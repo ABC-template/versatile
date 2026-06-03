@@ -272,24 +272,43 @@ window.updateLimitDisplay = function() {
     const info = document.getElementById('limit-info'); if (!info) return;
     const total = window.config?.dailyLimit || 0; info.innerText = `Лимит: ${window.usedToday}/${total >= 9000 ? '∞' : total}`;
 };
-// ЖЕСТКАЯ СИНХРОНИЗАЦИЯ ПОЛЗУНКА С ТЕКУЩИМ ЧАТОМ
+// ЖЕСТКАЯ СИНХРОНИЗАЦИЯ ПОЛЗУНКА С УЧЕТОМ РОЛИ ПОЛЬЗОВАТЕЛЯ
 window.syncContextSliderWithActiveChat = function() {
     const slider = document.getElementById('context-slider');
     const valueLabel = document.getElementById('context-range-value');
     const helpBlock = document.getElementById('context-help-text');
     if (!slider || !valueLabel) return;
 
-    if (helpBlock) helpBlock.classList.add('hidden'); // Сворачиваем подсказку при смене экранов
+    if (helpBlock) helpBlock.classList.add('hidden');
 
     const modelsChats = window.chatHistories[window.currentModel] || [];
     const currentActiveId = window.activeChatIds[window.currentModel];
     const activeChat = modelsChats.find(c => c.id === currentActiveId);
     
-    // Новым чатам ставим базовое значение 15
     const currentContextSize = activeChat ? (activeChat.maxContext || 15) : 15;
 
     slider.value = currentContextSize;
     valueLabel.innerText = currentContextSize;
+
+    // Проверка прав доступа для блокировки элемента
+    const userRole = window.config?.role || 'trial';
+    const hasAccess = ['premium', 'admin', 'standard', 'creator'].includes(userRole);
+
+    if (!hasAccess) {
+        slider.disabled = true;
+        slider.style.opacity = '0.5';
+        slider.style.pointerEvents = 'auto'; // Позволяет перехватывать клики на disabled элементе через обертку, либо обрабатывать onclick
+        
+        // Вешаем уведомление прямо на контейнер или подменяем поведение
+        slider.onclick = (e) => {
+            e.preventDefault();
+            if (window.tg?.showAlert) window.tg.showAlert("Данная опция находится в разработке");
+        };
+    } else {
+        slider.disabled = false;
+        slider.style.opacity = '1';
+        slider.onclick = null;
+    }
 };
 
 window.toggleContextHelp = function(event) {
@@ -312,9 +331,9 @@ window.saveContextSettings = function() {
 
     if (!hasAccess) {
         if (window.tg?.showAlert) {
-            window.tg.showAlert("🔒 Настройка глубины памяти доступна только Администраторам и владельцам Premium-доступа!");
+            window.tg.showAlert("Данная опция находится в разработке");
         }
-        window.syncContextSliderWithActiveChat(); // Возвращаем ползунок назад
+        window.syncContextSliderWithActiveChat();
         return;
     }
 
