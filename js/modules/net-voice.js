@@ -46,7 +46,7 @@ window.toggleVoiceRecording = async function(btn) {
         checkVolume();
 
         if (timerEl) {
-            timerEl.classList.remove('hidden'); let timeLeft = 30; timerEl.innerText = `${timeLeft}s`;
+            timerEl.classList.remove('hidden'); let timeLeft = 15; timerEl.innerText = `${timeLeft}s`;
             window.voiceInterval = setInterval(() => {
                 timeLeft--; timerEl.innerText = `${timeLeft}s`;
                 if (timeLeft <= 0) clearInterval(window.voiceInterval);
@@ -55,7 +55,7 @@ window.toggleVoiceRecording = async function(btn) {
 
         window.voiceTimeout = setTimeout(() => {
             if (window.isVoiceRecording) { window.isExpressVoiceTarget = false; window.toggleVoiceRecording(btn); }
-        }, 30000);
+        }, 15000);
 
         if (userInput) { userInput.disabled = true; userInput.placeholder = "Слушаю вас... Говорите"; }
         btn.classList.add('recording-active');
