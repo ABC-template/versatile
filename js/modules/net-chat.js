@@ -1,8 +1,9 @@
+// js /modules /net-chat.js
+
 // 1. Проверка подписки в Telegram-канале через бэкенд Edge API
 window.checkSubscriptionAndLoad = async function(uid) {
     try {
-        const hasKey = !!(window.allUserKeys[window.currentModel] && window.allUserKeys[window.currentModel].trim().length > 0);
-        const response = await fetch(`/api/check-sub?userId=${uid}&hasOwnKey=${hasKey}`);
+        const response = await fetch(`/api/check-sub?userId=${uid}`);
         const data = await response.json();
 
         if (data.error) {
@@ -18,7 +19,7 @@ window.checkSubscriptionAndLoad = async function(uid) {
         if (data.isMember || data.role === 'admin') {
             window.showChat();
             if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
-            if (typeof window.selectModel === 'function') window.selectModel(window.currentModel);
+            if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
         } else {
             window.showGuest({ msg: "403", joke: "Для доступа к ИИ необходимо подписаться на канал!" });
         }
@@ -42,36 +43,13 @@ window.incrementUsage = function() {
     if (typeof window.updateLimitDisplay === 'function') window.updateLimitDisplay();
 };
 
-// 3. Сохранение введенного пользователем API-ключ в CloudStorage Telegram
-window.saveCurrentKey = function() {
-    const input = document.getElementById('profile-api-key-input');
-    if (!input) return;
-    const keyValue = input.value.trim();
-
-    if (keyValue) window.allUserKeys[window.currentModel] = keyValue;
-    else delete window.allUserKeys[window.currentModel];
-
-    const onSaveDone = () => {
-        if (window.tg && window.tg.showAlert) window.tg.showAlert(`API-ключ для ${window.modelNames[window.currentModel]} привязан!`);
-        if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
-        if (typeof window.selectModel === 'function') window.selectModel(window.currentModel);
-    };
-
-    if (window.tg && window.tg.CloudStorage) {
-        window.tg.CloudStorage.setItem('ai_user_keys', JSON.stringify(window.allUserKeys), onSaveDone);
-    } else {
-        localStorage.setItem('ai_user_keys', JSON.stringify(window.allUserKeys));
-        onSaveDone();
-    }
-};
-
-// 4. Главная асинхронная функция отправки сообщений ИИ (с анти-спам блокировкой)
+// 3. Главная асинхронная функция отправки сообщений ИИ (с анти-спам блокировкой)
 window.sendMessage = async function() {
     if (window.isVoiceRecording) {
-        window.isExpressVoiceTarget = true; // Выставляем флаг экспресс-доставки
+        window.isExpressVoiceTarget = true; 
         const voiceBtn = document.querySelector('.voice-btn');
         if (typeof window.toggleVoiceRecording === 'function' && voiceBtn) {
-            await window.toggleVoiceRecording(voiceBtn); // Принудительно гасим микрофон
+            await window.toggleVoiceRecording(voiceBtn); 
         }
         return;
     }
@@ -85,15 +63,13 @@ window.sendMessage = async function() {
 
     const isNoLimit = window.config.dailyLimit >= 9000;
     if (!isNoLimit && window.usedToday >= window.config.dailyLimit) {
-        if (window.tg && window.tg.showAlert) window.tg.showAlert("Ежедневный лимит бесплатных запросов исчерпан!");
+        if (window.tg && window.tg.showAlert) window.tg.showAlert("Ежедневный лимит запросов исчерпан!");
         return;
     }
 
-    // НАЧАЛО БЛОКА ЗАМОРОЗКИ ИНТЕРФЕЙСА
     window.isSendingMessage = true;
     input.disabled = true;
     
-    // Блокируем кнопку диктофона во время отправки текста
     const voiceBtn = document.querySelector('.voice-btn');
     if (voiceBtn) voiceBtn.disabled = true;
 
@@ -109,9 +85,7 @@ window.sendMessage = async function() {
 
     if (typeof window.showSkeleton === 'function') window.showSkeleton();
 
-    const modelsChats = window.chatHistories[window.currentModel] || [];
-    const currentActiveId = window.activeChatIds[window.currentModel];
-    const activeChat = modelsChats.find(c => c.id === currentActiveId);
+    const activeChat = window.getCurrentActiveChat();
     const maxContextLimit = activeChat ? (activeChat.maxContext || 15) : 15;
     const contextMessages = activeChat ? activeChat.messages.slice(-maxContextLimit) : [];
     
@@ -119,7 +93,9 @@ window.sendMessage = async function() {
 
     try {
         if (typeof window.streamAiResponse === 'function') {
-            await window.streamAiResponse(cleanHistoryMessages, window.allUserKeys[window.currentModel], activeChat);
+            // Передаем в стрим текущую тему, а также язык интерфейса или язык конкретного чата
+            const userLang = activeChat?.language || window.tg?.initDataUnsafe?.user?.language_code || 'ru';
+            await window.streamAiResponse(cleanHistoryMessages, window.currentTopic, userLang, activeChat);
         }
     } catch (error) {
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
@@ -128,11 +104,8 @@ window.sendMessage = async function() {
             window.renderMessageToDOM(`Сбой связи с приложением: ${error.message}`, 'ai-msg');
         }
     } finally {
-        // НАЧАЛО БЛОКА РАЗМОРОЗКИ ИНТЕРФЕЙСА
         window.isSendingMessage = false;
         input.disabled = false;
-        
-        // Разблокируем диктофон обратно, когда ИИ закончил писать
         if (voiceBtn) voiceBtn.disabled = false;
     }
 };
@@ -143,11 +116,11 @@ function triggerTooltip(btn) {
     setTimeout(() => { btn.classList.remove('show-tip'); }, 1200);
 }
 
-// 1. ФУНКЦИЯ КОПИРОВАНИЯ ТЕКСТА ОТВЕТА AI
+// 4. ФУНКЦИЯ КОПИРОВАНИЯ ТЕКСТА ОТВЕТА AI
 window.copyMsgText = function(btn, msgId) {
     let foundMsg = null;
-    Object.keys(window.chatHistories).forEach(mId => {
-        (window.chatHistories[mId] || []).forEach(chat => {
+    Object.keys(window.chatHistories).forEach(tId => {
+        (window.chatHistories[tId] || []).forEach(chat => {
             const msg = (chat.messages || []).find(m => m.id === msgId);
             if (msg) foundMsg = msg;
         });
@@ -161,17 +134,18 @@ window.copyMsgText = function(btn, msgId) {
     });
 };
 
-// 2. ФУНКЦИЯ НАВЕДЕНИЯ ССЫЛКИ И НАВЕДЕНИЯ ШЕРИНГА В ТЕЛЕГРАМ
+// 5. ФУНКЦИЯ ГЕНЕРАЦИИ ССЫЛКИ ШЕРИНГА В ТЕЛЕГРАМ
 window.shareMsgText = function(btn, msgId) {
     let foundMsg = null;
-    Object.keys(window.chatHistories).forEach(mId => {
-        (window.chatHistories[mId] || []).forEach(chat => {
+    Object.keys(window.chatHistories).forEach(tId => {
+        (window.chatHistories[tId] || []).forEach(chat => {
             const msg = (chat.messages || []).find(m => m.id === msgId);
             if (msg) foundMsg = msg;
         });
     });
     if (!foundMsg) return;
 
+    // Ссылка оформлена с пробелами перед косой чертой
     const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(foundMsg.text)}`;
     
     triggerTooltip(btn);
@@ -182,11 +156,11 @@ window.shareMsgText = function(btn, msgId) {
     }, 300);
 };
 
-// 3. ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ИЗБРАННОГО С ЖЕСТКИМ СОХРАНЕНИЕМ В LOCALSTORAGE
+// 6. ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ИЗБРАННОГО
 window.toggleFavoriteMsg = function(btn, msgId) {
     let foundMsg = null;
-    Object.keys(window.chatHistories).forEach(mId => {
-        (window.chatHistories[mId] || []).forEach(chat => {
+    Object.keys(window.chatHistories).forEach(tId => {
+        (window.chatHistories[tId] || []).forEach(chat => {
             const msg = (chat.messages || []).find(m => m.id === msgId);
             if (msg) foundMsg = msg;
         });
@@ -199,14 +173,13 @@ window.toggleFavoriteMsg = function(btn, msgId) {
     if (foundMsg.isFavorite) {
         btn.classList.add('is-favorite');
         if (heartSpan) heartSpan.innerText = '❤️';
-        btn.setAttribute('data-tooltip', 'В избранном!');
+        btn.setAttribute('data-tooltip', '❤️');
     } else {
         btn.classList.remove('is-favorite');
         if (heartSpan) heartSpan.innerText = '🤍';
-        btn.setAttribute('data-tooltip', 'Удалено!');
+        btn.setAttribute('data-tooltip', '🤍');
     }
 
     triggerTooltip(btn);
     window.saveHistoriesToLocal();
 };
-
