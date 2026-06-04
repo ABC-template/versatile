@@ -4,6 +4,13 @@
 window.openModalTab = function(tabName) {
     const card = document.getElementById('profile-card');
     const keyArea = document.getElementById('dynamic-key-area');
+    if (tabName === 'organizer') {
+    if (keyArea) keyArea.style.display = 'none'; // Скрываем подвал в органайзере
+    // Запускаем рендеринг хаба, если функции модулей готовы
+    if (typeof window.renderTodoModule === 'function') window.renderTodoModule();
+    if (typeof window.renderSchedulerModule === 'function') window.renderSchedulerModule();
+    if (typeof window.renderTrackerModule === 'function') window.renderTrackerModule();
+}
     const subKey = document.getElementById('sub-footer-key');
     const subContext = document.getElementById('sub-footer-context');
     
