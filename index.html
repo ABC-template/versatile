@@ -16,6 +16,7 @@
         <div id="header-navigation" style="display: flex; align-items: center; gap: 8px;">
             <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('chats')" title="Диалоги">💬</button>
             <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('favorites')" title="Избранное">⭐</button>
+            <button id="organizer-trigger-btn" class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('organizer')" title="Органайзер">📅</button>
             <div id="user-profile-trigger" onclick="window.openModalTab('profile')" style="cursor:pointer; margin-left: 4px;">
                 <img id="user-avatar" src="" alt="Avatar" style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--button-color); background: #eee;">
             </div>
@@ -50,6 +51,15 @@
                         <p id="fav-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
                     </div>
                     <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                </div>
+                <div id="tab-organizer" class="modal-tab hidden">
+                    <div class="modal-sticky-header">
+                        <p id="organizer-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">📅 Органайзер Прогресса</p>
+                    </div>
+                    <!-- Динамические контейнеры для каждого модуля -->
+                    <div id="todo-module-container" style="margin-bottom: 20px;"></div>
+                    <div id="scheduler-module-container" style="margin-bottom: 20px;"></div>
+                    <div id="tracker-module-container" style="margin-bottom: 20px;"></div>
                 </div>
             </div>
             <div id="dynamic-key-area">
@@ -101,6 +111,10 @@
     <script src="js/core/locale.js"></script>
     <script src="js/config.js"></script>
     <script src="js/core/storage.js"></script>
+    <!-- ПОДКЛЮЧЕНИЕ ТРЕХ ИЗОЛИРОВАННЫХ МОДУЛЕЙ ОРГАНАЙЗЕРА -->
+    <script src="js/modules/net-todo.js"></script>
+    <script src="js/modules/net-scheduler.js"></script>
+    <script src="js/modules/net-tracker.js"></script>
     <script src="js/modules/ui.js"></script>
     <script src="js/modules/ui-footer.js"></script>
     <script src="js/modules/net-chat.js"></script>
