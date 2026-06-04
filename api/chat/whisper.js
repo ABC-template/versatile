@@ -1,7 +1,6 @@
-// api /chat /whisper.js
+// api/chat/whisper.js
 export const config = { runtime: 'edge' };
 
-// Безопасная и быстрая конвертация ArrayBuffer в Base64 на базе Web API
 function bufferToBase64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     let binary = '';
@@ -15,7 +14,6 @@ function bufferToBase64(arrayBuffer) {
     return btoa(binary);
 }
 
-// Вспомогательная функция сбора всех доступных ключей ротации из переменных окружения vercel
 function getRotatedKeysPool() {
     const keys = [];
     let i = 0;
@@ -64,7 +62,6 @@ export default async function handler(request) {
             }
         };
 
-        // Считываем пул доступных ключей ROUTER_KEY0, ROUTER_KEY1...
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
             return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), { 
@@ -72,15 +69,14 @@ export default async function handler(request) {
             });
         }
 
-        // ОТКАЗОУСТОЙЧИВЫЙ ЦИКЛ ОБРАБОТКИ АУДИО ЧЕРЕЗ ПУЛ КЛЮЧЕЙ
         let lastError = null;
 
         for (let k = 0; k < keysPool.length; k++) {
             const currentKey = keysPool[k];
 
             try {
-                // Ссылка оформлена с пробелами перед косой чертой
-                const response = await fetch('https: //openrouter.ai /api /v1 /audio /transcriptions', {
+                // ИСПРАВЛЕНО: Ссылка пишется строго слитно без пробелов для работы Fetch API
+                const response = await fetch('https://openrouter.ai/api/v1', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${currentKey}`,
@@ -97,7 +93,6 @@ export default async function handler(request) {
                     throw new Error(data.error?.message || response.statusText);
                 }
 
-                // Возвращаем успешный результат и выходим из цикла
                 return new Response(JSON.stringify({ text: data.text || "" }), { 
                     status: 200, 
                     headers: { 
@@ -109,13 +104,10 @@ export default async function handler(request) {
             } catch (err) {
                 console.error(`Сбой расшифровки Whisper с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
-                
-                // Переходим к следующему ключу в пуле
                 continue;
             }
         }
 
-        // Ни один ключ не справился со своей задачей
         return new Response(JSON.stringify({ 
             error: `Модуль аудио перегружен. Ошибка транскрипции: ${lastError?.message || 'Неизвестный сбой'}` 
         }), { 
