@@ -87,6 +87,8 @@ window.applyUiLocalization = function() {
         'memory-off-label': 'memory_off',
         'memory-max-label': 'memory_max'
     };
+    const elOrg = document.getElementById('organizer-title-label');
+    if (elOrg) elOrg.innerText = window.getLangString('organizer_title');
     
     Object.keys(ids).forEach(id => {
         const el = document.getElementById(id);
