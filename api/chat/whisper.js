@@ -1,7 +1,7 @@
 // api/chat/whisper.js
 export const config = { runtime: 'edge' };
 
-// Оптимизированная конвертация ArrayBuffer в чистый Base64 (без префиксов)
+// Быстрая конвертация бинарного потока в чистую Base64-строку
 function bufferToBase64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     let binary = '';
@@ -15,7 +15,7 @@ function bufferToBase64(arrayBuffer) {
     return btoa(binary);
 }
 
-// Поиск всех доступных ключей в пуле окружения Vercel
+// Извлечение всех доступных ключей из переменных окружения Vercel
 function getRotatedKeysPool() {
     const keys = [];
     let i = 0;
@@ -49,10 +49,13 @@ export default async function handler(request) {
 
         const base64Audio = bufferToBase64(arrayBuffer);
 
-        // ИСПРАВЛЕНО: Стандартизируем структуру тела под строгие требования /audio/transcriptions API
+        // ИСПРАВЛЕНО: Строгое соответствие спецификации OpenRouter Multimodal Audio Input
         const requestBody = {
             model: 'openai/whisper-large-v3-turbo', 
-            file: base64Audio // OpenRouter принимает Base64 напрямую в этот параметр
+            input_audio: {
+                data: base64Audio,
+                format: 'wav' // Фиксируем wav для 100% стабильности распознавания на сервере
+            }
         };
 
         const keysPool = getRotatedKeysPool();
@@ -68,7 +71,7 @@ export default async function handler(request) {
             const currentKey = keysPool[k];
 
             try {
-                // Запрос отправляется на выделенный аудио-эндпоинт
+                // Ссылка пишется слитно, без пробелов внутри fetch
                 const response = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
                     method: 'POST',
                     headers: {
@@ -80,20 +83,18 @@ export default async function handler(request) {
                     body: JSON.stringify(requestBody)
                 });
 
-                // Валидация ответа перед попыткой вызвать .json(), чтобы отловить HTML-ошибки
                 const contentType = response.headers.get('content-type') || '';
                 if (!contentType.includes('application/json')) {
                     const htmlErrorText = await response.text();
-                    throw new Error(`Сервер OpenRouter вернул не-JSON ответ: ${htmlErrorText.substring(0, 100)}`);
+                    throw new Error(`Сервер OpenRouter вернул HTML ошибку: ${htmlErrorText.substring(0, 80)}`);
                 }
 
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error?.message || response.statusText);
+                    throw new Error(data.error?.message || JSON.stringify(data.error) || response.statusText);
                 }
 
-                // Возвращаем успешно распознанную речь
                 return new Response(JSON.stringify({ text: data.text || "" }), { 
                     status: 200, 
                     headers: { 
@@ -105,12 +106,12 @@ export default async function handler(request) {
             } catch (err) {
                 console.error(`Сбой расшифровки Whisper с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
-                continue; // Переходим к следующему рабочему токену в пуле ротации
+                continue; // Failover: тихо переключаемся на следующий ключ ротации
             }
         }
 
         return new Response(JSON.stringify({ 
-            error: `Модуль аудио перегружен. Ошибка транскрипции: ${lastError?.message || 'Все ключи пула вернули ошибку'}` 
+            error: `Модуль аудио перегружен. Детали ошибки: ${lastError?.message || 'Все ключи пула отклонены'}` 
         }), { 
             status: 500, headers: { 'Content-Type': 'application/json' } 
         });
