@@ -1,3 +1,5 @@
+// js/modules/net-voice.js 
+
 window.toggleVoiceRecording = async function(btn) {
     const userInput = document.getElementById('user-input');
     const sendBtn = document.querySelector('.send-btn');
@@ -24,7 +26,13 @@ window.toggleVoiceRecording = async function(btn) {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             if (tg && tg.showAlert) tg.showAlert("Голосовой ввод не поддерживается устройством."); return;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // ИСПРАВЛЕНО: Сохраняем поток глобально. Запрос к getUserMedia сработает ОДИН раз за сессию.
+        if (!window.globalVoiceStream || !window.globalVoiceStream.active) {
+            window.globalVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+        
+        const stream = window.globalVoiceStream;
         window.audioChunks = []; window.isVoiceRecording = true; window.maxVolumeDetected = -100;
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -67,8 +75,21 @@ window.toggleVoiceRecording = async function(btn) {
         
         window.mediaRecorder = new MediaRecorder(stream, options);
         window.mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) window.audioChunks.push(e.data); };
-         window.mediaRecorder.onstop = async () => {
-            stream.getTracks().forEach(track => track.stop());
+        window.mediaRecorder.onstop = async () => {
+            // ИСПРАВЛЕНО: Закрытие треков stream.getTracks() полностью удалено.
+            // Мы останавливаем только MediaRecorder. Поток остается «горячим» для следующих кликов.
+            
+            // Отключаем аудио-ноды, чтобы не плодить утечки памяти при каждом новом цикле записи
+            try {
+                source.disconnect();
+                analyser.disconnect();
+                if (window.audioContext && window.audioContext.state !== 'closed') {
+                    window.audioContext.close();
+                }
+            } catch (e) {
+                console.warn("Ошибка очистки Web Audio API:", e);
+            }
+
             const isExpress = !!window.isExpressVoiceTarget; window.isExpressVoiceTarget = false;
 
             if (window.maxVolumeDetected < -48) {
@@ -84,7 +105,6 @@ window.toggleVoiceRecording = async function(btn) {
                 if (typeof window.collapseInputArea === 'function') window.collapseInputArea();
             }
 
-            // Шлем на бэкенд чистый, стабильный нативный оригинал без хирургического вмешательства
             let audioBlob = new Blob(window.audioChunks, options.mimeType ? { type: options.mimeType } : {});
 
             try {
