@@ -74,9 +74,8 @@ window.getLangString = function(key) {
     const activeLocale = window.locales[lang] || window.locales['ru'];
     return activeLocale[key] || window.locales['ru'][key] || key;
 };
-const elOrg = document.getElementById('organizer-title-label');
-if (elOrg) elOrg.innerText = window.getLangString('organizer_title');
 
+    
 window.applyUiLocalization = function() {
     const ids = {
         'limit-info': 'limit',
