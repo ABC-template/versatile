@@ -1,10 +1,15 @@
-window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeChat) {
+// js /modules /net-stream.js
+
+window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, activeChat) {
     const container = document.getElementById('chat-container');
     if (!container) return;
 
-    // Создаем контроллер для возможности принудительной отмены запроса по таймауту
+    // ОБЯЗАТЕЛЬНО: Объявляем переменную на самом верху, чтобы она была доступна в блоке catch
+    let msgDiv = null;
+    let accumulatedText = '';
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд на первый ответ сервера
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
         const response = await fetch('/api/chat/stream', {
@@ -12,13 +17,13 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 historyMessages: cleanHistoryMessages,
-                userKey: userKey || null,
-                currentModel: window.currentModel
+                currentTopic: userKey, // На фронтенде передается ID темы
+                userLang: userLang
             }),
             signal: controller.signal
         });
 
-        clearTimeout(timeoutId); // Ответ пошел, сбрасываем стартовый таймаут
+        clearTimeout(timeoutId);
 
         const contentType = response.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
@@ -39,17 +44,15 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         
-        let accumulatedText = '';
         let isFirstChunk = true;
         let msgIndex = activeChat ? activeChat.messages.length : Date.now();
 
-        const msgDiv = document.createElement('div');
+        // Инициализируем msgDiv строго здесь
+        msgDiv = document.createElement('div');
         msgDiv.className = `msg ai-msg msg-animated`;
-        msgDiv.id = `msg-block-${window.currentModel}-${msgIndex}`;
+        msgDiv.id = `msg-block-${window.currentTopic}-${msgIndex}`;
         
-        // Внутренний цикл чтения с контролем сетевого залипания между чанками
         while (true) {
-            // Запускаем гонку: либо чанк прочитан, либо сработает таймаут (12 секунд ожидания)
             const chunkTimeout = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Превышено время ожидания ответа от сети')), 12000)
             );
@@ -68,11 +71,10 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
                 isFirstChunk = false;
             }
 
-            // Рендеринг с автозакрытием незавершенных Markdown тегов
             let renderText = accumulatedText;
             const codeBlockCount = (renderText.match(/```/g) || []).length;
             if (codeBlockCount % 2 !== 0) {
-                renderText += '\n```'; // Временно закрываем блок кода для marked
+                renderText += '\n```';
             }
 
             if (typeof marked !== 'undefined') {
@@ -86,7 +88,6 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
             container.scrollTop = container.scrollHeight;
         }
 
-        // Завершение в штатном режиме
         if (accumulatedText.trim().length > 0) {
             finalizeStreamMessage(msgDiv, accumulatedText, activeChat);
         }
@@ -96,9 +97,8 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
         console.error("Критический сбой стрима:", err);
         
-        // Обработка обрыва связи (если текст уже частично был получен)
-        const partialText = msgDiv ? msgDiv.innerText || accumulatedText : '';
-        if (partialText.trim().length > 0) {
+        // Теперь проверка msgDiv работает идеально и без ошибок компиляции browser'а
+        if (msgDiv && accumulatedText.trim().length > 0) {
             const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано. Пожалуйста, повторите запрос]`;
             
             if (typeof marked !== 'undefined') {
@@ -109,7 +109,6 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
             
             finalizeStreamMessage(msgDiv, disconnectNotice, activeChat);
         } else {
-            // Если упало еще до первого чанка
             if (typeof window.renderMessageToDOM === 'function') {
                 window.renderMessageToDOM(`⚠️ Сбой потоковой передачи: Интернет-соединение прервано`, 'ai-msg');
             }
@@ -118,7 +117,6 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, activeCh
     }
 };
 
-// Выносим финализацию в чистую подфункцию, чтобы не дублировать логику при ошибке
 function finalizeStreamMessage(msgDiv, finalText, activeChat) {
     const generatedAiMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
     msgDiv.id = `msg-block-${generatedAiMsgId}`;
@@ -126,9 +124,10 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
     const act = document.createElement('div');
     act.className = 'msg-actions';
     act.innerHTML = `
-        <button class="action-btn" data-tooltip="Скопировано!" onclick="window.copyMsgText(this, '${generatedAiMsgId}')">📋</button>
-        <button class="action-btn" data-tooltip="Ссылка создана!" onclick="window.shareMsgText(this, '${generatedAiMsgId}')">🔗</button>
+        <button class="action-btn" data-tooltip="📋" onclick="window.copyMsgText(this, '${generatedAiMsgId}')">📋</button>
+        <button class="action-btn" data-tooltip="🔗" onclick="window.shareMsgText(this, '${generatedAiMsgId}')">🔗</button>
         <button class="action-btn" onclick="window.toggleFavoriteMsg(this, '${generatedAiMsgId}')"><span class="icon-heart">🤍</span></button>
+        <button class="action-btn" style="margin-left:auto; background:rgba(231,76,60,0.05); color:#e74c3c;" onclick="window.deleteMessage('${generatedAiMsgId}')">🗑️</button>
     `;
     msgDiv.appendChild(act);
 
