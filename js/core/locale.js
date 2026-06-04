@@ -6,6 +6,7 @@ window.locales = {
         "limit": "Лимит",
         "beta": "🚀 Versatile AI — Beta Версия",
         "sync": "Синхронизация...",
+        "organizer_title": "📅 Органайзер Прогресса"
         "dialogs": "Ваши диалоги:",
         "fav_title": "⭐ Избранные ответы:",
         "no_fav": "У вас пока нет избранных ответов.",
@@ -26,6 +27,7 @@ window.locales = {
         "limit": "Limit",
         "beta": "🚀 Versatile AI — Beta Version",
         "sync": "Syncing...",
+        "organizer_title": "📅 Progress Organizer"
         "dialogs": "Your dialogs:",
         "fav_title": "⭐ Favorite answers:",
         "no_fav": "You don't have any favorite answers yet.",
@@ -46,6 +48,7 @@ window.locales = {
         "limit": "Limite",
         "beta": "🚀 Versatile AI — Versione Beta",
         "sync": "Sincronizzazione...",
+        "organizer_title": "📅 Organizzatore"
         "dialogs": "I tuoi dialoghi:",
         "fav_title": "⭐ Risposte preferite:",
         "no_fav": "Non hai ancora risposte preferite.",
@@ -71,6 +74,8 @@ window.getLangString = function(key) {
     const activeLocale = window.locales[lang] || window.locales['ru'];
     return activeLocale[key] || window.locales['ru'][key] || key;
 };
+const elOrg = document.getElementById('organizer-title-label');
+if (elOrg) elOrg.innerText = window.getLangString('organizer_title');
 
 window.applyUiLocalization = function() {
     const ids = {
