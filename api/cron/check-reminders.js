@@ -48,7 +48,7 @@ export default async function handler(request) {
             const pushMessageText = `🔔 *Напоминание от Versatile AI*:\n\n${text}`;
 
             // Ссылка оформлена строго слитно для корректной работы fetch внутри Edge Runtime
-            const telegramApiUrl = `https://telegram.org{botToken}/sendMessage`;
+            const telegramApiUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
             try {
                 const tgResponse = await fetch(telegramApiUrl, {
