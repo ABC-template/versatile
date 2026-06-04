@@ -12,7 +12,7 @@
 <body>
     <div id="header" class="hidden">
         <span id="limit-info">Синхронизация...</span>
-        <span id="chat-model-indicator">Gemini 2.5</span>
+        <span id="chat-model-indicator">Versatile AI</span>
         <div id="header-navigation" style="display: flex; align-items: center; gap: 8px;">
             <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('chats')" title="Диалоги">💬</button>
             <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('favorites')" title="Избранное">⭐</button>
@@ -29,48 +29,41 @@
                         <img id="card-avatar" src="" alt="Avatar Large" style="width: 55px; height: 55px; border-radius: 50%; margin-bottom: 8px; border: 2px solid var(--button-color);">
                         <div id="user-name" style="font-weight: bold; font-size: 15px; color: var(--text-color);">Пользователь</div>
                     </div>
-                    <p style="font-size: 12px; font-weight: 600; color: var(--hint-color); margin: 0 0 8px 0;">Выберите активную нейросеть:</p>
+                    <p style="font-size: 12px; font-weight: 600; color: var(--hint-color); margin: 0 0 8px 0;">Выберите направление:</p>
                     <div class="model-switcher">
-                        <div class="model-chip active" data-model="gemini">Gemini</div>
-                        <div class="model-chip" data-model="deepseek">DeepSeek</div>
-                        <div class="model-chip" data-model="gpt">GPT-4o</div>
-                        <div class="model-chip" data-model="claude">Claude</div>
-                        <div class="model-chip" data-model="grok">Grok</div>
-                    </div>
-                    <div id="profile-premium-area" class="hidden" style="margin-top:15px; width:100%;">
-                        <button class="btn" style="background:#f39c12; width:100%; font-size: 12px; padding: 10px;" onclick="window.buyPremium()">Купить Premium (Stars)</button>
+                        <div class="model-chip active" data-topic="code">💻 Программирование и код</div>
+                        <div class="model-chip" data-topic="creative">✍️ Творчество и тексты</div>
+                        <div class="model-chip" data-topic="fast">⚡ Быстрый флуд</div>
+                        <div class="model-chip" data-topic="kitchen">🍳 Рецепты и Кулинария</div>
+                        <div class="model-chip" data-topic="analytics">📊 Аналитика и Фото (Beta)</div>
                     </div>
                 </div>
                 <div id="tab-chats" class="modal-tab hidden">
                     <div class="modal-sticky-header">
-                        <p style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">Ваши диалоги:</p>
-                        <button class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.createNewChat()">+ Новый чат</button>
+                        <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">Ваши диалоги:</p>
+                        <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.createNewChat()">+ Новый чат</button>
                     </div>
                     <div id="history-chats-list"></div>
                 </div>
                 <div id="tab-favorites" class="modal-tab hidden">
                     <div class="modal-sticky-header">
-                        <p style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
+                        <p id="fav-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
                     </div>
                     <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
                 </div>
             </div>
             <div id="dynamic-key-area">
                 <div id="sub-footer-key" class="hidden">
-                    <p id="key-label" style="font-size: 11px; font-weight: 600; margin: 0 0 6px 0; text-align: left; color: var(--hint-color);">Личный API Ключ:</p>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="profile-api-key-input" placeholder="Ключ отключен" style="flex: 1; padding: 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.12); background: var(--secondary-bg); color: var(--text-color); font-size: 13px; outline:none;">
-                        <button class="btn" style="padding: 10px 14px; border-radius: 10px; font-size: 13px;" onclick="window.saveCurrentKey()">💾</button>
-                    </div>
+                    <button class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-color); width: 100%; font-size: 13px; border: 1px dashed rgba(0,0,0,0.15);" onclick="window.showBetaAlert()">🚀 Versatile AI — Beta Версия</button>
                 </div>
                 <div id="sub-footer-context" class="hidden">
                     <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; margin-bottom: 6px;">
-                        <span style="color: var(--text-color); display: flex; align-items: center; gap: 6px;">🧠 Память чата <span onclick="window.toggleContextHelp(event)" style="cursor: pointer; background: rgba(0,0,0,0.05); width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--hint-color);">❓</span></span>
+                        <span id="memory-label" style="color: var(--text-color); display: flex; align-items: center; gap: 6px;">🧠 Память чата <span onclick="window.toggleContextHelp(event)" style="cursor: pointer; background: rgba(0,0,0,0.05); width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--hint-color);">❓</span></span>
                         <span id="context-range-value" style="color: var(--button-color);">15</span>
                     </div>
-                    <div id="context-help-text" class="hidden" style="font-size: 11px; color: var(--hint-color); line-height: 1.4; text-align: left; background: var(--bg-color); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 3px solid var(--button-color);">Память определяет число прошлых реплик, отправляемых ИИ.<br>• <strong>Меньше:</strong> быстрей ответ и экономия токенов.<br>• <strong>Больше:</strong> ИИ идеально помнит нить беседы.</div>
+                    <div id="context-help-text" class="hidden" style="font-size: 11px; color: var(--hint-color); line-height: 1.4; text-align: left; background: var(--bg-color); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 3px solid var(--button-color);" id="memory-hint-content"></div>
                     <input type="range" id="context-slider" min="1" max="40" value="15" style="width: 100%; cursor: pointer; display: block;" oninput="window.onContextSliderChange(this.value)" onchange="window.saveContextSettings()">
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--hint-color); margin-top: 2px;"><span>1 (Выкл)</span><span>40 сообщений</span></div>
+                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--hint-color); margin-top: 2px;"><span id="memory-off-label">1 (Выкл)</span><span id="memory-max-label">40 сообщений</span></div>
                 </div>
             </div>
         </div>
@@ -80,26 +73,21 @@
         <p id="joke-text">Проверка статуса подписки...</p>
         <a href="https: //t.me" class="btn" style="text-decoration:none; display:inline-block;">Подписаться на @bdicta</a>
     </div>
-        <div id="app-screen" style="display:none;">
+    <div id="app-screen" style="display:none;">
         <div id="chat-container"></div>
         <button id="fab-open-input" onclick="window.expandInputArea()">➤</button>
-        
-        <!-- ИЗОЛИРОВАННЫЙ ОВЕРЛЕЙ ФОНА ДЛЯ КАПСУЛЫ ВВОДА -->
         <div id="input-overlay" class="hidden"></div>
-        
         <div id="input-area">
-            <!-- ЗОНА ТЕКСТА С КРЕСТИКОМ ОЧИСТКИ -->
             <div style="position: relative; width: 100%; display: flex; align-items: flex-start;">
                 <textarea id="user-input" placeholder="Ваш вопрос..." rows="1"></textarea>
                 <button id="clear-input-btn" class="hidden" onclick="window.clearUserText(event)">✕</button>
             </div>
-            
             <div class="input-footer-bar">
                 <div class="footer-btn-group left-group">
-                    <button class="footer-action-btn media-btn" onclick="if(window.tg)window.tg.showAlert('Функция прикрепления фото появится позже')">📎</button>
+                    <button class="footer-action-btn media-btn" onclick="window.handleAttachmentClick()">📎</button>
                 </div>
                 <div class="footer-btn-group right-group">
-                    <span id="voice-timer" class="hidden">30</span>
+                    <span id="voice-timer" class="hidden">15s</span>
                     <button class="footer-action-btn voice-btn" onclick="window.toggleVoiceRecording(this)">🎙️</button>
                     <button class="footer-action-btn send-btn" onclick="window.sendMessage()">➤</button>
                 </div>
@@ -107,6 +95,7 @@
         </div>
     </div>
 
+    <script src="js/core/locale.js"></script>
     <script src="js/config.js"></script>
     <script src="js/core/storage.js"></script>
     <script src="js/modules/ui.js"></script>
@@ -117,3 +106,6 @@
     <script src="js/core/app.js"></script>
 </body>
 </html>
+
+
+        
