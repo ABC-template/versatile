@@ -1,4 +1,4 @@
-// js/modules/net-voice.js 
+// js /modules /net-voice.js (Часть 1 из 2)
 
 window.toggleVoiceRecording = async function(btn) {
     const userInput = document.getElementById('user-input');
@@ -11,9 +11,13 @@ window.toggleVoiceRecording = async function(btn) {
     const resetVoiceUI = () => {
         if (window.voiceInterval) clearInterval(window.voiceInterval);
         if (window.voiceTimeout) clearTimeout(window.voiceTimeout);
-        if (timerEl) { timerEl.classList.add('hidden'); timerEl.innerText = '30s'; }
+        if (timerEl) { timerEl.classList.add('hidden'); timerEl.innerText = '15s'; }
         btn.classList.remove('recording-active'); btn.disabled = false;
-        if (userInput) userInput.disabled = false; if (sendBtn) sendBtn.disabled = false;
+        if (userInput) {
+            userInput.disabled = false; 
+            userInput.placeholder = window.getLangString('placeholder'); // Локализовано!
+        } 
+        if (sendBtn) sendBtn.disabled = false;
     };
 
     if (window.isVoiceRecording) {
@@ -27,7 +31,7 @@ window.toggleVoiceRecording = async function(btn) {
             if (tg && tg.showAlert) tg.showAlert("Голосовой ввод не поддерживается устройством."); return;
         }
 
-        // ИСПРАВЛЕНО: Сохраняем поток глобально. Запрос к getUserMedia сработает ОДИН раз за сессию.
+        // ТВОЙ ФИКС: Запрос к getUserMedia срабатывает ОДИН раз за сессию
         if (!window.globalVoiceStream || !window.globalVoiceStream.active) {
             window.globalVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         }
@@ -65,7 +69,7 @@ window.toggleVoiceRecording = async function(btn) {
             if (window.isVoiceRecording) { window.isExpressVoiceTarget = false; window.toggleVoiceRecording(btn); }
         }, 15000);
 
-        if (userInput) { userInput.disabled = true; userInput.placeholder = "Слушаю вас... Говорите"; }
+        if (userInput) { userInput.disabled = true; userInput.placeholder = "🎙️..."; }
         btn.classList.add('recording-active');
         
         let options = { mimeType: 'audio/webm' };
@@ -75,11 +79,9 @@ window.toggleVoiceRecording = async function(btn) {
         
         window.mediaRecorder = new MediaRecorder(stream, options);
         window.mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) window.audioChunks.push(e.data); };
+        // js /modules /net-voice.js (Часть 2 из 2)
         window.mediaRecorder.onstop = async () => {
-            // ИСПРАВЛЕНО: Закрытие треков stream.getTracks() полностью удалено.
-            // Мы останавливаем только MediaRecorder. Поток остается «горячим» для следующих кликов.
-            
-            // Отключаем аудио-ноды, чтобы не плодить утечки памяти при каждом новом цикле записи
+            // ТВОЙ ФИКС: Поток остается «горячим», отключаем только аудио-ноды
             try {
                 source.disconnect();
                 analyser.disconnect();
@@ -94,13 +96,12 @@ window.toggleVoiceRecording = async function(btn) {
 
             if (window.maxVolumeDetected < -48) {
                 resetVoiceUI();
-                if (userInput) { userInput.disabled = false; userInput.placeholder = "Ваш вопрос..."; }
                 if (isExpress && typeof window.expandInputArea === 'function') window.expandInputArea();
                 return;
             }
 
             btn.disabled = true;
-            if (userInput) userInput.placeholder = isExpress ? "Экспресс-отправка..." : "Обработка аудиофайла...";
+            if (userInput) userInput.placeholder = "⌛...";
             if (isExpress) {
                 if (typeof window.collapseInputArea === 'function') window.collapseInputArea();
             }
@@ -113,15 +114,17 @@ window.toggleVoiceRecording = async function(btn) {
                     headers: { 'Content-Type': 'application/octet-stream', 'X-Audio-Type': audioBlob.type }
                 });
                 const data = await response.json();
-                resetVoiceUI(); if (userInput) userInput.placeholder = "Ваш вопрос...";
+                resetVoiceUI();
 
                 if (data.error || !data.text || data.text.trim().length === 0) {
                     if (isExpress) {
                         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
                         if (typeof window.renderMessageToDOM === 'function') {
-                            window.renderMessageToDOM(`⚠️ Ошибка расшифровки: ${data.error || "Голос не распознан"}`, 'ai-msg');
+                            window.renderMessageToDOM(`⚠️ Error: ${data.error || "Голос не распознан"}`, 'ai-msg');
                         }
-                    } else if (tg && tg.showAlert) { tg.showAlert(`Не удалось распознать: ${data.error || "пустой ответ"}`); }
+                    } else if (tg && tg.showAlert) { 
+                        tg.showAlert(data.error || "пустой ответ"); 
+                    }
                     return;
                 }
 
@@ -133,7 +136,9 @@ window.toggleVoiceRecording = async function(btn) {
 
                     if (typeof window.addMessageToStorage === 'function') window.addMessageToStorage(finalCleanText, 'user-msg');
                     if (typeof window.showSkeleton === 'function') window.showSkeleton();
-                    const activeChat = (window.chatHistories[window.currentModel] || []).find(c => c.id === window.activeChatIds[window.currentModel]);
+                    
+                    // ИСПРАВЛЕНО: Полный переход на Темы (window.currentTopic) вместо Моделей
+                    const activeChat = window.getCurrentActiveChat();
                     const maxLimit = activeChat ? (activeChat.maxContext || 15) : 15;
                     const cleanHist = (activeChat ? activeChat.messages.slice(-maxLimit) : []).map(m => ({ type: String(m.type), text: String(m.text) }));
                     
@@ -142,8 +147,11 @@ window.toggleVoiceRecording = async function(btn) {
                     if (sendBtn) sendBtn.disabled = true;
 
                     if (typeof window.streamAiResponse === 'function') {
-                        await window.streamAiResponse(cleanHist, window.allUserKeys[window.currentModel], activeChat);
+                        // ИСПРАВЛЕНО: Передаем корректные параметры Темы и Локализации (userLang) на бэкенд
+                        const userLang = activeChat?.language || window.tg?.initDataUnsafe?.user?.language_code || 'ru';
+                        await window.streamAiResponse(cleanHist, window.currentTopic, userLang, activeChat);
                     }
+                    
                     window.isSendingMessage = false; if (userInput) userInput.disabled = false;
                     if (vBtn) vBtn.disabled = false; if (sendBtn) sendBtn.disabled = false;
                 } else {
@@ -154,17 +162,18 @@ window.toggleVoiceRecording = async function(btn) {
                     }
                 }
             } catch (err) {
-                console.error("Ошибка сети Whisper:", err); resetVoiceUI(); if (userInput) userInput.placeholder = "Ваш вопрос...";
+                console.error("Ошибка сети Whisper:", err); 
+                resetVoiceUI();
                 if (isExpress) {
                     if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
-                    if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(`⚠️ Сбой сети при расшифровке аудио`, 'ai-msg');
+                    if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(`⚠️ Сбой сети`, 'ai-msg');
                 }
             }
         };
+        
         window.mediaRecorder.start();
     } catch (err) {
         console.error("Ошибка микрофона:", err); window.isVoiceRecording = false; resetVoiceUI();
-        if (userInput) { userInput.disabled = false; userInput.placeholder = "Ваш вопрос..."; }
         if (tg && tg.showAlert) tg.showAlert("Доступ к микрофону отклонен.");
     }
 };
