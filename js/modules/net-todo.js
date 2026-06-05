@@ -175,7 +175,15 @@ window.loadTodoItemsFromLocal = function() {
 
 window.saveTodoItemsToLocal = function() {
     try {
-        localStorage.setItem('tg_organizer_todo_list', JSON.stringify(window.todoItemsList));
+        const jsonStr = JSON.stringify(window.todoItemsList);
+        localStorage.setItem('tg_organizer_todo_list', jsonStr);
+        
+        // ДУБЛИРОВАНИЕ В ОБЛАКО TELEGRAM (Для надежности):
+        if (window.tg?.CloudStorage) {
+            window.tg.CloudStorage.setItem('tg_organizer_todo_list', jsonStr, (err) => {
+                if (err) console.error("Ошибка сохранения в CloudStorage:", err);
+            });
+        }
     } catch(e) {
         console.error("Превышен лимит localStorage To-Do:", e);
     }
