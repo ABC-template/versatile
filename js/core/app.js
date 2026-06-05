@@ -1,4 +1,15 @@
 async function initApp() {
+    // ДИНАМИЧЕСКИЙ КВЕСТ: Включаем Eruda только для создателя
+    const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+    const MY_TELEGRAM_ID = 1541531808; // <-- ВСТАВЬТЕ СЮДА ВАШ ID ИЗ ЛОГОВ ERUDA
+
+    if (currentUserId === MY_TELEGRAM_ID) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+        script.onload = () => { eruda.init(); };
+        document.head.appendChild(script);
+    }
+    
     const root = document.documentElement;
     const tg = window.Telegram?.WebApp;
     if (tg) {
