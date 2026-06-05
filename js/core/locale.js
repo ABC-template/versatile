@@ -1,4 +1,4 @@
-// js /core /locale.js
+// js/core/locale.js
 
 window.locales = {
     ru: {
@@ -6,7 +6,7 @@ window.locales = {
         "limit": "Лимит",
         "beta": "🚀 Versatile AI — Beta Версия",
         "sync": "Синхронизация...",
-        "organizer_title": "📅 Органайзер Прогресса"
+        "organizer_title": "📅 Органайзер Прогресса",
         "dialogs": "Ваши диалоги:",
         "fav_title": "⭐ Избранные ответы:",
         "no_fav": "У вас пока нет избранных ответов.",
@@ -27,7 +27,7 @@ window.locales = {
         "limit": "Limit",
         "beta": "🚀 Versatile AI — Beta Version",
         "sync": "Syncing...",
-        "organizer_title": "📅 Progress Organizer"
+        "organizer_title": "📅 Progress Organizer",
         "dialogs": "Your dialogs:",
         "fav_title": "⭐ Favorite answers:",
         "no_fav": "You don't have any favorite answers yet.",
@@ -48,7 +48,7 @@ window.locales = {
         "limit": "Limite",
         "beta": "🚀 Versatile AI — Versione Beta",
         "sync": "Sincronizzazione...",
-        "organizer_title": "📅 Organizzatore"
+        "organizer_title": "📅 Organizzatore",
         "dialogs": "I tuoi dialoghi:",
         "fav_title": "⭐ Risposte preferite:",
         "no_fav": "Non hai ancora risposte preferite.",
@@ -57,7 +57,7 @@ window.locales = {
         "memory_hint": "La memoria definisce il numero di messaggi passati inviati all'IA.<br>• <strong>Meno:</strong> risposta più rapida e risparmio di token.<br>• <strong>Più:</strong> L'IA ricorda perfettamente il filo della conversazione.",
         "memory_off": "1 (Disattivato)",
         "memory_max": "40 messaggi",
-        "beta_alert": "Questa funzione è in fase di sviluppo (Beta) e apparirà nei prossimi aggiornamenti dell'app!",
+        "beta_alert": "Questa funzione è in fase di sviluppo (Beta) e apparirà nei prochains aggiornamenti dell'app!",
         "confirm_del_chat": "Sei sicuro di voler eliminare completamente questo dialogo?",
         "confirm_del_msg": "Eliminare questo messaggio dalla cronologia della chat?",
         "confirm_unfav": "Rimuovere questa risposta dai preferiti?",
