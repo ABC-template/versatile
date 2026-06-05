@@ -203,7 +203,7 @@ window.submitQuickTrackerLog = async function(trackerId) {
     };
 
     try {
-        const response = await fetch('/api/organizer/core', {
+        const response = await fetch('${window.location.origin}/api/organizer/core', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
