@@ -73,5 +73,5 @@ async function initApp() {
 initApp();
 
 if (window.Telegram?.WebApp?.requestFullscreen) {
-    window.Telegram.WebApp.requestFullscreen().catch(err => console.log("Полноэкранный режим не поддерживается"));
+    window.Telegram.WebApp.requestFullscreen();
 }
