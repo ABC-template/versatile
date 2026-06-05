@@ -1,9 +1,10 @@
+// https://versatile-sepia.vercel.app/api/check-sub?userId=${userId}
 // js /modules /net-chat.js
 
 // 1. Проверка подписки в Telegram-канале через бэкенд Edge API
 window.checkSubscriptionAndLoad = async function(uid) {
     try {
-        const response = await fetch(`/api/check-sub?userId=${uid}`);
+        const response = await fetch(`https://versatile-sepia.vercel.app/api/check-sub?userId=${userId}`);
         
         let data = {};
         try {
