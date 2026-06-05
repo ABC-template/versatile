@@ -203,7 +203,7 @@ window.submitQuickTrackerLog = async function(trackerId) {
     };
 
     try {
-        const response = await fetch('${window.location.origin}/api/organizer/core', {
+        const response = await fetch('https://versatile-sepia.vercel.app/api/organizer/core', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -246,7 +246,7 @@ window.sendNewTrackerToCloud = async function() {
     };
 
     try {
-        const response = await fetch('${window.location.origin}/api/organizer/core', {
+        const response = await fetch('https://versatile-sepia.vercel.app/api/organizer/core', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -269,7 +269,7 @@ window.syncTrackersWithCloud = async function() {
     const uid = window.tg?.initDataUnsafe?.user?.id || 12345;
     
     try {
-        const response = await fetch(`${window.location.origin}/api/organizer/core?action=get_trackers&userId=${uid}`);
+        const response = await fetch(`https://versatile-sepia.vercel.app/api/organizer/core?action=get_trackers&userId=${uid}`);
         const resData = await response.json();
 
         if (resData.success && resData.data) {
@@ -286,7 +286,7 @@ window.syncTrackersWithCloud = async function() {
 window.deleteCloudTrackerLog = function(logId, trackerId) {
     const actionDeleteLog = async () => {
         try {
-            const response = await fetch('${window.location.origin}/api/organizer/core', {
+            const response = await fetch('https://versatile-sepia.vercel.app/api/organizer/core', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete_log', id: logId })
@@ -313,7 +313,7 @@ window.deleteCloudTrackerLog = function(logId, trackerId) {
 window.deleteCloudTrackerItem = function(trackerId) {
     const actionDeleteTracker = async () => {
         try {
-            const response = await fetch('${window.location.origin}/api/organizer/core', {
+            const response = await fetch('https://versatile-sepia.vercel.app/api/organizer/core', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete_tracker', id: trackerId })
