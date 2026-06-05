@@ -1,0 +1,32 @@
+name: Deploy to Vercel
+on:
+  push:
+    branches:
+      - main # Срабатывает при пуше в ветку main. Если у вас ветка master, замените слово main на master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel
+
+      # Шаг 1: Принудительно обновляем переменные в Vercel перед деплоем
+      - name: Sync Environment Variables
+        run: |
+          echo "${{ secrets.BOT_TOKEN }}" | vercel env add BOT_TOKEN production --token=${{ secrets.VERCEL_TOKEN }} --force
+          echo "${{ secrets.CHANNEL_ID }}" | vercel env add CHANNEL_ID production --token=${{ secrets.VERCEL_TOKEN }} --force
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      # Шаг 2: Запускаем сборку проекта и отправляем её в Vercel
+      - name: Deploy Project to Vercel
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          
