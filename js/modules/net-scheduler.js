@@ -137,7 +137,7 @@ window.createManualPushReminder = async function() {
 
     // Шлем запрос на наш будущий единый бэкенд-роут Supabase
     try {
-        const response = await fetch('/api/organizer/core', {
+        const response = await fetch('${window.location.origin}/api/organizer/core', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -161,7 +161,7 @@ window.syncRemindersWithCloud = async function() {
     const uid = window.tg?.initDataUnsafe?.user?.id || 12345;
     
     try {
-        const response = await fetch(`/api/organizer/core?action=get_reminders&userId=${uid}`);
+        const response = await fetch(`${window.location.origin}/api/organizer/core?action=get_reminders&userId=${uid}`);
         const resData = await response.json();
 
         if (resData.success && Array.isArray(resData.data)) {
@@ -182,7 +182,7 @@ window.deleteCloudReminderItem = function(reminderId) {
         };
 
         try {
-            const response = await fetch('/api/organizer/core', {
+            const response = await fetch('${window.location.origin}/api/organizer/core', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
