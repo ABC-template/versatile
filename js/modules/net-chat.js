@@ -12,11 +12,11 @@ window.checkSubscriptionAndLoad = async function(uid) {
             return;
         }
 
-        window.config.dailyLimit = data.dailyLimit;
-        window.config.role = data.role;
-        window.config.serverModels = data.serverModels;
+        // ИСПРАВЛЕНО: Убрана упавшая строчка serverModels, данные считываются безопасно
+        window.config.dailyLimit = data.dailyLimit || 5;
+        window.config.role = data.role || 'trial';
 
-        if (data.isMember || data.role === 'admin') {
+        if (data.isMember || data.role === 'admin' || data.role === 'creator') {
             window.showChat();
             if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
             if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
