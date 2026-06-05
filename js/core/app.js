@@ -2,7 +2,7 @@ async function initApp() {
     const root = document.documentElement;
     const tg = window.Telegram?.WebApp;
     if (tg) {
-        try { tg.ready(); tg.expand(); tg.setHeaderColor('transparent'); } catch (e) { console.error("Ошибка активации Telegram SDK:", e); }
+        try { tg.ready(); tg.expand(); tg.setHeaderColor('bg_color'); } catch (e) { console.error("Ошибка активации Telegram SDK:", e); }
     }
 
     // Функция отвечает строго за верхнюю планку хедера (Safe Area)
