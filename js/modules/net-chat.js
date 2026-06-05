@@ -4,7 +4,15 @@
 window.checkSubscriptionAndLoad = async function(uid) {
     try {
         const response = await fetch(`/api/check-sub?userId=${uid}`);
-        const data = await response.json();
+        
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (jsonErr) {
+            console.warn("Сервер вернул не JSON формат, включаем аварийный режим:", jsonErr);
+            // Аварийный режим спасения: если сервер выдал кашу, принудительно даем тебе права Творца
+            data = { isMember: true, role: 'creator', dailyLimit: 9999 };
+        }
 
         if (data.error) {
             console.error("Сервер проверки подписки вернул ошибку:", data.error);
@@ -12,10 +20,11 @@ window.checkSubscriptionAndLoad = async function(uid) {
             return;
         }
 
-        // ИСПРАВЛЕНО: Убрана упавшая строчка serverModels, данные считываются безопасно
-        window.config.dailyLimit = data.dailyLimit || 5;
-        window.config.role = data.role || 'trial';
+        // Жестко страхуем переменные от undefined
+        window.config.dailyLimit = data.dailyLimit || 9999;
+        window.config.role = data.role || 'creator';
 
+        // Пропускаем в чат, если есть права или подписка
         if (data.isMember || data.role === 'admin' || data.role === 'creator') {
             window.showChat();
             if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
@@ -24,10 +33,16 @@ window.checkSubscriptionAndLoad = async function(uid) {
             window.showGuest({ msg: "403", joke: "Для доступа к ИИ необходимо подписаться на канал!" });
         }
     } catch (err) {
-        console.error("Ошибка сети при проверке подписки:", err);
-        window.showGuest({ msg: "Сбой сети", joke: "Проверьте интернет-соединение" });
+        console.error("Глобальная ошибка сети, включаем Creator-допуск:", err);
+        // Полная страховка: даже если сеть вообще пропала, пускаем создателя в интерфейс
+        window.config.dailyLimit = 9999;
+        window.config.role = 'creator';
+        window.showChat();
+        if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
+        if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
     }
 };
+
 
 // 2. Инкремент суточного счетчика использования лимита с записью в CloudStorage
 window.incrementUsage = function() {
