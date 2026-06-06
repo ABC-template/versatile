@@ -89,6 +89,9 @@ window.sendMessage = async function() {
     const voiceBtn = document.querySelector('.voice-btn');
     if (voiceBtn) voiceBtn.disabled = true;
 
+    // Считываем прикрепленное изображение (если оно есть)
+    const mediaToAttach = window.currentAttachedImageBase64 || null;
+
     if (typeof window.addMessageToStorage === 'function') window.addMessageToStorage(text, 'user-msg');
     
     input.value = '';
@@ -109,9 +112,10 @@ window.sendMessage = async function() {
 
     try {
         if (typeof window.streamAiResponse === 'function') {
-            // Передаем в стрим текущую тему, а также язык интерфейса или язык конкретного чата
             const userLang = activeChat?.language || window.tg?.initDataUnsafe?.user?.language_code || 'ru';
-            await window.streamAiResponse(cleanHistoryMessages, window.currentTopic, userLang, activeChat);
+            
+            // Передаем прикрепленное изображение четвертым параметром в функцию стриминга
+            await window.streamAiResponse(cleanHistoryMessages, window.currentTopic, userLang, mediaToAttach, activeChat);
         }
     } catch (error) {
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
@@ -120,6 +124,11 @@ window.sendMessage = async function() {
             window.renderMessageToDOM(`Сбой связи с приложением: ${error.message}`, 'ai-msg');
         }
     } finally {
+        // ОБЯЗАТЕЛЬНО: Очищаем черновик и превью картинки после попытки отправки
+        if (typeof window.clearImageAttachment === 'function') {
+            window.clearImageAttachment();
+        }
+        
         window.isSendingMessage = false;
         input.disabled = false;
         if (voiceBtn) voiceBtn.disabled = false;
