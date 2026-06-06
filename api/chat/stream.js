@@ -111,7 +111,7 @@ export default async function handler(request) {
             
             try {
                 const provider = createOpenAI({
-                    baseURL: 'https://openrouter.ai',
+                    baseURL: 'https://openrouter.ai/api/v1',
                     apiKey: currentKey,
                 });
 
