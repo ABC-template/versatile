@@ -432,11 +432,8 @@ window.showBetaAlert = function() {
 
 // Обработчик для кликов по скрепке (📎)
 window.handleAttachmentClick = function() {
-    const userRole = window.config?.role || 'trial';
-    if (userRole === 'creator' || userRole === 'admin') {
-        if (window.tg?.showAlert) window.tg.showAlert("Режим разработчика: выбор файлов разблокирован.");
-    } else {
-        window.showBetaAlert();
+    if (typeof window.triggerMediaSelector === 'function') {
+        window.triggerMediaSelector();
     }
 };
 
