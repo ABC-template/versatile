@@ -35,9 +35,9 @@ export default async function handler(request) {
     }
 
     try {
-        const { historyMessages = [], currentTopic, userLang } = await request.json();
+        const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // 1. ОПРЕДЕЛЯЕМ МОДЕЛЕЙ-ИСПОЛНИТЕЛЕЙ И СИСТЕМНЫЕ ПРОМПТЫ ДЛЯ КАЖДОЙ ТЕМЫ
+        // 1. ОПРЕДЕЛЯЕМ БАЗОВУЮ МОДЕЛЬ И СИСТЕМНЫЙ ПРОМПТ
         let openRouterModelId = 'google/gemini-2.5-flash';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.5;
@@ -60,7 +60,12 @@ export default async function handler(request) {
             temperature = 0.6;
         }
 
-        // Собираем воедино системную роль и языковой барьер
+        // КРИТИЧЕСКИЙ УЗЕЛ: Если прикреплено фото — принудительно ставим мультимодального лидера
+        if (attachedImage && attachedImage.trim().length > 0) {
+            openRouterModelId = 'google/gemini-2.5-flash';
+            temperature = 0.4; // Чуть снижаем температуру для точного анализа деталей на фото
+        }
+
         const langInstruction = getLanguageInstruction(userLang || 'ru');
         const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
 
@@ -69,14 +74,27 @@ export default async function handler(request) {
             { role: 'system', content: finalSystemPrompt }
         ];
 
-        historyMessages.forEach(msg => {
+        // Маппинг истории
+        for (let i = 0; i < historyMessages.length; i++) {
+            const msg = historyMessages[i];
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
-            if (msg.text && msg.text.trim().length > 0) {
+            if (!msg.text || msg.text.trim().length === 0) continue;
+
+            // Если это самое последнее сообщение пользователя и у нас есть картинка
+            if (role === 'user' && i === historyMessages.length - 1 && attachedImage) {
+                formattedMessages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: String(msg.text) },
+                        { type: 'image_url', image_url: { url: attachedImage } } // Стандарт OpenRouter Vision
+                    ]
+                });
+            } else {
+                // Обычный плоский текстовый формат
                 formattedMessages.push({ role: role, content: String(msg.text) });
             }
-        });
+        }
 
-        // Считываем пул доступных ключей ROUTER_KEY0, ROUTER_KEY1...
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
             return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), {
@@ -93,7 +111,7 @@ export default async function handler(request) {
             
             try {
                 const provider = createOpenAI({
-                    baseURL: 'https://openrouter.ai/api/v1',
+                    baseURL: 'https://openrouter.ai',
                     apiKey: currentKey,
                 });
 
@@ -121,7 +139,7 @@ export default async function handler(request) {
                 console.error(`Сбой запроса с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
                 
-                // Если это последний ключ в массиве — цикл завершится и выдаст общую ошибку
+                // Failover: если токен перегружен, переходим к следующему в цикле
                 continue;
             }
         }
