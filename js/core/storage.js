@@ -53,9 +53,15 @@ window.createNewChat = function() {
     }
 };
 
-window.switchActiveChat = function(chatId) {
+window.switchActiveChat = async function(chatId) {
     window.activeChatIds[window.currentTopic] = chatId;
     window.saveHistoriesToLocal();
+    if (window.config && window.config.syncEnabled && typeof window.loadFullChat === 'function') {
+        const activeChat = window.getCurrentActiveChat();
+        if (!activeChat || !activeChat.messages || activeChat.messages.length === 0) {
+            await window.loadFullChat(chatId);
+        }
+    }
     window.refreshUiAfterChatSelection();
 };
 
