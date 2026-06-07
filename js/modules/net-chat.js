@@ -91,7 +91,9 @@ window.sendMessage = async function() {
 
     // Считываем прикрепленное изображение (если оно есть)
     const mediaToAttach = window.currentAttachedImageBase64 || null;
-
+    if (mediaToAttach) {
+        text = `📸 [Прикреплено изображение]\n${text}`;
+    }
     if (typeof window.addMessageToStorage === 'function') window.addMessageToStorage(text, 'user-msg');
     
     input.value = '';
