@@ -1,6 +1,6 @@
 // js /modules /net-stream.js
 
-window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, activeChat) {
+window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
     const container = document.getElementById('chat-container');
     if (!container) return;
 
