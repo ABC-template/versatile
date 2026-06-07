@@ -28,7 +28,7 @@ export default async function handler(request) {
     try {
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // 1. СНАЧАЛА ОПРЕДЕЛЯЕМ СТАНДАРТНУЮ ТЕКСТОВУЮ МОДЕЛЬ ПО ТЕМЕ
+        // 1. ОПРЕДЕЛЯЕМ БАЗОВЫЕ ТЕКСТОВЫЕ МОДЕЛИ
         let openRouterModelId = 'google/gemini-2.5-flash';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.5;
@@ -51,10 +51,11 @@ export default async function handler(request) {
             temperature = 0.6;
         }
 
-        // ИСПРАВЛЕНО: Этот блок теперь стоит ПОСЛЕ выбора тем, жестко перебивая слепую модель на зрячую!
+        // КРИТИЧЕСКИЙ УЗЕЛ: Если прикреплено фото — ЖЕСТКО форсируем конкретную мультимодальную модель!
+        // Пропускаем автоматический роутер, так как openrouter/auto работает только с текстом.
         if (attachedImage && attachedImage.trim().length > 0) {
-            openRouterModelId = 'google/gemini-2.5-flash'; // Мультимодальный флагман для чтения фото
-            temperature = 0.4;
+            openRouterModelId = 'google/gemini-2.5-flash'; // Принудительно вызываем зрячий движок напрямую
+            temperature = 0.3;
         }
 
         const langInstruction = getLanguageInstruction(userLang || 'ru');
@@ -72,23 +73,21 @@ export default async function handler(request) {
             let textContent = String(msg.text);
 
             if (role === 'user' && textContent.includes('📸 [Прикреплено изображение]')) {
-                // Очищаем маркер из промпта, оставляя только чистый вопрос пользователя
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
 
-                // Если это самое последнее сообщение и есть картинка — упаковываем в Vision-массив
+                // Упаковываем в массив контента для прямого мультимодального Vision API
                 if (attachedImage && index === historyMessages.length - 1) {
                     formattedMessages.push({
                         role: 'user',
                         content: [
                             { type: 'text', text: textContent },
-                            { type: 'image_url', image_url: { url: attachedImage } } // Стандарт OpenRouter Vision API
+                            { type: 'image_url', image_url: { url: attachedImage } } 
                         ]
                     });
                     return;
                 }
             }
 
-            // Обычное текстовое сообщение для истории
             formattedMessages.push({ role: role, content: textContent });
         });
 
@@ -98,7 +97,7 @@ export default async function handler(request) {
                 status: 200, headers: { 'Content-Type': 'application/json' }
             });
         }
-
+        
         // api /chat /stream.js (Часть 2 из 2)
 
         // 3. ОТКАЗОУСТОЙЧИВЫЙ ЦИКЛ ОБРАБОТКИ ЗАПРОСА ЧЕРЕЗ ПУЛ КЛЮЧЕЙ
