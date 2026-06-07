@@ -28,34 +28,30 @@ export default async function handler(request) {
     try {
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // 1. ОПРЕДЕЛЯЕМ БАЗОВЫЕ ТЕКСТОВЫЕ МОДЕЛИ
+        // ТОТАЛЬНАЯ СТРАХОВКА: Если есть фото — сразу выставляем зрячую модель, минуя любые ветвления!
         let openRouterModelId = 'google/gemini-2.5-flash';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
-        let temperature = 0.5;
+        let temperature = 0.4;
 
-        if (currentTopic === 'code') {
-            openRouterModelId = 'deepseek/deepseek-chat';
-            rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
-            temperature = 0.3;
-        } else if (currentTopic === 'creative') {
-            openRouterModelId = 'openai/gpt-4o';
-            rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений.';
-            temperature = 0.9;
-        } else if (currentTopic === 'fast') {
-            openRouterModelId = 'google/gemini-2.5-flash';
-            rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий и вводных слов.';
+        // Только если фото НЕТ, мы имеем право включить слепые текстовые модели разделов
+        if (!attachedImage || attachedImage.trim().length === 0) {
             temperature = 0.5;
-        } else if (currentTopic === 'kitchen') {
-            openRouterModelId = 'google/gemini-2.5-flash';
-            rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
-            temperature = 0.6;
-        }
-
-        // КРИТИЧЕСКИЙ УЗЕЛ: Если прикреплено фото — ЖЕСТКО форсируем конкретную мультимодальную модель!
-        // Пропускаем автоматический роутер, так как openrouter/auto работает только с текстом.
-        if (attachedImage && attachedImage.trim().length > 0) {
-            openRouterModelId = 'google/gemini-2.5-flash'; // Принудительно вызываем зрячий движок напрямую
-            temperature = 0.3;
+            if (currentTopic === 'code') {
+                openRouterModelId = 'deepseek/deepseek-chat';
+                rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
+                temperature = 0.3;
+            } else if (currentTopic === 'creative') {
+                openRouterModelId = 'openai/gpt-4o';
+                rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений.';
+                temperature = 0.9;
+            } else if (currentTopic === 'fast') {
+                openRouterModelId = 'google/gemini-2.5-flash';
+                rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий и вводных слов.';
+            } else if (currentTopic === 'kitchen') {
+                openRouterModelId = 'google/gemini-2.5-flash';
+                rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
+                temperature = 0.6;
+            }
         }
 
         const langInstruction = getLanguageInstruction(userLang || 'ru');
@@ -65,7 +61,7 @@ export default async function handler(request) {
             { role: 'system', content: finalSystemPrompt }
         ];
 
-        // 2. СБОРКА МУЛЬТИМОДАЛЬНОГО КОНТЕКСТА ДЛЯ OPENROUTER
+        // СБОРКА МУЛЬТИМОДАЛЬНОГО КОНТЕКСТА ДЛЯ OPENROUTER
         historyMessages.forEach((msg, index) => {
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
             if (!msg.text || msg.text.trim().length === 0) return;
@@ -75,7 +71,7 @@ export default async function handler(request) {
             if (role === 'user' && textContent.includes('📸 [Прикреплено изображение]')) {
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
 
-                // Упаковываем в массив контента для прямого мультимодального Vision API
+                // Если фото есть и это финальная реплика — пакуем строго по спецификации OpenRouter Vision
                 if (attachedImage && index === historyMessages.length - 1) {
                     formattedMessages.push({
                         role: 'user',
@@ -97,7 +93,7 @@ export default async function handler(request) {
                 status: 200, headers: { 'Content-Type': 'application/json' }
             });
         }
-        
+           
         // api /chat /stream.js (Часть 2 из 2)
 
         // 3. ОТКАЗОУСТОЙЧИВЫЙ ЦИКЛ ОБРАБОТКИ ЗАПРОСА ЧЕРЕЗ ПУЛ КЛЮЧЕЙ
