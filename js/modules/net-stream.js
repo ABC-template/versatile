@@ -131,14 +131,39 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
     `;
     msgDiv.appendChild(act);
 
-    if (activeChat) {
-        activeChat.messages.push({ 
-            id: generatedAiMsgId, 
-            text: finalText, 
-            type: 'ai-msg' 
-        });
-        window.saveHistoriesToLocal();
+if (activeChat) {
+    const aiMsg = {
+        id: generatedAiMsgId,
+        text: finalText,
+        type: 'ai-msg',
+        isFavorite: false
+    };
+    activeChat.messages.push(aiMsg);
+    window.saveHistoriesToLocal();
+
+    // Отправляем на сервер, если синхронизация включена
+    if (window.config.syncEnabled && activeChat.id) {
+        const initData = window.Telegram?.WebApp?.initData;
+        if (initData) {
+            try {
+                await fetch('/api/chats/action', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': initData
+                    },
+                    body: JSON.stringify({
+                        action: 'new_message',
+                        chatId: activeChat.id,
+                        message: aiMsg
+                    })
+                });
+            } catch (err) {
+                console.error("Ошибка отправки AI-сообщения на сервер:", err);
+            }
+        }
     }
+}
     
     const isNoLimit = window.config.dailyLimit >= 9000;
     if (!isNoLimit && typeof window.incrementUsage === 'function') {
