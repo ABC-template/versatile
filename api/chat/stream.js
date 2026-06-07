@@ -4,7 +4,6 @@ import { streamText } from 'ai';
 
 export const config = { runtime: 'edge' };
 
-// Вспомогательная функция сбора всех доступных ключей ротации из переменных окружения vercel
 function getRotatedKeysPool() {
     const keys = [];
     let i = 0;
@@ -17,83 +16,81 @@ function getRotatedKeysPool() {
     return keys;
 }
 
-// Генератор умной языковой инструкции, исключающий "эффект австралийца"
 function getLanguageInstruction(userLang) {
-    const langMap = {
-        ru: 'русском языке',
-        en: 'английском языке',
-        it: 'итальянском языке'
-    };
+    const langMap = { ru: 'русском языке', en: 'английском языке', it: 'итальянском языке' };
     const targetLangStr = langMap[userLang] || 'русском языке';
-    
     return `[Системная локаль пользователя: ${userLang}]. Instruction: Всегда веди диалог, пиши пояснения и комментарии строго на ${targetLangStr}. Exception: Если пользователь отправляет текст на другом языке с явной просьбой о переводе, анализе, или напрямую просит переключить язык общения — полностью подчиняйся контексту его запроса и отвечай на выбранном им языке.`;
 }
 
 export default async function handler(request) {
-    if (request.method !== 'POST') {
-        return new Response('Method Not Allowed', { status: 405 });
-    }
+    if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
     try {
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // 1. ОПРЕДЕЛЯЕМ БАЗОВУЮ МОДЕЛЬ И СИСТЕМНЫЙ ПРОМПТ
         let openRouterModelId = 'google/gemini-2.5-flash';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.5;
 
         if (currentTopic === 'code') {
             openRouterModelId = 'deepseek/deepseek-chat';
-            rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
+            rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Специализация — чистый, производительный код.';
             temperature = 0.3;
         } else if (currentTopic === 'creative') {
             openRouterModelId = 'openai/gpt-4o';
-            rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений. Используй метафоры и сильные глаголы.';
+            rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер. Пиши живым, эмоциональным языком без штампов.';
             temperature = 0.9;
         } else if (currentTopic === 'fast') {
             openRouterModelId = 'google/gemini-2.5-flash';
-            rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий, вводных слов и вежливых завершений диалога. Экономь время пользователя.';
+            rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Выдавай только короткую и сжатую суть без лишней воды.';
             temperature = 0.5;
         } else if (currentTopic === 'kitchen') {
             openRouterModelId = 'google/gemini-2.5-flash';
-            rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты, заменять недостающие ингредиенты и объясняешь сложные кулинарные техники простым языком.';
+            rolePrompt = 'Ты — Versatile AI, шеф-повар со звездами Мишлен. Помогаешь составлять меню и находить рецепты.';
             temperature = 0.6;
         }
 
-        // КРИТИЧЕСКИЙ УЗЕЛ: Если прикреплено фото — принудительно ставим мультимодального лидера
+        // Если прилетела картинка, жестко фиксируем мультимодальную зрячую модель
         if (attachedImage && attachedImage.trim().length > 0) {
             openRouterModelId = 'google/gemini-2.5-flash';
-            temperature = 0.4; // Чуть снижаем температуру для точного анализа деталей на фото
+            temperature = 0.4;
         }
 
         const langInstruction = getLanguageInstruction(userLang || 'ru');
         const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
 
-        // 2. СБОРКА КОНТЕКСТА: Системный промпт ВСЕГДА идет первым элементом
         const formattedMessages = [
             { role: 'system', content: finalSystemPrompt }
         ];
 
-        // Маппинг истории
-        for (let i = 0; i < historyMessages.length; i++) {
-            const msg = historyMessages[i];
+        // УМНЫЙ ПАРСИНГ ИСТОРИИ С ИНТЕГРАЦИЕЙ МУЛЬТИМОДАЛЬНОСТИ
+        historyMessages.forEach((msg, index) => {
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
-            if (!msg.text || msg.text.trim().length === 0) continue;
+            if (!msg.text || msg.text.trim().length === 0) return;
 
-            // Если это самое последнее сообщение пользователя и у нас есть картинка
-            if (role === 'user' && i === historyMessages.length - 1 && attachedImage) {
-                formattedMessages.push({
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: String(msg.text) },
-                        { type: 'image_url', image_url: { url: attachedImage } } // Стандарт OpenRouter Vision
-                    ]
-                });
-            } else {
-                // Обычный плоский текстовый формат
-                formattedMessages.push({ role: role, content: String(msg.text) });
+            let textContent = String(msg.text);
+
+            // Если в тексте сообщения обнаружена наша новая визуальная заглушка
+            if (role === 'user' && textContent.includes('📸 [Прикреплено изображение]')) {
+                // Очищаем системный маркер из текста, чтобы он не улетал в промпт нейросети
+                textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
+
+                // Упаковываем сообщение в строгий Vision-формат OpenRouter
+                if (attachedImage && index === historyMessages.length - 1) {
+                    formattedMessages.push({
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: textContent },
+                            { type: 'image_url', image_url: { url: attachedImage } }
+                        ]
+                    });
+                    return;
+                }
             }
-        }
+
+            // Обычный плоский текст для всех остальных реплик истории
+            formattedMessages.push({ role: role, content: textContent });
+        });
 
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
