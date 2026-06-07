@@ -136,28 +136,54 @@ window.deleteMessage = function(msgId) {
     }
 };
 
-window.addMessageToStorage = function(text, className) {
+window.addMessageToStorage = async function(text, className) {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     const activeChat = window.getCurrentActiveChat();
-
     const generatedMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
-
     if (activeChat) {
-        activeChat.messages.push({ 
-            id: generatedMsgId, 
-            text: text, 
-            type: className 
-        });
-        
-        // Автопереименование работает только если пользователь еще не менял название сам
+        const newMsg = {
+            id: generatedMsgId,
+            text: text,
+            type: className,
+            isFavorite: false
+        };
+        activeChat.messages.push(newMsg);
         const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
         const startTitle = `${window.getLangString('start_chat')} "${sectionName}"`;
         if (className === 'user-msg' && (!activeChat.userRenamed || activeChat.title === startTitle)) {
             activeChat.title = text.substring(0, 18) + (text.length > 18 ? '...' : '');
         }
-    }
+        // Сохраняем локально
+        window.saveHistoriesToLocal();
+        if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(text, className, generatedMsgId);
+        if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
 
-    window.saveHistoriesToLocal();
-    if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(text, className, generatedMsgId);
-    if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
+        // Отправляем на сервер, если синхронизация включена
+        if (window.config.syncEnabled && activeChat.id) {
+            try {
+                const initData = window.Telegram?.WebApp?.initData;
+                if (initData) {
+                    await fetch('/api/chats/action', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-Telegram-Init-Data': initData
+                        },
+                        body: JSON.stringify({
+                            action: 'new_message',
+                            chatId: activeChat.id,
+                            message: {
+                                id: generatedMsgId,
+                                text: text,
+                                type: className,
+                                isFavorite: false
+                            }
+                        })
+                    });
+                }
+            } catch (err) {
+                console.error("Ошибка отправки сообщения на сервер:", err);
+            }
+        }
+    }
 };
