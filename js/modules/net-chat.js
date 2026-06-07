@@ -3,47 +3,56 @@
 
 // 1. Проверка подписки в Telegram-канале через бэкенд Edge API
 window.checkSubscriptionAndLoad = async function(uid) {
-    try {
-        const response = await fetch(`https://versatile-sepia.vercel.app/api/check-sub?userId=${uid}`);
-        
-        let data = {};
-        try {
-            data = await response.json();
-        } catch (jsonErr) {
-            console.warn("Сервер вернул не JSON формат, включаем аварийный режим:", jsonErr);
-            // Аварийный режим спасения: если сервер выдал кашу, принудительно даем тебе права Творца
-            data = { isMember: true, role: 'creator', dailyLimit: 9999 };
-        }
-
-        if (data.error) {
-            console.error("Сервер проверки подписки вернул ошибку:", data.error);
-            window.showGuest({ msg: "500", joke: "Сбой синхронизации с сервером" });
-            return;
-        }
-
-        // Жестко страхуем переменные от undefined
-        window.config.dailyLimit = data.dailyLimit || 9999;
-        window.config.role = data.role || 'creator';
-
-        // Пропускаем в чат, если есть права или подписка
-        if (data.isMember || data.role === 'admin' || data.role === 'creator') {
-            window.showChat();
-            if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
-            if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
-        } else {
-            window.showGuest({ msg: "403", joke: "Для доступа к ИИ необходимо подписаться на канал!" });
-        }
-    } catch (err) {
-        console.error("Глобальная ошибка сети, включаем Creator-допуск:", err);
-        // Полная страховка: даже если сеть вообще пропала, пускаем создателя в интерфейс
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) {
+        console.warn("Нет initData, работа в офлайн-режиме");
         window.config.dailyLimit = 9999;
         window.config.role = 'creator';
         window.showChat();
         if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
         if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
+        return;
+    }
+    try {
+        const response = await fetch(`/api/check-sub`, {
+            headers: { 'X-Telegram-Init-Data': initData }
+        });
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (jsonErr) {
+            console.warn("Сервер вернул не JSON:", jsonErr);
+            data = { isMember: true, role: 'creator', dailyLimit: 9999, syncEnabled: true };
+        }
+        if (data.error) {
+            console.error("Ошибка проверки подписки:", data.error);
+            window.showGuest({ msg: "500", joke: "Сбой синхронизации с сервером" });
+            return;
+        }
+        window.config.dailyLimit = data.dailyLimit || 9999;
+        window.config.role = data.role || 'creator';
+        window.config.syncEnabled = data.syncEnabled === true;
+        if (data.isMember || data.role === 'admin' || data.role === 'creator') {
+            window.showChat();
+            if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
+            if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
+            // Если синхронизация включена, загружаем метаданные чатов
+            if (window.config.syncEnabled && typeof window.syncChatsMetadata === 'function') {
+                await window.syncChatsMetadata();
+            }
+        } else {
+            window.showGuest({ msg: "403", joke: "Для доступа к ИИ необходимо подписаться на канал!" });
+        }
+    } catch (err) {
+        console.error("Глобальная ошибка сети, включаем Creator-допуск:", err);
+        window.config.dailyLimit = 9999;
+        window.config.role = 'creator';
+        window.config.syncEnabled = false;
+        window.showChat();
+        if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
+        if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
     }
 };
-
 
 // 2. Инкремент суточного счетчика использования лимита с записью в CloudStorage
 window.incrementUsage = function() {
