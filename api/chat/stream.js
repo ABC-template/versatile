@@ -28,31 +28,32 @@ export default async function handler(request) {
     try {
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
+        // 1. СНАЧАЛА ОПРЕДЕЛЯЕМ СТАНДАРТНУЮ ТЕКСТОВУЮ МОДЕЛЬ ПО ТЕМЕ
         let openRouterModelId = 'google/gemini-2.5-flash';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.5;
 
         if (currentTopic === 'code') {
             openRouterModelId = 'deepseek/deepseek-chat';
-            rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Специализация — чистый, производительный код.';
+            rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
             temperature = 0.3;
         } else if (currentTopic === 'creative') {
             openRouterModelId = 'openai/gpt-4o';
-            rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер. Пиши живым, эмоциональным языком без штампов.';
+            rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений.';
             temperature = 0.9;
         } else if (currentTopic === 'fast') {
             openRouterModelId = 'google/gemini-2.5-flash';
-            rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Выдавай только короткую и сжатую суть без лишней воды.';
+            rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий и вводных слов.';
             temperature = 0.5;
         } else if (currentTopic === 'kitchen') {
             openRouterModelId = 'google/gemini-2.5-flash';
-            rolePrompt = 'Ты — Versatile AI, шеф-повар со звездами Мишлен. Помогаешь составлять меню и находить рецепты.';
+            rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
             temperature = 0.6;
         }
 
-        // Если прилетела картинка, жестко фиксируем мультимодальную зрячую модель
+        // ИСПРАВЛЕНО: Этот блок теперь стоит ПОСЛЕ выбора тем, жестко перебивая слепую модель на зрячую!
         if (attachedImage && attachedImage.trim().length > 0) {
-            openRouterModelId = 'google/gemini-2.5-flash';
+            openRouterModelId = 'google/gemini-2.5-flash'; // Мультимодальный флагман для чтения фото
             temperature = 0.4;
         }
 
@@ -63,32 +64,31 @@ export default async function handler(request) {
             { role: 'system', content: finalSystemPrompt }
         ];
 
-        // УМНЫЙ ПАРСИНГ ИСТОРИИ С ИНТЕГРАЦИЕЙ МУЛЬТИМОДАЛЬНОСТИ
+        // 2. СБОРКА МУЛЬТИМОДАЛЬНОГО КОНТЕКСТА ДЛЯ OPENROUTER
         historyMessages.forEach((msg, index) => {
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
             if (!msg.text || msg.text.trim().length === 0) return;
 
             let textContent = String(msg.text);
 
-            // Если в тексте сообщения обнаружена наша новая визуальная заглушка
             if (role === 'user' && textContent.includes('📸 [Прикреплено изображение]')) {
-                // Очищаем системный маркер из текста, чтобы он не улетал в промпт нейросети
+                // Очищаем маркер из промпта, оставляя только чистый вопрос пользователя
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
 
-                // Упаковываем сообщение в строгий Vision-формат OpenRouter
+                // Если это самое последнее сообщение и есть картинка — упаковываем в Vision-массив
                 if (attachedImage && index === historyMessages.length - 1) {
                     formattedMessages.push({
                         role: 'user',
                         content: [
                             { type: 'text', text: textContent },
-                            { type: 'image_url', image_url: { url: attachedImage } }
+                            { type: 'image_url', image_url: { url: attachedImage } } // Стандарт OpenRouter Vision API
                         ]
                     });
                     return;
                 }
             }
 
-            // Обычный плоский текст для всех остальных реплик истории
+            // Обычное текстовое сообщение для истории
             formattedMessages.push({ role: role, content: textContent });
         });
 
@@ -98,6 +98,7 @@ export default async function handler(request) {
                 status: 200, headers: { 'Content-Type': 'application/json' }
             });
         }
+
         // api /chat /stream.js (Часть 2 из 2)
 
         // 3. ОТКАЗОУСТОЙЧИВЫЙ ЦИКЛ ОБРАБОТКИ ЗАПРОСА ЧЕРЕЗ ПУЛ КЛЮЧЕЙ
