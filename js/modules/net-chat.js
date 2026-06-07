@@ -74,7 +74,7 @@ window.sendMessage = async function() {
 
     const input = document.getElementById('user-input');
     if (!input) return;
-    const text = input.value.trim();
+    let text = input.value.trim();
     if (!text) return;
 
     const isNoLimit = window.config.dailyLimit >= 9000;
