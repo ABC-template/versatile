@@ -1,3 +1,5 @@
+console.log('VERSION 2.0 - using initData');
+
 import { validateTelegramInitData } from './_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
