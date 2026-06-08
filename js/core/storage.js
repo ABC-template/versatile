@@ -20,13 +20,13 @@ window.getCurrentActiveChat = function() {
 
 window.createNewChat = async function() {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
-    const newId = "chat_" + Date.now();
+    const newId = window.generateUUID();                 // вместо "chat_" + Date.now()
     const currentList = window.chatHistories[window.currentTopic];
     const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
     const sysLang = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru';
     const startTitle = `${window.getLangString('start_chat')} "${sectionName}"`;
     const welcomeText = window.welcomeTexts[window.currentTopic] || `Привет!`;
-    const firstMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const firstMsgId = window.generateUUID();            // вместо "msg_" + Date.now() + "_" + random
     const newChat = {
         id: newId,
         title: startTitle,
@@ -50,7 +50,6 @@ window.createNewChat = async function() {
         card.classList.add('hidden');
         if (window.tg?.BackButton) window.tg.BackButton.hide();
     }
-    // Отправляем новый чат на сервер, если синхронизация включена
     if (window.config.syncEnabled) {
         const initData = window.Telegram?.WebApp?.initData;
         if (initData) {
@@ -193,10 +192,10 @@ window.deleteMessage = async function(msgId) {
     }
 };
 
-window.addMessageToStorage = async function(text, className) {
+windowwindow.addMessageToStorage = async function(text, className) {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     const activeChat = window.getCurrentActiveChat();
-    const generatedMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const generatedMsgId = window.generateUUID();      // замена
     if (activeChat) {
         const newMsg = {
             id: generatedMsgId,
@@ -210,19 +209,16 @@ window.addMessageToStorage = async function(text, className) {
         if (className === 'user-msg' && (!activeChat.userRenamed || activeChat.title === startTitle)) {
             activeChat.title = text.substring(0, 18) + (text.length > 18 ? '...' : '');
         }
-        // Сохраняем локально
         window.saveHistoriesToLocal();
         if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(text, className, generatedMsgId);
         if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
-
-        // Отправляем на сервер, если синхронизация включена
         if (window.config.syncEnabled && activeChat.id) {
             try {
                 const initData = window.Telegram?.WebApp?.initData;
                 if (initData) {
                     await fetch('/api/chats/action', {
                         method: 'POST',
-                        headers: { 
+                        headers: {
                             'Content-Type': 'application/json',
                             'X-Telegram-Init-Data': initData
                         },
