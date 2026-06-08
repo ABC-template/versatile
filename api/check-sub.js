@@ -21,8 +21,7 @@ export default async function handler(req) {
   if (!botToken) {
     return new Response(JSON.stringify({ error: "Bot token not configured" }), { status: 500, headers: corsHeaders });
   }
-console.log('BOT_TOKEN first 10 chars:', botToken.substring(0, 10));
-console.log('Full initData:', initData);
+  
   const user = await validateTelegramInitData(initData, botToken);
   if (!user || !user.id) {
     return new Response(JSON.stringify({ error: "Invalid init data" }), { status: 401, headers: corsHeaders });
