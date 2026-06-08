@@ -25,6 +25,18 @@ export default async function handler(request) {
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
 
+    // Установка контекста RLS
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/set_app_user_id`;
+    await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid: userId })
+    });
+
     const { searchParams } = new URL(request.url);
     const chatId = searchParams.get('id');
     if (!chatId) throw new Error('Missing chat id');
