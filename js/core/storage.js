@@ -96,18 +96,34 @@ window.deleteChat = function(event, chatId) {
 };
 
 // Функция переименования чата (Книга со своим названием)
-window.renameChat = function(event, chatId) {
+window.renameChat = async function(event, chatId) {
     if (event && event.stopPropagation) event.stopPropagation();
     const modelsChats = window.chatHistories[window.currentTopic] || [];
     const chat = modelsChats.find(c => c.id === chatId);
     if (!chat) return;
-
     const newTitle = prompt(window.getLangString('prompt_rename'), chat.title);
     if (newTitle && newTitle.trim().length > 0) {
         chat.title = newTitle.trim();
-        chat.userRenamed = true; // Запрещаем авто-переименование первой фразой
+        chat.userRenamed = true;
         window.saveHistoriesToLocal();
         if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
+        // Отправляем на сервер
+        if (window.config.syncEnabled && chat.id) {
+            const initData = window.Telegram?.WebApp?.initData;
+            if (initData) {
+                try {
+                    await fetch('/api/chats/action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+                        body: JSON.stringify({
+                            action: 'rename_chat',
+                            chatId: chat.id,
+                            newTitle: chat.title
+                        })
+                    });
+                } catch (err) { console.error("Ошибка переименования на сервере:", err); }
+            }
+        }
     }
 };
 
