@@ -28,8 +28,7 @@ export default async function handler(req) {
   if (!botToken) {
     return new Response(JSON.stringify({ error: "Bot token not configured" }), { status: 500, headers: corsHeaders });
   }
-  // Временно для отладки – УБРАТЬ ПОТОМ!
-const user = { id: 1541531808 }; // force pass
+  const user = await validateTelegramInitData(initData, botToken);
   if (!user || !user.id) {
     return new Response(JSON.stringify({ error: "Invalid init data" }), { status: 401, headers: corsHeaders });
   }
