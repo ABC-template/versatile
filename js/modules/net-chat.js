@@ -18,6 +18,9 @@ window.checkSubscriptionAndLoad = async function(uid) {
             headers: { 'X-Telegram-Init-Data': initData }
         });
         let data = {};
+
+        data.syncEnable = true;
+        
         try {
             data = await response.json();
         } catch (jsonErr) {
