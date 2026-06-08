@@ -1,5 +1,4 @@
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
-import { createClient } from '@supabase/supabase-js';
 
 export const config = { runtime: 'edge' };
 
@@ -25,31 +24,30 @@ export default async function handler(request) {
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    await supabase.rpc('set_app_user_id', { uid: userId });
 
     const { searchParams } = new URL(request.url);
     const chatId = searchParams.get('id');
     if (!chatId) throw new Error('Missing chat id');
 
-    // Получаем чат, проверяя принадлежность пользователю
-    const { data: chat, error: chatError } = await supabase
-      .from('chats')
-      .select('*')
-      .eq('id', chatId)
-      .eq('user_id', userId)
-      .single();
-    if (chatError || !chat) throw new Error('Chat not found or access denied');
+    async function supabaseFetch(path) {
+      const url = `${supabaseUrl}/rest/v1/${path}`;
+      const headers = {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      };
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Supabase error ${res.status}: ${text}`);
+      }
+      return res.json();
+    }
 
-    // Получаем сообщения чата (последние 500)
-    const { data: messages, error: messagesError } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('chat_id', chatId)
-      .order('created_at', { ascending: true })
-      .limit(500);
-    if (messagesError) throw messagesError;
+    const chats = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}`);
+    if (!chats || chats.length === 0) throw new Error('Chat not found or access denied');
+    const chat = chats[0];
 
+    const messages = await supabaseFetch(`messages?chat_id=eq.${chatId}&order=created_at.asc&limit=500`);
     return new Response(JSON.stringify({ success: true, chat, messages }), { status: 200, headers: corsHeaders });
   } catch (err) {
     console.error(err);
