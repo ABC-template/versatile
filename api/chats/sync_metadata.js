@@ -25,6 +25,18 @@ export default async function handler(request) {
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
 
+    // Установка контекста RLS
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/set_app_user_id`;
+    await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid: userId })
+    });
+
     async function supabaseFetch(path) {
       const url = `${supabaseUrl}/rest/v1/${path}`;
       const headers = {
@@ -39,9 +51,8 @@ export default async function handler(request) {
       return res.json();
     }
 
-    // Проверка права на синхронизацию через RPC
-    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/can_sync`;
-    const rpcRes = await fetch(rpcUrl, {
+    const canSyncUrl = `${supabaseUrl}/rest/v1/rpc/can_sync`;
+    const canSyncRes = await fetch(canSyncUrl, {
       method: 'POST',
       headers: {
         'apikey': supabaseKey,
@@ -50,7 +61,7 @@ export default async function handler(request) {
       },
       body: JSON.stringify({ uid: userId })
     });
-    const canSync = await rpcRes.json();
+    const canSync = await canSyncRes.json();
     if (!canSync) {
       return new Response(JSON.stringify({ syncEnabled: false, message: 'Sync not allowed' }), { status: 200, headers: corsHeaders });
     }
