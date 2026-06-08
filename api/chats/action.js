@@ -39,6 +39,34 @@ export default async function handler(request) {
       .eq('user_id', userId)
       .single();
     if (chatError || !chat) throw new Error('Chat not found or access denied');
+    
+    if (action === 'new_chat') {
+  const { chat, firstMessage } = body;
+  // Вставляем чат
+  const { error: chatInsertError } = await supabase
+    .from('chats')
+    .insert({
+      id: chat.id,
+      user_id: userId,
+      topic_id: chat.topic_id,
+      title: chat.title,
+      max_context: chat.max_context,
+      user_renamed: chat.user_renamed,
+    });
+  if (chatInsertError) throw chatInsertError;
+  // Вставляем первое сообщение
+  const { error: msgInsertError } = await supabase
+    .from('messages')
+    .insert({
+      id: firstMessage.id,
+      chat_id: chat.id,
+      msg_type: firstMessage.type,
+      text: firstMessage.text,
+      is_favorite: firstMessage.is_favorite,
+    });
+  if (msgInsertError) throw msgInsertError;
+  return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+    }
 
     if (action === 'new_message') {
       const { data, error } = await supabase
