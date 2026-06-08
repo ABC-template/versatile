@@ -238,7 +238,7 @@ window.renderMessageToDOM = function(text, className, msgId = null, isFav = fals
     const msgDiv = document.createElement('div'); 
     msgDiv.className = `msg ${className} msg-animated`;
     
-    const finalMsgId = msgId || "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const finalMsgId = msgId || window.generateUUID();   // замена
     msgDiv.id = `msg-block-${finalMsgId}`;
     
     const contentContainer = document.createElement('div');
