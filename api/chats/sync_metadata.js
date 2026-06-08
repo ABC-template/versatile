@@ -1,6 +1,4 @@
-// api/chats/sync-metadata.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
-import { createClient } from '@supabase/supabase-js';
 
 export const config = { runtime: 'edge' };
 
@@ -26,39 +24,42 @@ export default async function handler(request) {
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    await supabase.rpc('set_app_user_id', { uid: userId });
 
-    // Проверяем право на синхронизацию
-    const { data: canSyncData } = await supabase.rpc('can_sync', { uid: userId });
-    if (!canSyncData) {
+    async function supabaseFetch(path) {
+      const url = `${supabaseUrl}/rest/v1/${path}`;
+      const headers = {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      };
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Supabase error ${res.status}: ${text}`);
+      }
+      return res.json();
+    }
+
+    // Проверка права на синхронизацию через RPC
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/can_sync`;
+    const rpcRes = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid: userId })
+    });
+    const canSync = await rpcRes.json();
+    if (!canSync) {
       return new Response(JSON.stringify({ syncEnabled: false, message: 'Sync not allowed' }), { status: 200, headers: corsHeaders });
     }
 
-    // Получаем список чатов с минимальной информацией
-    const { data: chats, error } = await supabase
-      .from('chats')
-      .select('id, topic_id, title, max_context, user_renamed, updated_at, created_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false });
-    if (error) throw error;
+    const chats = await supabaseFetch(`chats?user_id=eq.${userId}&order=updated_at.desc&select=id,topic_id,title,max_context,user_renamed,updated_at,created_at`);
+    const favorites = await supabaseFetch(`messages?is_favorite=eq.true&select=id,chat_id,text`);
+    const favoritesShort = favorites.map(m => ({ msg_id: m.id, chat_id: m.chat_id, text_preview: m.text.substring(0,100) }));
 
-    // Получаем избранные сообщения (кратко)
-    let favorites = [];
-    const { data: favMessages, error: favError } = await supabase
-      .from('messages')
-      .select('id, chat_id, text, is_favorite, updated_at')
-      .eq('is_favorite', true)
-      .in('chat_id', chats.map(c => c.id));
-    if (!favError && favMessages) {
-      favorites = favMessages.map(m => ({ msg_id: m.id, chat_id: m.chat_id, text_preview: m.text.substring(0, 100) }));
-    }
-
-    return new Response(JSON.stringify({
-      syncEnabled: true,
-      chats,
-      favorites
-    }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ syncEnabled: true, chats, favorites: favoritesShort }), { status: 200, headers: corsHeaders });
   } catch (err) {
     console.error(err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
