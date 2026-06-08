@@ -17,26 +17,26 @@ async function hmacSha256(key, data) {
 export async function validateTelegramInitData(initData, botToken) {
     if (!initData || !botToken) return null;
     
-    const urlParams = new URLSearchParams(initData);
-    const hash = urlParams.get('hash');
+    const params = new URLSearchParams(initData);
+    const hash = params.get('hash');
     if (!hash) return null;
     
-    urlParams.delete('hash');
-    // Ключевой момент: параметры сортируются, но НЕ КОДИРУЮТСЯ повторно
-    const sortedKeys = [...urlParams.keys()].sort();
-    const dataCheckString = sortedKeys.map(key => `${key}=${urlParams.get(key)}`).join('\n');
+    params.delete('hash');
+    // Критично: параметры сортируются по ключу
+    const sortedKeys = Array.from(params.keys()).sort();
+    const dataCheckString = sortedKeys
+        .map(key => `${key}=${params.get(key)}`)
+        .join('\n');
     
-    // Вычисляем secret_key = HMAC-SHA256("WebAppData", bot_token)
-    const secretKey = await hmacSha256('WebAppData', botToken);
-    // Вычисляем ожидаемый hash = HMAC-SHA256(secret_key, data_check_string)
-    const computedHash = await hmacSha256(secretKey, dataCheckString);
+    // Важно: botToken должен быть ТОЧНО токеном бота
+    const secret = await hmacSha256('WebAppData', botToken);
+    const computedHash = await hmacSha256(secret, dataCheckString);
     
-    // Сравниваем
     if (computedHash !== hash) {
-        console.error('Hash mismatch', { computedHash, receivedHash: hash });
+        console.error('Hash mismatch', { computedHash, receivedHash: hash, dataCheckString });
         return null;
     }
     
-    const user = JSON.parse(urlParams.get('user') || '{}');
+    const user = JSON.parse(params.get('user') || '{}');
     return user.id ? user : null;
 }
