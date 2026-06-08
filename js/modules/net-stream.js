@@ -118,9 +118,8 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
 };
 
 function finalizeStreamMessage(msgDiv, finalText, activeChat) {
-    const generatedAiMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const generatedAiMsgId = window.generateUUID();   // замена
     msgDiv.id = `msg-block-${generatedAiMsgId}`;
-
     const act = document.createElement('div');
     act.className = 'msg-actions';
     act.innerHTML = `
@@ -130,41 +129,37 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
         <button class="action-btn" style="margin-left:auto; background:rgba(231,76,60,0.05); color:#e74c3c;" onclick="window.deleteMessage('${generatedAiMsgId}')">🗑️</button>
     `;
     msgDiv.appendChild(act);
-
-if (activeChat) {
-    const aiMsg = {
-        id: generatedAiMsgId,
-        text: finalText,
-        type: 'ai-msg',
-        isFavorite: false
-    };
-    activeChat.messages.push(aiMsg);
-    window.saveHistoriesToLocal();
-
-    // Отправляем на сервер, если синхронизация включена
-    if (window.config.syncEnabled && activeChat.id) {
-        const initData = window.Telegram?.WebApp?.initData;
-        if (initData) {
-            try {
-                await fetch('/api/chats/action', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': initData
-                    },
-                    body: JSON.stringify({
-                        action: 'new_message',
-                        chatId: activeChat.id,
-                        message: aiMsg
-                    })
-                });
-            } catch (err) {
-                console.error("Ошибка отправки AI-сообщения на сервер:", err);
+    if (activeChat) {
+        const aiMsg = {
+            id: generatedAiMsgId,
+            text: finalText,
+            type: 'ai-msg',
+            isFavorite: false
+        };
+        activeChat.messages.push(aiMsg);
+        window.saveHistoriesToLocal();
+        if (window.config.syncEnabled && activeChat.id) {
+            const initData = window.Telegram?.WebApp?.initData;
+            if (initData) {
+                try {
+                    await fetch('/api/chats/action', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Telegram-Init-Data': initData
+                        },
+                        body: JSON.stringify({
+                            action: 'new_message',
+                            chatId: activeChat.id,
+                            message: aiMsg
+                        })
+                    });
+                } catch (err) {
+                    console.error("Ошибка отправки AI-сообщения на сервер:", err);
+                }
             }
         }
     }
-}
-    
     const isNoLimit = window.config.dailyLimit >= 9000;
     if (!isNoLimit && typeof window.incrementUsage === 'function') {
         window.incrementUsage();
