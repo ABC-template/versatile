@@ -193,19 +193,18 @@ window.shareMsgText = function(btn, msgId) {
 };
 
 // 6. ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ИЗБРАННОГО
-window.toggleFavoriteMsg = function(btn, msgId) {
+window.toggleFavoriteMsg = async function(btn, msgId) {
     let foundMsg = null;
+    let foundChatId = null;
     Object.keys(window.chatHistories).forEach(tId => {
         (window.chatHistories[tId] || []).forEach(chat => {
             const msg = (chat.messages || []).find(m => m.id === msgId);
-            if (msg) foundMsg = msg;
+            if (msg) { foundMsg = msg; foundChatId = chat.id; }
         });
     });
     if (!foundMsg) return;
-
     foundMsg.isFavorite = !foundMsg.isFavorite;
     const heartSpan = btn.querySelector('.icon-heart');
-
     if (foundMsg.isFavorite) {
         btn.classList.add('is-favorite');
         if (heartSpan) heartSpan.innerText = '❤️';
@@ -215,7 +214,24 @@ window.toggleFavoriteMsg = function(btn, msgId) {
         if (heartSpan) heartSpan.innerText = '🤍';
         btn.setAttribute('data-tooltip', '🤍');
     }
-
     triggerTooltip(btn);
     window.saveHistoriesToLocal();
+    // Отправляем на сервер
+    if (window.config.syncEnabled && foundChatId) {
+        const initData = window.Telegram?.WebApp?.initData;
+        if (initData) {
+            try {
+                await fetch('/api/chats/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+                    body: JSON.stringify({
+                        action: 'favorite_message',
+                        chatId: foundChatId,
+                        messageId: msgId,
+                        isFavorite: foundMsg.isFavorite
+                    })
+                });
+            } catch (err) { console.error("Ошибка сохранения избранного:", err); }
+        }
+    }
 };
