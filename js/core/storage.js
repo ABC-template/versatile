@@ -112,14 +112,12 @@ window.renameChat = function(event, chatId) {
 };
 
 // Функция удаления отдельной реплики внутри чата (Чистка книги знаний)
-window.deleteMessage = function(msgId) {
-    const action = () => {
+window.deleteMessage = async function(msgId) {
+    const action = async () => {
         const activeChat = window.getCurrentActiveChat();
         if (!activeChat) return;
-
         activeChat.messages = activeChat.messages.filter(m => m.id !== msgId);
         window.saveHistoriesToLocal();
-        
         const domBlock = document.getElementById(`msg-block-${msgId}`);
         if (domBlock) {
             domBlock.style.transition = 'all 0.25s ease';
@@ -127,8 +125,24 @@ window.deleteMessage = function(msgId) {
             domBlock.style.transform = 'scale(0.95)';
             setTimeout(() => { domBlock.remove(); }, 250);
         }
+        // Отправляем на сервер, если синхронизация включена
+        if (window.config.syncEnabled && activeChat.id) {
+            const initData = window.Telegram?.WebApp?.initData;
+            if (initData) {
+                try {
+                    await fetch('/api/chats/action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+                        body: JSON.stringify({
+                            action: 'delete_message',
+                            chatId: activeChat.id,
+                            messageId: msgId
+                        })
+                    });
+                } catch (err) { console.error("Ошибка удаления на сервере:", err); }
+            }
+        }
     };
-
     if (window.tg?.showConfirm) {
         window.tg.showConfirm(window.getLangString('confirm_del_msg'), (ok) => { if (ok) action(); });
     } else if (confirm(window.getLangString('confirm_del_msg'))) {
