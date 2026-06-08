@@ -1,5 +1,10 @@
 console.log('VERSION 2.0 - using initData');
 
+console.log('InitData length:', initData.length);
+console.log('Bot token exists:', !!botToken);
+const user = await validateTelegramInitData(initData, botToken);
+console.log('User validation result:', user);
+
 import { validateTelegramInitData } from './_lib/telegram_auth.js';
 
 export const config = { runtime: 'edge' };
