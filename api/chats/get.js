@@ -17,7 +17,7 @@ export default async function handler(request) {
     if (!initData) throw new Error('Missing init data');
     const botToken = process.env.BOT_TOKEN?.trim();
     if (!botToken) throw new Error('Bot token not configured');
-    const user = validateTelegramInitData(initData, botToken);
+    const user = await validateTelegramInitData(initData, botToken);
     if (!user) throw new Error('Invalid init data');
     const userId = user.id;
 
