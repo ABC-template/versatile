@@ -25,6 +25,18 @@ export default async function handler(request) {
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
 
+    // Установка контекста RLS
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/set_app_user_id`;
+    await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid: userId })
+    });
+
     const body = await request.json();
     const { action, chatId, message, messageId, newTitle, isFavorite, maxContext, chat, firstMessage } = body;
 
@@ -129,4 +141,4 @@ export default async function handler(request) {
     console.error(err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
-} 
+}
