@@ -18,15 +18,16 @@ window.checkSubscriptionAndLoad = async function(uid) {
             headers: { 'X-Telegram-Init-Data': initData }
         });
         let data = {};
-
-        data.syncEnable = true;
-        
         try {
             data = await response.json();
         } catch (jsonErr) {
             console.warn("Сервер вернул не JSON:", jsonErr);
             data = { isMember: true, role: 'creator', dailyLimit: 9999, syncEnabled: true };
         }
+        
+        // 🔧 ВРЕМЕННОЕ ФОРСИРОВАНИЕ - убрать после исправления check-sub на сервере
+        data.syncEnabled = true;
+        
         if (data.error) {
             console.error("Ошибка проверки подписки:", data.error);
             window.showGuest({ msg: "500", joke: "Сбой синхронизации с сервером" });
@@ -35,11 +36,11 @@ window.checkSubscriptionAndLoad = async function(uid) {
         window.config.dailyLimit = data.dailyLimit || 9999;
         window.config.role = data.role || 'creator';
         window.config.syncEnabled = data.syncEnabled === true;
+        
         if (data.isMember || data.role === 'admin' || data.role === 'creator') {
             window.showChat();
             if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
             if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
-            // Если синхронизация включена, загружаем метаданные чатов
             if (window.config.syncEnabled && typeof window.syncChatsMetadata === 'function') {
                 await window.syncChatsMetadata();
             }
