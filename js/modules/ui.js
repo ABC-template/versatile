@@ -401,23 +401,37 @@ window.onContextSliderChange = function(val) {
     if (valueLabel) valueLabel.innerText = val;
 };
 
-window.saveContextSettings = function() {
+window.saveContextSettings = async function() {
     const slider = document.getElementById('context-slider');
     if (!slider) return;
-
     const userRole = window.config?.role || 'trial';
     const hasAccess = ['premium', 'admin', 'standard', 'creator'].includes(userRole);
-
     if (!hasAccess) {
         window.showBetaAlert();
         window.syncContextSliderWithActiveChat();
         return;
     }
-
     const activeChat = window.getCurrentActiveChat();
     if (activeChat) {
         activeChat.maxContext = parseInt(slider.value, 10);
         window.saveHistoriesToLocal();
+        // Отправляем на сервер
+        if (window.config.syncEnabled && activeChat.id) {
+            const initData = window.Telegram?.WebApp?.initData;
+            if (initData) {
+                try {
+                    await fetch('/api/chats/action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+                        body: JSON.stringify({
+                            action: 'update_context',
+                            chatId: activeChat.id,
+                            maxContext: activeChat.maxContext
+                        })
+                    });
+                } catch (err) { console.error("Ошибка синхронизации контекста:", err); }
+            }
+        }
     }
 };
 
