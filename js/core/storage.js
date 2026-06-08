@@ -18,38 +18,65 @@ window.getCurrentActiveChat = function() {
     return modelsChats.find(c => c.id === currentActiveId) || null;
 };
 
-window.createNewChat = function() {
+window.createNewChat = async function() {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     const newId = "chat_" + Date.now();
     const currentList = window.chatHistories[window.currentTopic];
     const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
-    
-    // Берем системный язык для первичной разметки чата
     const sysLang = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru';
     const startTitle = `${window.getLangString('start_chat')} "${sectionName}"`;
-
-    currentList.unshift({
+    const welcomeText = window.welcomeTexts[window.currentTopic] || `Привет!`;
+    const firstMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const newChat = {
         id: newId,
         title: startTitle,
         maxContext: 15,
-        language: sysLang, // Сохраняем язык общения внутри объекта чата
+        language: sysLang,
         topic: window.currentTopic,
-        messages: [{ 
-            id: "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7), 
-            text: window.welcomeTexts[window.currentTopic] || `Привет!`, 
-            type: "ai-msg" 
+        userRenamed: false,
+        messages: [{
+            id: firstMsgId,
+            text: welcomeText,
+            type: "ai-msg",
+            isFavorite: false
         }]
-    });
-
+    };
+    currentList.unshift(newChat);
     window.activeChatIds[window.currentTopic] = newId;
     window.saveHistoriesToLocal();
-    
     window.refreshUiAfterChatSelection();
-    
     const card = document.getElementById('profile-card');
     if (card) {
         card.classList.add('hidden');
         if (window.tg?.BackButton) window.tg.BackButton.hide();
+    }
+    // Отправляем новый чат на сервер, если синхронизация включена
+    if (window.config.syncEnabled) {
+        const initData = window.Telegram?.WebApp?.initData;
+        if (initData) {
+            try {
+                await fetch('/api/chats/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+                    body: JSON.stringify({
+                        action: 'new_chat',
+                        chat: {
+                            id: newChat.id,
+                            topic_id: newChat.topic,
+                            title: newChat.title,
+                            max_context: newChat.maxContext,
+                            user_renamed: newChat.userRenamed
+                        },
+                        firstMessage: {
+                            id: firstMsgId,
+                            text: welcomeText,
+                            type: 'ai-msg',
+                            is_favorite: false
+                        }
+                    })
+                });
+            } catch (err) { console.error("Ошибка синхронизации нового чата:", err); }
+        }
     }
 };
 
