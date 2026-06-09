@@ -25,6 +25,10 @@ const userId = 1541531808; // ваш ID
 
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+    
+    console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
+console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
+    
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
 
     // Установка контекста RLS
