@@ -10,7 +10,9 @@ export default async function handler(request) {
     'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
   };
 
-
+console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
+console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
+console.log('First 20 chars of URL:', process.env.SUPABASE_URL?.substring(0, 20));
   console.log('=== action.js: function started ==='); // Лог 1
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
