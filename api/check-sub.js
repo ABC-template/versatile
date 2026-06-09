@@ -22,13 +22,14 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: "Bot token not configured" }), { status: 500, headers: corsHeaders });
   }
   // Временно (для проверки синхронизации)
-const user = { id: userId };
+const userId = user.id;  // <-- СНАЧАЛА получите userId
+
+// ВРЕМЕННО для теста (УБРАТЬ ПОТОМ!):
+const fakeUser = { id: userId };
 // const user = validateTelegramInitData(initData, botToken);
-  //const user = validateTelegramInitData(initData, botToken);
-  if (!user || !user.id) {
-    return new Response(JSON.stringify({ error: "Invalid init data" }), { status: 401, headers: corsHeaders });
-  }
-  const userId = user.id;
+// if (!user || !user.id) {
+//     return new Response(JSON.stringify({ error: "Invalid init data" }), { status: 401, headers: corsHeaders });
+// }
 
   const channel = process.env.CHANNEL_ID?.trim();
   if (!channel) {
