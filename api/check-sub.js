@@ -33,7 +33,7 @@ const userId = user?.id || 1541531808;  // ваш тестовый ID
 
 // const userId = user.id; // старая строка, закомментировать
 
-  const channel = process.env.CHANNEL_ID?.trim();
+  const channel = '@bdicta';
   if (!channel) {
     return new Response(JSON.stringify({ error: "Channel not configured" }), { status: 500, headers: corsHeaders });
   }
