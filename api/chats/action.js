@@ -40,9 +40,12 @@ const user = validateTelegramInitData(initData, botToken);
 const userId = 1541531808; // ваш ID
 // if (!user) throw new Error('Invalid init data');
 // const userId = user.id;
-
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+// Временно, для теста:
+const supabaseUrl = 'https://brkkgdetcdcysxzjhput.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJya2tnZGV0Y2RjeXN4empocHV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODI2OTEsImV4cCI6MjA5NjE1ODY5MX0.LWzFBpO-K4-pW7VYP4kjU0fks6-kssDTFlL5pRG3LwY';
+// Закомментируйте строки с process.env
+   // const supabaseUrl = process.env.SUPABASE_URL?.trim();
+   // const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     
     console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
 console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
