@@ -4,7 +4,7 @@ window.syncChatsMetadata = async function() {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) return;
     try {
-        const response = await fetch('/api/chats/sync-metadata', {
+        const response = await fetch('/api/chats/sync_metadata.js', {
             headers: { 'X-Telegram-Init-Data': initData }
         });
         const data = await response.json();
