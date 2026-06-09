@@ -44,38 +44,3 @@ window.modelNames = {
     claude: 'Claude 3.5',
     grok: 'Grok 4.3'
 };
-    analytics: "Режим Аналитика. Готов к глубокому разбору логических задач, анализу документов и данных. (Функция анализа фото будет доступна создателю) 📊"
-};
-// Мгновенная нативная инициализация среды Telegram SDK
-window.tg = window.Telegram?.WebApp;
-if (window.tg) {
-    window.tg.expand();
-    window.tg.ready();
-    if (window.tg.themeParams && window.tg.themeParams.bg_color) {
-        window.tg.setHeaderColor(window.tg.themeParams.bg_color);
-        window.tg.setBackgroundColor(window.tg.themeParams.bg_color);
-    }
-}
-
-// Глобальные переменные состояния конфигурации приложения
-window.config = { dailyLimit: 0, role: 'trial', serverModels: {} };
-window.currentModel = 'gemini'; 
-window.allUserKeys = {}; 
-window.usedToday = 0;
-window.chatHistories = {}; 
-window.activeChatIds = { gemini: null, deepseek: null, gpt: null, claude: null, grok: null }; 
-
-// Флаги управления процессами
-window.isSendingMessage = false;
-window.isVoiceRecording = false;
-window.mediaRecorder = null;
-window.audioChunks = [];
-
-// Словари названий ИИ-моделей для интерфейса
-window.modelNames = { 
-    gemini: 'Gemini 2.5', 
-    deepseek: 'DeepSeek V3', 
-    gpt: 'GPT-4o', 
-    claude: 'Claude 3.5', 
-    grok: 'Grok 4.3' 
-}; 
