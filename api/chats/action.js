@@ -10,49 +10,24 @@ export default async function handler(request) {
     'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
   };
 
-console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
-console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
-console.log('First 20 chars of URL:', process.env.SUPABASE_URL?.substring(0, 20));
-  console.log('=== action.js: function started ==='); // Лог 1
-
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
-
-  try {
-    console.log('action.js: reading initData...'); // Лог 2
-    const initData = request.headers.get('x-telegram-init-data');
-    // ... (весь остальной код функции)
-  } catch (err) {
-    console.error('action.js: FATAL ERROR', err); // Лог ошибки
-    // ...
-  }
-  
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 
   try {
     const initData = request.headers.get('x-telegram-init-data');
     if (!initData) throw new Error('Missing init data');
+    
     const botToken = process.env.BOT_TOKEN?.trim();
     if (!botToken) throw new Error('Bot token not configured');
-    // В api/chats/action.js, get.js, sync_metadata.js:
-const user = validateTelegramInitData(initData, botToken);
-const userId = 1541531808; // ваш ID
-// if (!user) throw new Error('Invalid init data');
-// const userId = user.id;
-// Временно, для теста:
-const supabaseUrl = 'https://brkkgdetcdcysxzjhput.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJya2tnZGV0Y2RjeXN4empocHV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODI2OTEsImV4cCI6MjA5NjE1ODY5MX0.LWzFBpO-K4-pW7VYP4kjU0fks6-kssDTFlL5pRG3LwY';
-// Закомментируйте строки с process.env
-   // const supabaseUrl = process.env.SUPABASE_URL?.trim();
-   // const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     
-    console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
-console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
+    const user = validateTelegramInitData(initData, botToken);
+    const userId = 1541531808; // временно для теста
+    
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-
-    // Установка контекста RLS
+    
     const rpcUrl = `${supabaseUrl}/rest/v1/rpc/set_app_user_id`;
     await fetch(rpcUrl, {
       method: 'POST',
@@ -63,10 +38,10 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       },
       body: JSON.stringify({ uid: userId })
     });
-
+    
     const body = await request.json();
     const { action, chatId, message, messageId, newTitle, isFavorite, maxContext, chat, firstMessage } = body;
-
+    
     async function supabaseFetch(path, options = {}) {
       const url = `${supabaseUrl}/rest/v1/${path}`;
       const headers = {
@@ -81,12 +56,12 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       }
       return res.json();
     }
-
+    
     if (chatId && action !== 'new_chat') {
       const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
       if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
     }
-
+    
     if (action === 'new_message') {
       await supabaseFetch('messages', {
         method: 'POST',
@@ -104,7 +79,7 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-
+    
     if (action === 'delete_message') {
       await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, { method: 'DELETE' });
       await supabaseFetch(`chats?id=eq.${chatId}`, {
@@ -113,7 +88,7 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-
+    
     if (action === 'rename_chat') {
       await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
@@ -121,7 +96,7 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-
+    
     if (action === 'favorite_message') {
       await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, {
         method: 'PATCH',
@@ -129,7 +104,7 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-
+    
     if (action === 'update_context') {
       await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
@@ -137,7 +112,7 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-
+    
     if (action === 'new_chat') {
       await supabaseFetch('chats', {
         method: 'POST',
@@ -162,7 +137,7 @@ console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-
+    
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders });
   } catch (err) {
     console.error(err);
