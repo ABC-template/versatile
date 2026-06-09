@@ -38,8 +38,11 @@ const userId = user?.id || 1541531808;  // ваш тестовый ID
     return new Response(JSON.stringify({ error: "Channel not configured" }), { status: 500, headers: corsHeaders });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL?.trim();
-  const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+// const supabaseUrl = process.env.SUPABASE_URL?.trim();
+// const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+const supabaseUrl = 'https://brkkgdetcdcysxzjhput.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJya2tnZGV0Y2RjeXN4empocHV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODI2OTEsImV4cCI6MjA5NjE1ODY5MX0.LWzFBpO-K4-pW7VYP4kjU0fks6-kssDTFlL5pRG3LwY';
+  
   let dbUser = null;
   let canSync = false;
 
