@@ -10,43 +10,24 @@ export default async function handler(request) {
     'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
   };
 
-
-
-console.log('=== action.js: function started ==='); // Лог 1
-
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
-
-  try {
-    console.log('action.js: reading initData...'); // Лог 2
-    const initData = request.headers.get('x-telegram-init-data');
-    // ... (весь остальной код функции)
-  } catch (err) {
-    console.error('action.js: FATAL ERROR', err); // Лог ошибки
-    // ...
-  }
-
-
-  
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 
   try {
     const initData = request.headers.get('x-telegram-init-data');
     if (!initData) throw new Error('Missing init data');
+    
     const botToken = process.env.BOT_TOKEN?.trim();
     if (!botToken) throw new Error('Bot token not configured');
-    // В api/chats/action.js, get.js, sync_metadata.js:
-const user = validateTelegramInitData(initData, botToken);
-const userId = 1541531808; // ваш ID
-// if (!user) throw new Error('Invalid init data');
-// const userId = user.id;
-
+    
+    const user = validateTelegramInitData(initData, botToken);
+    const userId = 1541531808; // временно для теста
+    
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+    
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-
-    // Установка контекста RLS
+    
     const rpcUrl = `${supabaseUrl}/rest/v1/rpc/set_app_user_id`;
     await fetch(rpcUrl, {
       method: 'POST',
@@ -57,7 +38,7 @@ const userId = 1541531808; // ваш ID
       },
       body: JSON.stringify({ uid: userId })
     });
-
+    
     async function supabaseFetch(path) {
       const url = `${supabaseUrl}/rest/v1/${path}`;
       const headers = {
@@ -71,7 +52,7 @@ const userId = 1541531808; // ваш ID
       }
       return res.json();
     }
-
+    
     const canSyncUrl = `${supabaseUrl}/rest/v1/rpc/can_sync`;
     const canSyncRes = await fetch(canSyncUrl, {
       method: 'POST',
@@ -82,15 +63,16 @@ const userId = 1541531808; // ваш ID
       },
       body: JSON.stringify({ uid: userId })
     });
+    
     const canSync = await canSyncRes.json();
     if (!canSync) {
       return new Response(JSON.stringify({ syncEnabled: false, message: 'Sync not allowed' }), { status: 200, headers: corsHeaders });
     }
-
+    
     const chats = await supabaseFetch(`chats?user_id=eq.${userId}&order=updated_at.desc&select=id,topic_id,title,max_context,user_renamed,updated_at,created_at`);
     const favorites = await supabaseFetch(`messages?is_favorite=eq.true&select=id,chat_id,text`);
     const favoritesShort = favorites.map(m => ({ msg_id: m.id, chat_id: m.chat_id, text_preview: m.text.substring(0,100) }));
-
+    
     return new Response(JSON.stringify({ syncEnabled: true, chats, favorites: favoritesShort }), { status: 200, headers: corsHeaders });
   } catch (err) {
     console.error(err);
