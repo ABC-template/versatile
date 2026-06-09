@@ -11,3 +11,20 @@
     }
   ]
 }
+{
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "edge",
+      "environment": [
+        "SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "BOT_TOKEN",
+        "CHANNEL_ID",
+        "CRON_SECRET",
+        "ROUTER_KEY0",
+        "ROUTER_KEY1"
+      ]
+    }
+  }
+}
