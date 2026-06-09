@@ -14,7 +14,7 @@ window.checkSubscriptionAndLoad = async function(uid) {
         return;
     }
     try {
-        const response = await fetch(`../api/check-sub`, {
+        const response = await fetch(`/api/check-sub`, {
             headers: { 'X-Telegram-Init-Data': initData }
         });
         let data = {};
@@ -225,7 +225,7 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
         const initData = window.Telegram?.WebApp?.initData;
         if (initData) {
             try {
-                await fetch('../api/chats/action', {
+                await fetch('/api/chats/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
                     body: JSON.stringify({
