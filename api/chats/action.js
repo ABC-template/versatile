@@ -9,6 +9,22 @@ export default async function handler(request) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
   };
+
+
+  console.log('=== action.js: function started ==='); // Лог 1
+
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+
+  try {
+    console.log('action.js: reading initData...'); // Лог 2
+    const initData = request.headers.get('x-telegram-init-data');
+    // ... (весь остальной код функции)
+  } catch (err) {
+    console.error('action.js: FATAL ERROR', err); // Лог ошибки
+    // ...
+  }
+  
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 
