@@ -24,10 +24,6 @@ window.checkSubscriptionAndLoad = async function(uid) {
             console.warn("Сервер вернул не JSON:", jsonErr);
             data = { isMember: true, role: 'creator', dailyLimit: 9999, syncEnabled: true };
         }
-        
-        // 🔧 ВРЕМЕННОЕ ФОРСИРОВАНИЕ - убрать после исправления check-sub на сервере
-        data.syncEnabled = true;
-        
         if (data.error) {
             console.error("Ошибка проверки подписки:", data.error);
             window.showGuest({ msg: "500", joke: "Сбой синхронизации с сервером" });
@@ -36,11 +32,11 @@ window.checkSubscriptionAndLoad = async function(uid) {
         window.config.dailyLimit = data.dailyLimit || 9999;
         window.config.role = data.role || 'creator';
         window.config.syncEnabled = data.syncEnabled === true;
-        
         if (data.isMember || data.role === 'admin' || data.role === 'creator') {
             window.showChat();
             if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
             if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
+            // Если синхронизация включена, загружаем метаданные чатов
             if (window.config.syncEnabled && typeof window.syncChatsMetadata === 'function') {
                 await window.syncChatsMetadata();
             }
@@ -197,18 +193,19 @@ window.shareMsgText = function(btn, msgId) {
 };
 
 // 6. ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ИЗБРАННОГО
-window.toggleFavoriteMsg = async function(btn, msgId) {
+window.toggleFavoriteMsg = function(btn, msgId) {
     let foundMsg = null;
-    let foundChatId = null;
     Object.keys(window.chatHistories).forEach(tId => {
         (window.chatHistories[tId] || []).forEach(chat => {
             const msg = (chat.messages || []).find(m => m.id === msgId);
-            if (msg) { foundMsg = msg; foundChatId = chat.id; }
+            if (msg) foundMsg = msg;
         });
     });
     if (!foundMsg) return;
+
     foundMsg.isFavorite = !foundMsg.isFavorite;
     const heartSpan = btn.querySelector('.icon-heart');
+
     if (foundMsg.isFavorite) {
         btn.classList.add('is-favorite');
         if (heartSpan) heartSpan.innerText = '❤️';
@@ -218,24 +215,7 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
         if (heartSpan) heartSpan.innerText = '🤍';
         btn.setAttribute('data-tooltip', '🤍');
     }
+
     triggerTooltip(btn);
     window.saveHistoriesToLocal();
-    // Отправляем на сервер
-    if (window.config.syncEnabled && foundChatId) {
-        const initData = window.Telegram?.WebApp?.initData;
-        if (initData) {
-            try {
-                await fetch('/api/chats/action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
-                    body: JSON.stringify({
-                        action: 'favorite_message',
-                        chatId: foundChatId,
-                        messageId: msgId,
-                        isFavorite: foundMsg.isFavorite
-                    })
-                });
-            } catch (err) { console.error("Ошибка сохранения избранного:", err); }
-        }
-    }
 };
