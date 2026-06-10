@@ -1,48 +1,101 @@
-//import { validateTelegramInitData } from './_lib/telegram-auth.js';
+import { validateTelegramInitData } from './_lib/telegram-auth.js';
+
 export const config = { runtime: 'edge' };
 
+function jsonResponse(data, status = 200, corsHeaders = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+  });
+}
+
 export default async function handler(req) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
-
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400 });
-  }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
+  };
+  
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&select=*&limit=1`, {
-      method: 'GET',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
+    const initData = req.headers.get('x-telegram-init-data');
+    if (!initData) return jsonResponse({ error: "Missing init data" }, 401, corsHeaders);
+
+    const botToken = process.env.BOT_TOKEN?.trim();
+    if (!botToken) return jsonResponse({ error: "Bot token not configured" }, 500, corsHeaders);
+
+    const user = await validateTelegramInitData(initData, botToken);
+    if (!user || !user.id) return jsonResponse({ error: "Invalid init data" }, 401, corsHeaders);
+    const userId = user.id;
+
+    const channel = process.env.CHANNEL_ID?.trim();
+    if (!channel) return jsonResponse({ error: "Channel not configured" }, 500, corsHeaders);
+
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+
+    let dbUser = null;
+    if (supabaseUrl && supabaseKey) {
+      // Инициализируем сессию пользователя в Supabase через RPC
+      await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ uid: userId })
+      });
+
+      // Делаем чистый GET-запрос вместо SDK-метода .select()
+      const userRes = await fetch(`${supabaseUrl}/rest/v1/users?telegram_id=eq.${userId}&select=role,premium_until`, {
+        method: 'GET',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+      });
+      
+      if (userRes.ok) {
+        const users = await userRes.json();
+        dbUser = users[0] || null;
       }
-    });
-
-    if (!response.ok) {
-      return new Response(JSON.stringify({ active: false, reason: 'Database check failed' }), { status: 200 });
     }
 
-    const data = await response.json();
-    const subscription = data[0];
+    let role = "guest";
+    let dailyLimit = 0;
+    let syncEnabled = false;
 
-    if (!subscription) {
-      return new Response(JSON.stringify({ active: false, msg: 'No subscription found' }), { status: 200 });
+    if (dbUser && (dbUser.role === 'admin' || dbUser.role === 'creator')) {
+      role = dbUser.role;
+      dailyLimit = 9999;
+      syncEnabled = true;
+    } else if (dbUser && dbUser.role === 'premium' && new Date(dbUser.premium_until) > new Date()) {
+      role = 'premium';
+      dailyLimit = 100;
+      syncEnabled = true;
+    } else {
+      const url = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${channel}&user_id=${userId}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.ok) {
+        const status = data.result.status;
+        const isMember = ['member', 'administrator', 'creator', 'owner'].includes(status);
+        if (['administrator', 'creator'].includes(status)) {
+          role = "admin"; dailyLimit = 9999; syncEnabled = true;
+        } else if (isMember) {
+          role = "trial"; dailyLimit = 5; syncEnabled = false;
+        }
+      }
     }
 
-    const now = new Date();
-    const isExpired = subscription.expires_at ? new Date(subscription.expires_at) < now : false;
+    return jsonResponse({
+      isMember: role !== 'guest',
+      role,
+      dailyLimit,
+      syncEnabled,
+      serverModels: { gemini: true, deepseek: true, gpt: true, claude: true, grok: true }
+    }, 200, corsHeaders);
 
-    return new Response(JSON.stringify({
-      active: subscription.status === 'active' && !isExpired,
-      subscription
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  } catch (err) {
+    return jsonResponse({ error: err.message }, 500, corsHeaders);
   }
 }
