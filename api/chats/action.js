@@ -1,4 +1,4 @@
-import { validateTelegramInitData } from '../_lib/telegram_auth.js';
+import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
 
