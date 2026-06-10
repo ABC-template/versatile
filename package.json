@@ -2,7 +2,7 @@
   "name": "fibi-project",
   "version": "1.0.0",
   "type": "module",
-  ""cleanUrls": true,
+  "cleanUrls": true,
   "outputDirectory": ".",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
