@@ -1,5 +1,5 @@
 // api/chat/whisper.js
-export const config = { runtime: 'edge' };
+//export const config = { runtime: 'edge' };
 
 // Быстрая конвертация бинарного потока в чистую Base64-строку
 function bufferToBase64(arrayBuffer) {
