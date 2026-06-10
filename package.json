@@ -1,15 +1,13 @@
 {
-  "name": "fibi-project",
+  "name": "fibi-tma",
   "version": "1.0.0",
   "type": "module",
-  "cleanUrls": true,
-  "outputDirectory": ".",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/$1" },
-  ],
-  "dependencies": {
-    "ai": "^3.1.0",
-    "@ai-sdk/openai": "^0.0.30",
+  "engines": {
+    "node": "22.x"
   },
+  "dependencies": {
+    "ai": "^4.1.0",
+    "@ai-sdk/google": "^1.1.0",
+    "@ai-sdk/openai": "^1.1.0"
+  }
 }
