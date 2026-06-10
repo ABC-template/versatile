@@ -13,3 +13,4 @@ export function validateTelegramInitData(initData, botToken) {
   const user = JSON.parse(urlParams.get('user') || '{}');
   return user.id ? user : null;
 }
+
