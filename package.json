@@ -1,11 +1,12 @@
 {
+  "name": "fibi-project",
+  "version": "1.0.0",
   "type": "module",
-  "engines": {
-    "node": "20.x"
+  "scripts": {
+    "build": "echo 'No build step needed' && exit 0"
   },
   "dependencies": {
-    "ai": "^4.1.0",
-    "@ai-sdk/google": "^1.1.0",
-    "@ai-sdk/openai": "^1.1.0"
+    "ai": "^3.1.0",
+    "@ai-sdk/openai": "^0.0.30"
   }
 }
