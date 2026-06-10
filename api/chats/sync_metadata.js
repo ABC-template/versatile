@@ -1,66 +1,51 @@
 // api/chats/sync-metadata.js
-import { validateTelegramInitData } from '../_lib/telegram-auth.js';
-import { createClient } from '@supabase/supabase-js';
+//import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+export const config = { runtime: 'edge' };
 
-//export const config = { runtime: 'edge' };
-
-export default async function handler(request) {
-  const corsHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
-  };
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-  if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+export default async function handler(req) {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  }
 
   try {
-    const initData = request.headers.get('x-telegram-init-data');
-    if (!initData) throw new Error('Missing init data');
-    const botToken = process.env.BOT_TOKEN?.trim();
-    if (!botToken) throw new Error('Bot token not configured');
-    const user = validateTelegramInitData(initData, botToken);
-    if (!user) throw new Error('Invalid init data');
-    const userId = user.id;
+    const body = await req.json();
+    const { id, user_id, title, metadata } = body;
 
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
-    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    await supabase.rpc('set_app_user_id', { uid: userId });
-
-    // Проверяем право на синхронизацию
-    const { data: canSyncData } = await supabase.rpc('can_sync', { uid: userId });
-    if (!canSyncData) {
-      return new Response(JSON.stringify({ syncEnabled: false, message: 'Sync not allowed' }), { status: 200, headers: corsHeaders });
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: 'Missing user_id' }), { status: 400 });
     }
 
-    // Получаем список чатов с минимальной информацией
-    const { data: chats, error } = await supabase
-      .from('chats')
-      .select('id, topic_id, title, max_context, user_renamed, updated_at, created_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false });
-    if (error) throw error;
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-    // Получаем избранные сообщения (кратко)
-    let favorites = [];
-    const { data: favMessages, error: favError } = await supabase
-      .from('messages')
-      .select('id, chat_id, text, is_favorite, updated_at')
-      .eq('is_favorite', true)
-      .in('chat_id', chats.map(c => c.id));
-    if (!favError && favMessages) {
-      favorites = favMessages.map(m => ({ msg_id: m.id, chat_id: m.chat_id, text_preview: m.text.substring(0, 100) }));
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/chats`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=representation'
+      },
+      body: JSON.stringify({
+        id: id,
+        user_id: user_id,
+        title: title || 'New Chat',
+        metadata: metadata || {},
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return new Response(JSON.stringify({ error: 'Supabase sync error', details: errText }), { status: response.status });
     }
 
-    return new Response(JSON.stringify({
-      syncEnabled: true,
-      chats,
-      favorites
-    }), { status: 200, headers: corsHeaders });
-  } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    const data = await response.json();
+    return new Response(JSON.stringify({ success: true, data }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
