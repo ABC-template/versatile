@@ -2,9 +2,12 @@
   "name": "fibi-project",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "build": "echo 'No build step needed' && exit 0"
-  },
+  ""cleanUrls": true,
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/$1" }
+  ]
   "dependencies": {
     "ai": "^3.1.0",
     "@ai-sdk/openai": "^0.0.30"
