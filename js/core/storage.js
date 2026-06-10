@@ -1,5 +1,17 @@
 // js /core /storage.js
 
+// Глобальный генератор валидных UUID для Supabase (доступен для всех файлов)
+window.generateUUID = function() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 window.loadLocalHistories = function() {
     try { window.chatHistories = JSON.parse(localStorage.getItem('tg_chat_histories') || '{}'); } catch(e) { window.chatHistories = {}; }
     try { window.activeChatIds = JSON.parse(localStorage.getItem('active_chat_ids') || '{}'); } catch(e) { window.activeChatIds = { code: null, creative: null, fast: null, kitchen: null, analytics: null }; }
@@ -20,11 +32,12 @@ window.getCurrentActiveChat = function() {
 
 window.createNewChat = function() {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
-    const newId = "chat_" + Date.now();
+    
+    // ИСПРАВЛЕНО: Вместо "chat_" + Date.now() теперь создается чистый UUID
+    const newId = window.generateUUID(); 
     const currentList = window.chatHistories[window.currentTopic];
     const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
     
-    // Берем системный язык для первичной разметки чата
     const sysLang = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru';
     const startTitle = `${window.getLangString('start_chat')} "${sectionName}"`;
 
@@ -32,10 +45,11 @@ window.createNewChat = function() {
         id: newId,
         title: startTitle,
         maxContext: 15,
-        language: sysLang, // Сохраняем язык общения внутри объекта чата
+        language: sysLang, 
         topic: window.currentTopic,
         messages: [{ 
-            id: "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7), 
+            // ИСПРАВЛЕНО: Системное приветствие теперь тоже получает чистый UUID
+            id: window.generateUUID(), 
             text: window.welcomeTexts[window.currentTopic] || `Привет!`, 
             type: "ai-msg" 
         }]
@@ -66,7 +80,7 @@ window.switchActiveChat = async function(chatId) {
 };
 
 window.refreshUiAfterChatSelection = function() {
-    window.applyUiLocalization(); // Перерисовываем интерфейс под язык активного чата
+    window.applyUiLocalization(); 
     if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
     if (typeof window.loadActiveChatMessages === 'function') window.loadActiveChatMessages();
     if (typeof window.syncContextSliderWithActiveChat === 'function') window.syncContextSliderWithActiveChat();
@@ -95,7 +109,6 @@ window.deleteChat = function(event, chatId) {
     }
 };
 
-// Функция переименования чата (Книга со своим названием)
 window.renameChat = function(event, chatId) {
     if (event && event.stopPropagation) event.stopPropagation();
     const modelsChats = window.chatHistories[window.currentTopic] || [];
@@ -105,13 +118,12 @@ window.renameChat = function(event, chatId) {
     const newTitle = prompt(window.getLangString('prompt_rename'), chat.title);
     if (newTitle && newTitle.trim().length > 0) {
         chat.title = newTitle.trim();
-        chat.userRenamed = true; // Запрещаем авто-переименование первой фразой
+        chat.userRenamed = true; 
         window.saveHistoriesToLocal();
         if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
     }
 };
 
-// Функция удаления отдельной реплики внутри чата (Чистка книги знаний)
 window.deleteMessage = function(msgId) {
     const action = () => {
         const activeChat = window.getCurrentActiveChat();
@@ -139,7 +151,10 @@ window.deleteMessage = function(msgId) {
 window.addMessageToStorage = async function(text, className) {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     const activeChat = window.getCurrentActiveChat();
-    const generatedMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    
+    // ИСПРАВЛЕНО: Исходящие сообщения пользователя теперь тоже получают строгий UUID
+    const generatedMsgId = window.generateUUID(); 
+    
     if (activeChat) {
         const newMsg = {
             id: generatedMsgId,
@@ -153,12 +168,11 @@ window.addMessageToStorage = async function(text, className) {
         if (className === 'user-msg' && (!activeChat.userRenamed || activeChat.title === startTitle)) {
             activeChat.title = text.substring(0, 18) + (text.length > 18 ? '...' : '');
         }
-        // Сохраняем локально
+        
         window.saveHistoriesToLocal();
         if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(text, className, generatedMsgId);
         if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
 
-        // Отправляем на сервер, если синхронизация включена
         if (window.config.syncEnabled && activeChat.id) {
             try {
                 const initData = window.Telegram?.WebApp?.initData;
