@@ -1,6 +1,6 @@
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
-//export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge' };
 
 export default async function handler(request) {
   const corsHeaders = {
@@ -18,20 +18,14 @@ export default async function handler(request) {
     if (!initData) throw new Error('Missing init data');
     
     const botToken = process.env.BOT_TOKEN?.trim();
-    if (!botToken) throw new Error('Bot token not configured');
+    const user = await validateTelegramInitData(initData, botToken);
+    if (!user) throw new Error('Invalid init data');
+    const userId = user.id;
     
-    const user = validateTelegramInitData(initData, botToken);
-    const userId = 1541531808; // временно для теста
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
     
-// const supabaseUrl = process.env.SUPABASE_URL?.trim();
-// const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
-const supabaseUrl = 'https://brkkgdetcdcysxzjhput.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJya2tnZGV0Y2RjeXN4empocHV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODI2OTEsImV4cCI6MjA5NjE1ODY5MX0.LWzFBpO-K4-pW7VYP4kjU0fks6-kssDTFlL5pRG3LwY';
-    
-    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-    
-    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/set_app_user_id`;
-    await fetch(rpcUrl, {
+    await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
       method: 'POST',
       headers: {
         'apikey': supabaseKey,
@@ -44,29 +38,19 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
     const body = await request.json();
     const { action, chatId, message, messageId, newTitle, isFavorite, maxContext, chat, firstMessage } = body;
     
-    async function supabaseFetch(path, options = {}) {
-      const url = `${supabaseUrl}/rest/v1/${path}`;
-      const headers = {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      };
-      const res = await fetch(url, { ...options, headers });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Supabase error ${res.status}: ${text}`);
-      }
-      return res.json();
-    }
-    
     if (chatId && action !== 'new_chat') {
-      const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
+      const checkRes = await fetch(`${supabaseUrl}/rest/v1/chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`, {
+        method: 'GET',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+      });
+      const chatCheck = checkRes.ok ? await checkRes.json() : [];
       if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
     }
     
     if (action === 'new_message') {
-      await supabaseFetch('messages', {
+      await fetch(`${supabaseUrl}/rest/v1/messages`, {
         method: 'POST',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: message.id,
           chat_id: chatId,
@@ -75,49 +59,55 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
           is_favorite: message.isFavorite || false,
         })
       });
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
+      
+      await fetch(`${supabaseUrl}/rest/v1/chats?id=eq.${chatId}`, {
         method: 'PATCH',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ updated_at: new Date().toISOString() })
       });
+      
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
     if (action === 'delete_message') {
-      await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, { method: 'DELETE' });
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ updated_at: new Date().toISOString() })
+      await fetch(`${supabaseUrl}/rest/v1/messages?id=eq.${messageId}&chat_id=eq.${chatId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
     if (action === 'rename_chat') {
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
+      await fetch(`${supabaseUrl}/rest/v1/chats?id=eq.${chatId}`, {
         method: 'PATCH',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle, user_renamed: true })
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
     if (action === 'favorite_message') {
-      await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, {
+      await fetch(`${supabaseUrl}/rest/v1/messages?id=eq.${messageId}&chat_id=eq.${chatId}`, {
         method: 'PATCH',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_favorite: isFavorite })
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
     if (action === 'update_context') {
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
+      await fetch(`${supabaseUrl}/rest/v1/chats?id=eq.${chatId}`, {
         method: 'PATCH',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ max_context: maxContext })
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
     if (action === 'new_chat') {
-      await supabaseFetch('chats', {
+      await fetch(`${supabaseUrl}/rest/v1/chats`, {
         method: 'POST',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: chat.id,
           user_id: userId,
@@ -127,14 +117,16 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
           user_renamed: chat.user_renamed,
         })
       });
-      await supabaseFetch('messages', {
+      
+      await fetch(`${supabaseUrl}/rest/v1/messages`, {
         method: 'POST',
+        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: firstMessage.id,
           chat_id: chat.id,
           msg_type: firstMessage.type,
           text: firstMessage.text,
-          is_favorite: firstMessage.is_favorite,
+          is_favorite: firstMessage.firstMessage?.is_favorite || false,
         })
       });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
@@ -142,7 +134,6 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
     
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders });
   } catch (err) {
-    console.error(err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 }
