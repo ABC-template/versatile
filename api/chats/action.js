@@ -1,6 +1,6 @@
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
-export const config = { runtime: 'edge' };
+//export const config = { runtime: 'edge' };
 
 export default async function handler(request) {
   const corsHeaders = {
