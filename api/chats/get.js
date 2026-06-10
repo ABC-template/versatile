@@ -1,4 +1,5 @@
-//import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+
 export const config = { runtime: 'edge' };
 
 export default async function handler(req) {
@@ -6,12 +7,17 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
   }
 
+  // Извлекаем initData из заголовка Authorization
+  const authHeader = req.headers.get('Authorization') || '';
+  const initData = authHeader.replace('Bearer ', '').trim();
+  
+  const isValid = await validateTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN);
+  if (!isValid) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
-
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400 });
-  }
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -26,8 +32,7 @@ export default async function handler(req) {
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      return new Response(JSON.stringify({ error: 'Supabase error', details: errText }), { status: response.status });
+      return new Response(JSON.stringify({ error: 'Supabase error' }), { status: response.status });
     }
 
     const data = await response.json();
