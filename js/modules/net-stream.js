@@ -118,7 +118,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
 };
 
 function finalizeStreamMessage(msgDiv, finalText, activeChat) {
-    const generatedAiMsgId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const generatedAiMsgId = window.generateUUID();
     msgDiv.id = `msg-block-${generatedAiMsgId}`;
 
     const act = document.createElement('div');
