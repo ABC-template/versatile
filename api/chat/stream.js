@@ -2,7 +2,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 
-export const config = { runtime: 'edge' };
+//export const config = { runtime: 'edge' };
 
 function getRotatedKeysPool() {
     const keys = [];
