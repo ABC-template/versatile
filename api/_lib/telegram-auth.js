@@ -1,56 +1,49 @@
 // api/_lib/telegram-auth.js
 export async function validateTelegramInitData(initData, botToken) {
-  if (!initData || !botToken) return false;
+  if (!initData || !botToken) return null;
 
   try {
-    const params = new URLSearchParams(initData);
-    const hash = params.get('hash');
-    params.delete('hash');
+    const urlParams = new URLSearchParams(initData);
+    const hash = urlParams.get('hash');
+    if (!hash) return null;
+    urlParams.delete('hash');
 
-    // Сортируем ключи, как требует Telegram
-    const keys = Array.from(params.keys()).sort();
-    const dataCheckString = keys.map(key => `${key}=${params.get(key)}`).join('\n');
+    const sortedKeys = [...urlParams.keys()].sort();
+    const dataCheckString = sortedKeys.map(key => `${key}=${urlParams.get(key)}`).join('\n');
 
     const encoder = new TextEncoder();
-
-    // 1. Создаем секретный ключ из WebTelegramData и токена бота
+    
+    // В Telegram используется HMAC-SHA256 с константой "WebAppData"
     const baseKey = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode("WebTelegramData"),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
+      "raw", 
+      encoder.encode("WebAppData"), 
+      { name: "HMAC", hash: "SHA-256" }, 
+      false, 
       ["sign"]
     );
     
-    const secretKeyBuffer = await crypto.subtle.sign(
-      "HMAC",
-      baseKey,
-      encoder.encode(botToken)
-    );
-
-    // 2. Считаем итоговый HMAC-SHA256 хэш от полученных данных
+    const secretKeyBuffer = await crypto.subtle.sign("HMAC", baseKey, encoder.encode(botToken));
+    
     const secretKey = await crypto.subtle.importKey(
-      "raw",
-      secretKeyBuffer,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
+      "raw", 
+      secretKeyBuffer, 
+      { name: "HMAC", hash: "SHA-256" }, 
+      false, 
       ["sign"]
     );
-
-    const calculatedHashBuffer = await crypto.subtle.sign(
-      "HMAC",
-      secretKey,
-      encoder.encode(dataCheckString)
-    );
-
-    // Переводим буфер в hex-строку
+    
+    const calculatedHashBuffer = await crypto.subtle.sign("HMAC", secretKey, encoder.encode(dataCheckString));
+    
     const calculatedHash = Array.from(new Uint8Array(calculatedHashBuffer))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
-    return calculatedHash === hash;
+    if (calculatedHash !== hash) return null;
+
+    const user = JSON.parse(urlParams.get('user') || '{}');
+    return user.id ? user : null;
   } catch (e) {
-    console.error('Telegram auth error:', e);
-    return false;
+    console.error('Edge WebCrypto Telegram Auth Error:', e);
+    return null;
   }
 }
