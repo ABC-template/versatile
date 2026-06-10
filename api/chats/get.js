@@ -1,58 +1,41 @@
-import { validateTelegramInitData } from '../_lib/telegram-auth.js';
-import { createClient } from '@supabase/supabase-js';
+//import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+export const config = { runtime: 'edge' };
 
-//export const config = { runtime: 'edge' };
+export default async function handler(req) {
+  if (req.method !== 'GET') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  }
 
-export default async function handler(request) {
-  const corsHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
-  };
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-  if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get('userId');
+
+  if (!userId) {
+    return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400 });
+  }
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
   try {
-    const initData = request.headers.get('x-telegram-init-data');
-    if (!initData) throw new Error('Missing init data');
-    const botToken = process.env.BOT_TOKEN?.trim();
-    if (!botToken) throw new Error('Bot token not configured');
-    const user = validateTelegramInitData(initData, botToken);
-    if (!user) throw new Error('Invalid init data');
-    const userId = user.id;
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/chats?user_id=eq.${userId}&select=*&order=updated_at.desc`, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      }
+    });
 
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
-    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    await supabase.rpc('set_app_user_id', { uid: userId });
+    if (!response.ok) {
+      const errText = await response.text();
+      return new Response(JSON.stringify({ error: 'Supabase error', details: errText }), { status: response.status });
+    }
 
-    const { searchParams } = new URL(request.url);
-    const chatId = searchParams.get('id');
-    if (!chatId) throw new Error('Missing chat id');
-
-    // Получаем чат, проверяя принадлежность пользователю
-    const { data: chat, error: chatError } = await supabase
-      .from('chats')
-      .select('*')
-      .eq('id', chatId)
-      .eq('user_id', userId)
-      .single();
-    if (chatError || !chat) throw new Error('Chat not found or access denied');
-
-    // Получаем сообщения чата (последние 500)
-    const { data: messages, error: messagesError } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('chat_id', chatId)
-      .order('created_at', { ascending: true })
-      .limit(500);
-    if (messagesError) throw messagesError;
-
-    return new Response(JSON.stringify({ success: true, chat, messages }), { status: 200, headers: corsHeaders });
-  } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    const data = await response.json();
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
