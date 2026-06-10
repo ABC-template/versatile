@@ -2,45 +2,65 @@ import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
 
-export default async function handler(req) {
-  if (req.method !== 'GET') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
-  }
-
-  // Извлекаем initData из заголовка Authorization
-  const authHeader = req.headers.get('Authorization') || '';
-  const initData = authHeader.replace('Bearer ', '').trim();
+export default async function handler(request) {
+  const corsHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
+  };
   
-  const isValid = await validateTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN);
-  if (!isValid) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
-
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+  if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/chats?user_id=eq.${userId}&select=*&order=updated_at.desc`, {
+    const initData = request.headers.get('x-telegram-init-data');
+    if (!initData) throw new Error('Missing init data');
+    
+    const botToken = process.env.BOT_TOKEN?.trim();
+    const user = await validateTelegramInitData(initData, botToken);
+    if (!user) throw new Error('Invalid init data');
+    const userId = user.id;
+
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+
+    const { searchParams } = new URL(request.url);
+    const chatId = searchParams.get('id');
+    if (!chatId) throw new Error('Missing chat id');
+
+    // Устанавливаем RLS контекст в базе данных
+    await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ uid: userId })
+    });
+
+    // Запрашиваем конкретный чат (проверяя владельца через сессию)
+    const chatRes = await fetch(`${supabaseUrl}/rest/v1/chats?id=eq.${chatId}&user_id=eq.${userId}&select=*`, {
       method: 'GET',
       headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Accept': 'application/vnd.pgrst.object+json'
       }
     });
+    if (!chatRes.ok) throw new Error('Chat not found or access denied');
+    const chat = await chatRes.json();
 
-    if (!response.ok) {
-      return new Response(JSON.stringify({ error: 'Supabase error' }), { status: response.status });
-    }
-
-    const data = await response.json();
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
+    // Подгружаем историю сообщений чата
+    const msgRes = await fetch(`${supabaseUrl}/rest/v1/messages?chat_id=eq.${chatId}&order=created_at.asc&limit=500`, {
+      method: 'GET',
+      headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
     });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    const messages = msgRes.ok ? await msgRes.json() : [];
+
+    return new Response(JSON.stringify({ success: true, chat, messages }), { status: 200, headers: corsHeaders });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 }
