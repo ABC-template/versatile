@@ -21,7 +21,6 @@ export default async function handler(request) {
     const botToken = process.env.BOT_TOKEN?.trim();
     if (!botToken) throw new Error('Bot token not configured');
     
-    // Исправлено: добавлен await для стабильной валидации
     const user = await validateTelegramInitData(initData, botToken);
     if (!user) throw new Error('Invalid init data');
     
@@ -50,10 +49,21 @@ export default async function handler(request) {
       return res.json();
     }
     
-    // Проверяем существование чата и владение им для всех действий кроме создания нового чата и полного удаления чата
-    if (chatId && action !== 'new_chat' && action !== 'delete_chat') {
-      const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
-      if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
+    // Вспомогательная функция для проверки прав пользователя на синхронизацию
+    async function canUserSync() {
+      try {
+        const userCheck = await supabaseFetch(`users?telegram_id=eq.${userId}&select=role,premium_until`);
+        if (!userCheck || userCheck.length === 0) return false;
+        
+        const userData = userCheck[0];
+        const isPro = ['creator', 'admin', 'premium'].includes(userData.role);
+        const hasValidPremium = userData.premium_until && new Date(userData.premium_until) > new Date();
+        
+        return isPro || hasValidPremium;
+      } catch (err) {
+        console.error('Ошибка проверки прав синхронизации:', err);
+        return false;
+      }
     }
     
     // НАЧАЛО НОВОГО ФУНКЦИОНАЛА: Удаление чата
@@ -61,29 +71,109 @@ export default async function handler(request) {
       const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
       if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
 
-      // Физическое удаление чата. Благодаря ON DELETE CASCADE в Supabase,
-      // сообщения и избранное этого чата сотрутся автоматически.
       await supabaseFetch(`chats?id=eq.${chatId}`, { method: 'DELETE' });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
-    // КОНЕЦ НОВОГО ФУНКЦИОНАЛА
     
+    // ОБНОВЛЕННЫЙ ОБРАБОТЧИК new_message с авто-созданием чата
     if (action === 'new_message') {
-      await supabaseFetch('messages', {
-        method: 'POST',
-        body: JSON.stringify({
-          id: message.id,
-          chat_id: chatId,
-          msg_type: message.type,
-          text: message.text,
-          is_favorite: message.isFavorite || false,
-        })
-      });
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ updated_at: new Date().toISOString() })
-      });
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      // Шаг 1: Проверяем существование чата в БД
+      let chatExists = false;
+      let existingChat = null;
+      
+      try {
+        const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed`);
+        chatExists = chatCheck && chatCheck.length > 0;
+        if (chatExists) existingChat = chatCheck[0];
+      } catch (err) {
+        console.error('Ошибка проверки чата:', err);
+        // Не падаем, пробуем создать чат дальше
+      }
+      
+      // Шаг 2: Если чата нет, проверяем права и создаем
+      if (!chatExists) {
+        const canSync = await canUserSync();
+        
+        if (!canSync) {
+          // Пользователь не имеет права на синхронизацию
+          // Возвращаем 403, НО не падаем — сообщение уже сохранено локально у клиента
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Синхронизация недоступна для вашего тарифного плана',
+            synced: false 
+          }), { status: 403, headers: corsHeaders });
+        }
+        
+        // Создаем чат на лету с данными из запроса или дефолтными
+        const chatTopic = body.topicId || 'fast';
+        const chatTitle = body.chatTitle || `Чат в разделе ${chatTopic}`;
+        const chatMaxContext = body.maxContext || 15;
+        const chatUserRenamed = body.userRenamed || false;
+        
+        console.log(`Создаем чат ${chatId} для пользователя ${userId} с темой ${chatTopic}`);
+        
+        try {
+          await supabaseFetch('chats', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: chatId,
+              user_id: userId,
+              topic_id: chatTopic,
+              title: chatTitle,
+              max_context: chatMaxContext,
+              user_renamed: chatUserRenamed,
+            })
+          });
+          chatExists = true;
+        } catch (createErr) {
+          console.error('Ошибка создания чата:', createErr);
+          // Возвращаем 200, но с флагом synced: false
+          // Сообщение уже сохранено локально, клиент повторит попытку позже
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Не удалось создать чат в облаке',
+            synced: false 
+          }), { status: 200, headers: corsHeaders });
+        }
+      }
+      
+      // Шаг 3: Сохраняем сообщение (чат теперь точно существует или не понадобился)
+      if (chatExists) {
+        try {
+          await supabaseFetch('messages', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: message.id,
+              chat_id: chatId,
+              msg_type: message.type,
+              text: message.text,
+              is_favorite: message.isFavorite || false,
+            })
+          });
+          
+          // Обновляем updated_at чата
+          await supabaseFetch(`chats?id=eq.${chatId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ updated_at: new Date().toISOString() })
+          });
+          
+          return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
+        } catch (msgErr) {
+          console.error('Ошибка сохранения сообщения:', msgErr);
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Сообщение не сохранено в облаке',
+            synced: false 
+          }), { status: 200, headers: corsHeaders });
+        }
+      }
+      
+      // Fallback: если что-то пошло не так
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Неизвестная ошибка синхронизации',
+        synced: false 
+      }), { status: 200, headers: corsHeaders });
     }
     
     if (action === 'delete_message') {
@@ -120,6 +210,15 @@ export default async function handler(request) {
     }
     
     if (action === 'new_chat') {
+      // Проверяем права перед созданием чата
+      const canSync = await canUserSync();
+      if (!canSync) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Создание облачных чатов доступно только PRO-пользователям' 
+        }), { status: 403, headers: corsHeaders });
+      }
+      
       await supabaseFetch('chats', {
         method: 'POST',
         body: JSON.stringify({
@@ -149,4 +248,4 @@ export default async function handler(request) {
     console.error(err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
-    }
+}
