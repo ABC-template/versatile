@@ -142,6 +142,28 @@ if (typeof window.initExportButtons === 'function') {
         }
     }
 
+// Если синхронизация включена, загружаем свежие данные с сервера
+if (window.config && window.config.syncEnabled) {
+    console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
+    
+    // Сначала синхронизируем метаданные
+    if (typeof window.syncChatsMetadata === 'function') {
+        await window.syncChatsMetadata();
+    }
+    
+    // Затем полностью синхронизируем все чаты
+    if (typeof window.fullSyncAllChats === 'function') {
+        await window.fullSyncAllChats();
+    }
+    
+    // Запускаем таймер для повторной отправки несинхронизированных данных
+    if (typeof window.startUnsyncedRetryTimer === 'function') {
+        window.startUnsyncedRetryTimer();
+    }
+} else {
+    console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
+}
+
     // Гарантированное снятие серого экрана в самом конце
     const appScreen = document.getElementById('app-screen');
     if (appScreen) {
