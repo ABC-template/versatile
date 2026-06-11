@@ -50,11 +50,16 @@ export default async function handler(request) {
     if (notifs && notifs.length > 0) continue;
 
     let message = '';
+    let notificationType = 'expiry_warning';
+    
     if (daysLeft > 0) {
       const dayWord = (daysLeft % 10 === 1 && daysLeft % 100 !== 11) ? 'день' : ((daysLeft % 10 >= 2 && daysLeft % 10 <= 4 && (daysLeft % 100 < 10 || daysLeft % 100 >= 20)) ? 'дня' : 'дней');
       message = `⚠️ Ваша PRO-подписка истекает через ${daysLeft} ${dayWord}. Продлите, чтобы не потерять синхронизацию чатов и расширенные лимиты.`;
+      notificationType = 'expiry_warning';
     } else {
       message = `⏰ Ваша PRO-подписка истекла сегодня. Ваши чаты будут храниться в облаке ещё 7 дней. Скачайте архив в приложении или продлите PRO, иначе облачные данные будут безвозвратно удалены.`;
+      notificationType = 'final_notice';
+      
       const userData = await supabaseFetch(`users?telegram_id=eq.${user.telegram_id}&select=data_deadline`);
       if (!userData[0]?.data_deadline) {
         const deadline = new Date(now.getTime() + 7*24*60*60*1000).toISOString();
@@ -84,7 +89,7 @@ export default async function handler(request) {
             user_id: user.telegram_id,
             notified_at: today,
             days_left: daysLeft,
-            notification_type: daysLeft === 0 ? 'final_notice' : 'expiry_warning'
+            notification_type: notificationType
           })
         });
         sent++;
@@ -97,28 +102,126 @@ export default async function handler(request) {
   }
 
   // -------------------------------------------------------------
-  // ФАЗА 2: Физическое каскадное удаление данных по истечении 7 дней
+  // ФАЗА 2: Уведомление ЗА 1 ДЕНЬ до удаления данных (grace period)
+  // -------------------------------------------------------------
+  try {
+    // Находим пользователей с data_deadline на завтра
+    const tomorrow = new Date(now.getTime() + 24*60*60*1000);
+    const tomorrowStart = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate()).toISOString();
+    const tomorrowEnd = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate() + 1).toISOString();
+    
+    const expiringUsers = await supabaseFetch(`users?data_deadline=gte.${tomorrowStart}&data_deadline=lt.${tomorrowEnd}&select=telegram_id,data_deadline`);
+    
+    let deleteWarnings = 0;
+    for (const expUser of expiringUsers) {
+      // Проверяем, не отправляли ли уже уведомление сегодня
+      const existingWarning = await supabaseFetch(`premium_notifications?user_id=eq.${expUser.telegram_id}&notification_type=eq.delete_warning&notified_at=eq.${today}&select=notified_at`);
+      if (existingWarning && existingWarning.length > 0) continue;
+      
+      const message = `⚠️ **ВНИМАНИЕ!** Завтра (${new Date(expUser.data_deadline).toLocaleDateString()}) ваши облачные чаты будут **безвозвратно удалены**.\n\n📥 Скачайте архив прямо сейчас через приложение Versatile AI, чтобы сохранить историю диалогов.\n\n💎 Продлите PRO-подписку, чтобы продолжить пользоваться облачной синхронизацией.`;
+      
+      const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      try {
+        const resp = await fetch(tgUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: expUser.telegram_id,
+            text: message,
+            parse_mode: 'Markdown'
+          })
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          await supabaseFetch('premium_notifications', {
+            method: 'POST',
+            body: JSON.stringify({
+              user_id: expUser.telegram_id,
+              notified_at: today,
+              days_left: -7, // Отрицательное значение означает, что подписка истекла
+              notification_type: 'delete_warning'
+            })
+          });
+          deleteWarnings++;
+          console.log(`Отправлено предупреждение об удалении пользователю ${expUser.telegram_id}`);
+        } else {
+          console.error(`Не удалось отправить предупреждение об удалении ${expUser.telegram_id}: ${json.description}`);
+        }
+      } catch (err) {
+        console.error(`Ошибка отправки предупреждения для ${expUser.telegram_id}:`, err.message);
+      }
+    }
+    
+    if (deleteWarnings > 0) {
+      console.log(`📢 Отправлено предупреждений об удалении: ${deleteWarnings}`);
+    }
+  } catch (warningErr) {
+    console.error('Ошибка в фазе предупреждения об удалении:', warningErr.message);
+  }
+
+  // -------------------------------------------------------------
+  // ФАЗА 3: Физическое каскадное удаление данных по истечении 7 дней
   // -------------------------------------------------------------
   let deletedUsersCount = 0;
+  let deletedChatsCount = 0;
+  let deletedMessagesCount = 0;
+  
   try {
     // Ищем тех, у кого дедлайн меньше или равен текущему времени
     const expiredUsers = await supabaseFetch(`users?data_deadline=lte.${now.toISOString()}&select=telegram_id`);
     
     for (const expUser of expiredUsers) {
+      // Подсчитываем количество чатов и сообщений перед удалением (для логов)
+      try {
+        const userChats = await supabaseFetch(`chats?user_id=eq.${expUser.telegram_id}&select=id`);
+        if (userChats && userChats.length > 0) {
+          const chatIds = userChats.map(c => c.id).join(',');
+          const messagesCount = await supabaseFetch(`messages?chat_id=in.(${chatIds})&select=id`);
+          deletedChatsCount += userChats.length;
+          deletedMessagesCount += messagesCount.length;
+        }
+      } catch (countErr) {
+        console.error('Ошибка подсчета данных для удаления:', countErr.message);
+      }
+      
       // Удаляем все чаты пользователя. За счёт FOREIGN KEY ... ON DELETE CASCADE
       // в базе данных Supabase автоматически сотрутся все сообщения и избранное этого юзера.
       await supabaseFetch(`chats?user_id=eq.${expUser.telegram_id}`, { method: 'DELETE' });
+      
+      // Также удаляем напоминания и трекеры пользователя (хотя они тоже могут быть с CASCADE)
+      await supabaseFetch(`reminders?user_id=eq.${expUser.telegram_id}`, { method: 'DELETE' });
+      await supabaseFetch(`trackers?user_id=eq.${expUser.telegram_id}`, { method: 'DELETE' });
       
       // Сбрасываем дедлайн в null, чтобы очистка не выполнялась циклически
       await supabaseFetch(`users?telegram_id=eq.${expUser.telegram_id}`, {
         method: 'PATCH',
         body: JSON.stringify({ data_deadline: null })
       });
+      
       deletedUsersCount++;
+      console.log(`🗑️ Удалены данные пользователя ${expUser.telegram_id}`);
     }
   } catch (cleanErr) {
     console.error('Ошибка в фазе очистки просроченных данных:', cleanErr.message);
   }
 
-  return new Response(JSON.stringify({ success: true, sent, deletedUsers: deletedUsersCount }), { status: 200 });
+  // -------------------------------------------------------------
+  // ИТОГОВЫЙ ОТЧЕТ
+  // -------------------------------------------------------------
+  const report = {
+    success: true,
+    timestamp: now.toISOString(),
+    notifications_sent: sent,
+    delete_warnings_sent: deleteWarnings || 0,
+    users_deleted: deletedUsersCount,
+    chats_deleted: deletedChatsCount,
+    messages_deleted: deletedMessagesCount
+  };
+  
+  console.log('✅ Cron выполнен:', JSON.stringify(report));
+  
+  return new Response(JSON.stringify(report), { 
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
