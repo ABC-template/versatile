@@ -39,7 +39,7 @@ export default async function handler(request) {
       isAuthenticated = true;
     } catch (err) {
       console.error('Auth error:', err);
-      return new Response(JSON.stringify({ error: err.message }), { 
+      return new Response(JSON.stringify({ error: err.message, fallbackToLocal: true }), { 
         status: 401, 
         headers: corsHeaders 
       });
@@ -61,13 +61,21 @@ export default async function handler(request) {
         });
       }
       
-      // Формируем архив из локальных данных
+      // Формируем архив из локальных данных с сортировкой сообщений
       const archive = [];
       let totalMessages = 0;
       let totalSize = 0;
       
       for (const [topicId, chats] of Object.entries(chatHistories)) {
         for (const chat of chats) {
+          // Сортируем сообщения по created_at (если есть) или по порядку в массиве
+          const sortedMessages = [...(chat.messages || [])].sort((a, b) => {
+            if (a.created_at && b.created_at) {
+              return new Date(a.created_at) - new Date(b.created_at);
+            }
+            return 0;
+          });
+          
           const chatArchive = {
             chat_id: chat.id,
             title: chat.title,
@@ -77,7 +85,7 @@ export default async function handler(request) {
             user_renamed: chat.userRenamed || false,
             created_at: chat.created_at || new Date().toISOString(),
             updated_at: chat.updated_at || new Date().toISOString(),
-            messages: chat.messages || []
+            messages: sortedMessages
           };
           
           totalMessages += chatArchive.messages.length;
@@ -94,29 +102,33 @@ export default async function handler(request) {
         const chunks = [];
         let currentChunk = [];
         let currentSize = 0;
+        let currentMessages = 0;
         
         for (const chat of archive) {
           const chatJson = JSON.stringify(chat);
           const chatSize = new TextEncoder().encode(chatJson).length;
+          const chatMessages = chat.messages.length;
           
           if (currentChunk.length > 0 && 
               (currentSize + chatSize > MAX_EXPORT_SIZE_BYTES || 
-               currentChunk.length >= MAX_MESSAGES_PER_CHUNK)) {
+               currentMessages + chatMessages > MAX_MESSAGES_PER_CHUNK)) {
             chunks.push(currentChunk);
             currentChunk = [];
             currentSize = 0;
+            currentMessages = 0;
           }
           
           currentChunk.push(chat);
           currentSize += chatSize;
+          currentMessages += chatMessages;
         }
         
         if (currentChunk.length > 0) {
           chunks.push(currentChunk);
         }
         
-        // Возвращаем первую часть с метаинформацией
-        const part = parseInt(exportOptions.part || '1', 10);
+        // Получаем номер запрошенной части
+        const part = parseInt(exportOptions.part || request.headers.get('X-Request-Part') || '1', 10);
         const totalParts = chunks.length;
         
         if (part > totalParts) {
@@ -179,7 +191,7 @@ export default async function handler(request) {
       const res = await fetch(url, { ...options, headers });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Supabase error ${res.status}: ${text}`);
+        throw new Error(`Supabase error ${res.status}: ${text.substring(0, 200)}`);
       }
       return res.json();
     }
@@ -208,11 +220,11 @@ export default async function handler(request) {
       return new Response(JSON.stringify({ 
         success: false, 
         error: 'Скачивание облачного архива доступно только PRO-пользователям или в течение 7 дней после окончания подписки.',
-        fallbackToLocal: true  // Подсказываем клиенту использовать локальный экспорт
+        fallbackToLocal: true
       }), { status: 403, headers: corsHeaders });
     }
 
-    // Получаем все чаты пользователя
+    // Получаем все чаты пользователя с сортировкой
     const chats = await supabaseFetch(`chats?user_id=eq.${userId}&select=*&order=updated_at.desc`);
     
     let compiledArchive = [];
@@ -221,7 +233,7 @@ export default async function handler(request) {
     if (chats.length > 0) {
       const chatIdsQuery = chats.map(c => c.id).join(',');
       
-      // Получаем сообщения с пагинацией (чтобы не перегружать память)
+      // Получаем сообщения с пагинацией и сортировкой по created_at
       let allMessages = [];
       let offset = 0;
       const limit = 500;
@@ -247,6 +259,7 @@ export default async function handler(request) {
           title: chat.title,
           topic_id: chat.topic_id,
           max_context: chat.max_context,
+          user_renamed: chat.user_renamed,
           created_at: chat.created_at,
           updated_at: chat.updated_at,
           messages: chatMessages.map(m => ({
@@ -261,14 +274,15 @@ export default async function handler(request) {
     }
     
     // Проверяем размер архива
-    const archiveJson = JSON.stringify({ 
-      success: true, 
+    const archiveData = {
+      success: true,
       exported_at: new Date().toISOString(),
       user_id: userId,
       grace_period_days_left: hasGracePeriod ? daysLeft : null,
-      archive: compiledArchive 
-    });
+      archive: compiledArchive
+    };
     
+    const archiveJson = JSON.stringify(archiveData);
     const archiveSize = new TextEncoder().encode(archiveJson).length;
     
     // Если размер превышает лимит, разбиваем на части
@@ -276,21 +290,25 @@ export default async function handler(request) {
       const chunks = [];
       let currentChunk = [];
       let currentSize = 0;
+      let currentMessages = 0;
       
       for (const chat of compiledArchive) {
         const chatJson = JSON.stringify(chat);
         const chatSize = new TextEncoder().encode(chatJson).length;
+        const chatMessages = chat.messages.length;
         
         if (currentChunk.length > 0 && 
             (currentSize + chatSize > MAX_EXPORT_SIZE_BYTES || 
-             currentChunk.length >= MAX_MESSAGES_PER_CHUNK)) {
+             currentMessages + chatMessages > MAX_MESSAGES_PER_CHUNK)) {
           chunks.push(currentChunk);
           currentChunk = [];
           currentSize = 0;
+          currentMessages = 0;
         }
         
         currentChunk.push(chat);
         currentSize += chatSize;
+        currentMessages += chatMessages;
       }
       
       if (currentChunk.length > 0) {
@@ -337,10 +355,10 @@ export default async function handler(request) {
     console.error('Cloud export error:', err);
     return new Response(JSON.stringify({ 
       error: err.message,
-      fallbackToLocal: true  // При ошибке БД предлагаем использовать локальный экспорт
+      fallbackToLocal: true
     }), { 
       status: 500, 
       headers: corsHeaders 
     });
   }
-}
+                                                                  }
