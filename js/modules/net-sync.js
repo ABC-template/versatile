@@ -1,4 +1,5 @@
 // js/modules/net-sync.js
+
 // Синхронизация метаданных (список чатов и избранное)
 window.syncChatsMetadata = async function() {
     if (!window.config.syncEnabled) return;
@@ -12,7 +13,6 @@ window.syncChatsMetadata = async function() {
         if (data.syncEnabled && data.chats) {
             if (!window.cloudChatsMeta) window.cloudChatsMeta = {};
             
-            // Обновляем метаданные с учетом updated_at
             data.chats.forEach(chat => {
                 const existingMeta = window.cloudChatsMeta[chat.id];
                 if (!existingMeta || new Date(chat.updated_at) > new Date(existingMeta.updated_at)) {
@@ -51,9 +51,8 @@ window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, cha
     if (!window.config.syncEnabled) return { success: true, syncedCount: 0 };
     if (!messages || messages.length === 0) return { success: true, syncedCount: 0 };
     
-    // Лимиты для батча: 50 сообщений или 1MB
     const BATCH_SIZE_LIMIT = 50;
-    const BATCH_BYTES_LIMIT = 1000000; // 1MB
+    const BATCH_BYTES_LIMIT = 1000000;
     
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) return { success: false, error: 'No init data' };
@@ -62,7 +61,6 @@ window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, cha
     let currentBatch = [];
     let currentBatchSize = 0;
     
-    // Функция отправки одного батча
     const sendBatch = async (batch) => {
         const payload = {
             action: 'batch_messages',
@@ -102,7 +100,6 @@ window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, cha
         }
     };
     
-    // Разбиваем сообщения на батчи
     for (const msg of messages) {
         const msgSize = new TextEncoder().encode(JSON.stringify(msg)).length;
         
@@ -113,7 +110,6 @@ window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, cha
                 const result = await sendBatch(currentBatch);
                 if (result.success) {
                     syncedCount += currentBatch.length;
-                    // Помечаем сообщения как синхронизированные
                     window.markMessagesSynced(chatId, result.messageIds);
                 } else {
                     console.error("Батч не отправлен:", result.error);
@@ -129,7 +125,6 @@ window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, cha
         currentBatchSize += msgSize;
     }
     
-    // Отправляем последний батч
     if (currentBatch.length > 0) {
         const result = await sendBatch(currentBatch);
         if (result.success) {
@@ -162,7 +157,6 @@ window.loadFullChat = async function(chatId) {
             
             let existingChatIndex = window.chatHistories[topic].findIndex(c => c.id === chatId);
             
-            // Формируем серверный чат
             const serverChat = {
                 id: data.chat.id,
                 title: data.chat.title,
@@ -177,24 +171,20 @@ window.loadFullChat = async function(chatId) {
                     text: msg.text,
                     type: msg.msg_type,
                     isFavorite: msg.is_favorite,
-                    synced: true // Сообщения с сервера считаем синхронизированными
+                    synced: true
                 }))
             };
             
-            // Конфликт-резолвинг
             if (existingChatIndex !== -1) {
                 const localChat = window.chatHistories[topic][existingChatIndex];
                 const resolution = window.resolveChatConflict(localChat, serverChat);
                 
                 if (resolution.winner === 'server') {
-                    // Сервер новее → заменяем локальный чат
                     window.chatHistories[topic][existingChatIndex] = serverChat;
                     console.log(`🔄 Чат ${chatId}: сервер новее, заменяем локальный`);
                 } else if (resolution.winner === 'local') {
-                    // Локально новее → отправляем только новые сообщения на сервер
                     console.log(`📤 Чат ${chatId}: локально новее, отправляем изменения на сервер`);
                     
-                    // Находим сообщения, которых нет на сервере (local.synced === false)
                     const localMessages = localChat.messages || [];
                     const serverMessageIds = new Set(serverChat.messages.map(m => m.id));
                     const unsyncedMessages = localMessages.filter(m => !serverMessageIds.has(m.id) && !m.synced);
@@ -210,7 +200,6 @@ window.loadFullChat = async function(chatId) {
                         );
                         
                         if (result.success) {
-                            // После успешной отправки обновляем updated_at локального чата
                             localChat.updated_at = new Date().toISOString();
                             window.chatHistories[topic][existingChatIndex] = localChat;
                             window.saveHistoriesToLocal();
@@ -218,21 +207,16 @@ window.loadFullChat = async function(chatId) {
                             console.warn(`⚠️ Частичная синхронизация: отправлено ${result.syncedCount} из ${unsyncedMessages.length} сообщений`);
                         }
                     }
-                    
-                    // Не заменяем локальный чат, просто оставляем как есть
                 } else {
-                    // Равны (tie) → ничего не делаем
                     console.log(`⚖️ Чат ${chatId}: сервер и локально одинаковы`);
                 }
             } else {
-                // Новый чат, которого нет локально → добавляем
                 window.chatHistories[topic].push(serverChat);
                 console.log(`✨ Новый чат ${chatId} загружен с сервера`);
             }
             
             window.saveHistoriesToLocal();
             
-            // Если активный чат совпадает, обновляем интерфейс
             if (window.activeChatIds[topic] === chatId) {
                 if (typeof window.loadActiveChatMessages === 'function') {
                     window.loadActiveChatMessages();
@@ -249,18 +233,14 @@ window.loadFullChat = async function(chatId) {
 
 // Периодическая проверка и повторная отправка unsynced сообщений
 window.startUnsyncedRetryTimer = function() {
-    // Проверяем каждые 30 секунд
     setInterval(async () => {
         if (window.config.syncEnabled && navigator.onLine !== false) {
-            // Повторная отправка сообщений
             if (typeof window.retryUnsyncedMessages === 'function') {
                 await window.retryUnsyncedMessages();
             }
-            // Повторная отправка избранного
             if (typeof window.retryUnsyncedFavorites === 'function') {
                 await window.retryUnsyncedFavorites();
             }
-            // Повторная отправка чатов
             if (typeof window.retryUnsyncedChats === 'function') {
                 await window.retryUnsyncedChats();
             }
@@ -277,10 +257,8 @@ window.fullSyncAllChats = async function() {
     
     console.log("🔄 Начинаем полную синхронизацию всех чатов...");
     
-    // Сначала синхронизируем метаданные
     await window.syncChatsMetadata();
     
-    // Загружаем все чаты, которых нет локально или которые устарели
     const topics = ['code', 'creative', 'fast', 'kitchen'];
     
     for (const topic of topics) {
@@ -289,28 +267,25 @@ window.fullSyncAllChats = async function() {
         
         for (const localChat of localChats) {
             if (cloudChatIds.has(localChat.id)) {
-                // Чат есть в облаке, проверяем актуальность
                 const cloudMeta = window.cloudChatsMeta[localChat.id];
                 if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
-                    // Облачный чат новее → загружаем полностью
                     await window.loadFullChat(localChat.id);
                 }
             }
-            // Если чата нет в облаке, но syncEnabled=true, он создастся при первом сообщении
         }
     }
     
     console.log("✅ Полная синхронизация завершена");
     
-    // Запускаем retry-таймер для unsynced сообщений
     window.startUnsyncedRetryTimer();
 };
+
 // ==========================================
 // ФУНКЦИЯ СИНХРОНИЗАЦИИ СООБЩЕНИЙ (AI и USER)
 // ==========================================
 
 window.syncMessageToCloud = async function(chatId, message) {
-    console.log("📤 syncMessageToCloud вызвана", { chatId, messageId: message?.id, type: message?.type });
+    console.log("📤 syncMessageToCloud вызвана", { chatId: chatId, messageId: message?.id, type: message?.type });
     
     if (!window.config.syncEnabled) {
         console.log("Синхронизация отключена, сообщение не отправлено");
@@ -371,7 +346,7 @@ window.syncMessageToCloud = async function(chatId, message) {
     }
 };
 
-console.log("✅ syncMessageToCloud зарегистрирована в глобальной области");
+console.log("✅ syncMessageToCloud зарегистрирована в глобальной области, тип:", typeof window.syncMessageToCloud);
 
 // Функция для синхронизации нескольких сообщений разом (batch)
 window.syncBatchMessagesToCloud = async function(chatId, messages) {
@@ -415,3 +390,5 @@ window.syncBatchMessagesToCloud = async function(chatId, messages) {
         return false;
     }
 };
+
+console.log("✅ net-sync.js полностью загружен");
