@@ -306,3 +306,112 @@ window.fullSyncAllChats = async function() {
     // Запускаем retry-таймер для unsynced сообщений
     window.startUnsyncedRetryTimer();
 };
+// ==========================================
+// УНИВЕРСАЛЬНАЯ ФУНКЦИЯ СИНХРОНИЗАЦИИ СООБЩЕНИЙ
+// ==========================================
+
+window.syncMessageToCloud = async function(chatId, message) {
+    if (!window.config.syncEnabled) {
+        console.log("Синхронизация отключена, сообщение не отправлено");
+        return false;
+    }
+    
+    if (!chatId || !message || !message.id) {
+        console.error("Недостаточно данных для синхронизации сообщения");
+        return false;
+    }
+    
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) {
+        console.error("Нет initData для синхронизации");
+        return false;
+    }
+    
+    try {
+        const response = await fetch('/api/chats/action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': initData
+            },
+            body: JSON.stringify({
+                action: 'new_message',
+                chatId: chatId,
+                message: {
+                    id: message.id,
+                    text: message.text,
+                    type: message.type,
+                    isFavorite: message.isFavorite || false
+                }
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.synced === true || data.success === true) {
+            console.log(`✅ Сообщение ${message.id} синхронизировано с облаком`);
+            // Помечаем сообщение как синхронизированное в локальном хранилище
+            if (typeof window.markMessagesSynced === 'function') {
+                window.markMessagesSynced(chatId, [message.id]);
+            }
+            return true;
+        } else {
+            console.warn(`⚠️ Сообщение ${message.id} не синхронизировано:`, data.error);
+            // Добавляем в очередь для повторной попытки
+            if (typeof window.addToUnsyncedQueue === 'function') {
+                window.addToUnsyncedQueue(chatId, message);
+            }
+            return false;
+        }
+    } catch (err) {
+        console.error(`❌ Ошибка синхронизации сообщения ${message.id}:`, err);
+        // Добавляем в очередь для повторной попытки
+        if (typeof window.addToUnsyncedQueue === 'function') {
+            window.addToUnsyncedQueue(chatId, message);
+        }
+        return false;
+    }
+};
+
+// Функция для синхронизации нескольких сообщений разом (batch)
+window.syncBatchMessagesToCloud = async function(chatId, messages) {
+    if (!window.config.syncEnabled) return false;
+    if (!messages || messages.length === 0) return true;
+    
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) return false;
+    
+    try {
+        const response = await fetch('/api/chats/action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': initData
+            },
+            body: JSON.stringify({
+                action: 'batch_messages',
+                chatId: chatId,
+                messages: messages.map(msg => ({
+                    id: msg.id,
+                    text: msg.text,
+                    type: msg.type,
+                    isFavorite: msg.isFavorite || false
+                }))
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.synced === true || data.success === true) {
+            console.log(`✅ Batch синхронизация: ${messages.length} сообщений`);
+            if (typeof window.markMessagesSynced === 'function') {
+                window.markMessagesSynced(chatId, messages.map(m => m.id));
+            }
+            return true;
+        }
+        return false;
+    } catch (err) {
+        console.error("Ошибка batch синхронизации:", err);
+        return false;
+    }
+};
