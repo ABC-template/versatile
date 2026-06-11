@@ -307,10 +307,12 @@ window.fullSyncAllChats = async function() {
     window.startUnsyncedRetryTimer();
 };
 // ==========================================
-// УНИВЕРСАЛЬНАЯ ФУНКЦИЯ СИНХРОНИЗАЦИИ СООБЩЕНИЙ
+// ФУНКЦИЯ СИНХРОНИЗАЦИИ СООБЩЕНИЙ (AI и USER)
 // ==========================================
 
 window.syncMessageToCloud = async function(chatId, message) {
+    console.log("📤 syncMessageToCloud вызвана", { chatId, messageId: message?.id, type: message?.type });
+    
     if (!window.config.syncEnabled) {
         console.log("Синхронизация отключена, сообщение не отправлено");
         return false;
@@ -349,29 +351,28 @@ window.syncMessageToCloud = async function(chatId, message) {
         const data = await response.json();
         
         if (data.synced === true || data.success === true) {
-            console.log(`✅ Сообщение ${message.id} синхронизировано с облаком`);
-            // Помечаем сообщение как синхронизированное в локальном хранилище
+            console.log(`✅ Сообщение ${message.id} (${message.type}) синхронизировано`);
             if (typeof window.markMessagesSynced === 'function') {
                 window.markMessagesSynced(chatId, [message.id]);
             }
             return true;
         } else {
             console.warn(`⚠️ Сообщение ${message.id} не синхронизировано:`, data.error);
-            // Добавляем в очередь для повторной попытки
             if (typeof window.addToUnsyncedQueue === 'function') {
                 window.addToUnsyncedQueue(chatId, message);
             }
             return false;
         }
     } catch (err) {
-        console.error(`❌ Ошибка синхронизации сообщения ${message.id}:`, err);
-        // Добавляем в очередь для повторной попытки
+        console.error(`❌ Ошибка синхронизации:`, err);
         if (typeof window.addToUnsyncedQueue === 'function') {
             window.addToUnsyncedQueue(chatId, message);
         }
         return false;
     }
 };
+
+console.log("✅ syncMessageToCloud зарегистрирована в глобальной области");
 
 // Функция для синхронизации нескольких сообщений разом (batch)
 window.syncBatchMessagesToCloud = async function(chatId, messages) {
