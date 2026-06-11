@@ -118,7 +118,6 @@ window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, cha
                     window.markMessagesSynced(chatId, result.messageIds);
                 } else {
                     console.error("Батч не отправлен:", result.error);
-                    // Возвращаем частичный успех
                     return { success: false, syncedCount: syncedCount, error: result.error };
                 }
             }
@@ -254,11 +253,17 @@ window.startUnsyncedRetryTimer = function() {
     // Проверяем каждые 30 секунд
     setInterval(async () => {
         if (window.config.syncEnabled && navigator.onLine !== false) {
+            // Повторная отправка сообщений
             if (typeof window.retryUnsyncedMessages === 'function') {
                 await window.retryUnsyncedMessages();
             }
+            // Повторная отправка избранного
             if (typeof window.retryUnsyncedFavorites === 'function') {
                 await window.retryUnsyncedFavorites();
+            }
+            // Повторная отправка чатов
+            if (typeof window.retryUnsyncedChats === 'function') {
+                await window.retryUnsyncedChats();
             }
         }
     }, 30000);
