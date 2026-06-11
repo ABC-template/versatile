@@ -1,5 +1,5 @@
 // js/modules/net-sync.js
-
+console.log("✅ net-sync.js загружен");
 // Синхронизация метаданных (список чатов и избранное)
 window.syncChatsMetadata = async function() {
     if (!window.config.syncEnabled) return;
