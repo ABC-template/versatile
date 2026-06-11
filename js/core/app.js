@@ -110,6 +110,10 @@ async function initApp() {
         }
         return; 
     }
+    // В initApp(), после проверки подписки
+if (typeof window.initExportButtons === 'function') {
+    window.initExportButtons();
+}
 
     // Динамическая установка флага синхронизации, как мы обсуждали ранее
     window.config = window.config || {};
