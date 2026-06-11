@@ -1,5 +1,6 @@
 // js /modules /net-stream.js
-
+console.log("✅ net-stream.js загружен");
+console.log("syncMessageToCloud defined:", typeof window.syncMessageToCloud);
 window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
     const container = document.getElementById('chat-container');
     if (!container) return;
