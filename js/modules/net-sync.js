@@ -257,6 +257,9 @@ window.startUnsyncedRetryTimer = function() {
             if (typeof window.retryUnsyncedMessages === 'function') {
                 await window.retryUnsyncedMessages();
             }
+            if (typeof window.retryUnsyncedFavorites === 'function') {
+                await window.retryUnsyncedFavorites();
+            }
         }
     }, 30000);
 };
