@@ -31,28 +31,36 @@ export default async function handler(request) {
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
 
     // Устанавливаем контекст пользователя для RLS
-    await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ uid: userId })
-    });
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ uid: userId })
+      });
+    } catch (err) {
+      console.error('RPC set_app_user_id error:', err);
+    }
 
     // Проверяем, может ли пользователь синхронизироваться (RPC функция)
-    const canSyncRes = await fetch(`${supabaseUrl}/rest/v1/rpc/can_sync`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ uid: userId })
-    });
-    
-    const canSyncData = canSyncRes.ok ? await canSyncRes.json() : false;
+    let canSyncData = false;
+    try {
+      const canSyncRes = await fetch(`${supabaseUrl}/rest/v1/rpc/can_sync`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ uid: userId })
+      });
+      canSyncData = canSyncRes.ok ? await canSyncRes.json() : false;
+    } catch (err) {
+      console.error('RPC can_sync error:', err);
+    }
     
     if (!canSyncData) {
       return new Response(JSON.stringify({ 
@@ -74,11 +82,11 @@ export default async function handler(request) {
     
     const chats = chatsRes.ok ? await chatsRes.json() : [];
 
-    // Запрашиваем избранные сообщения
+    // Запрашиваем избранные сообщения с сортировкой
     let favorites = [];
     if (chats.length > 0) {
       const chatIdsQuery = chats.map(c => c.id).join(',');
-      const favRes = await fetch(`${supabaseUrl}/rest/v1/messages?is_favorite=eq.true&chat_id=in.(${chatIdsQuery})&select=id,chat_id,text,is_favorite,updated_at`, {
+      const favRes = await fetch(`${supabaseUrl}/rest/v1/messages?is_favorite=eq.true&chat_id=in.(${chatIdsQuery})&select=id,chat_id,text,is_favorite,updated_at&order=updated_at.desc`, {
         method: 'GET',
         headers: { 
           'apikey': supabaseKey, 
