@@ -33,7 +33,6 @@ window.getCurrentActiveChat = function() {
 window.createNewChat = function() {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     
-    // ИСПРАВЛЕНО: Вместо "chat_" + Date.now() теперь создается чистый UUID
     const newId = window.generateUUID(); 
     const currentList = window.chatHistories[window.currentTopic];
     const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
@@ -48,7 +47,6 @@ window.createNewChat = function() {
         language: sysLang, 
         topic: window.currentTopic,
         messages: [{ 
-            // ИСПРАВЛЕНО: Системное приветствие теперь тоже получает чистый UUID
             id: window.generateUUID(), 
             text: window.welcomeTexts[window.currentTopic] || `Привет!`, 
             type: "ai-msg" 
@@ -152,7 +150,6 @@ window.addMessageToStorage = async function(text, className) {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     const activeChat = window.getCurrentActiveChat();
     
-    // ИСПРАВЛЕНО: Исходящие сообщения пользователя теперь тоже получают строгий UUID
     const generatedMsgId = window.generateUUID(); 
     
     if (activeChat) {
@@ -186,6 +183,8 @@ window.addMessageToStorage = async function(text, className) {
                         body: JSON.stringify({
                             action: 'new_message',
                             chatId: activeChat.id,
+                            chatTitle: activeChat.title, // Передаем заголовок для авто-создания
+                            chatTopic: activeChat.topic || window.currentTopic, // Передаем топик
                             message: {
                                 id: generatedMsgId,
                                 text: text,
