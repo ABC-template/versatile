@@ -1,3 +1,4 @@
+// api/cron/check-premium-expiry.js
 export const config = { runtime: 'edge' };
 
 export default async function handler(request) {
@@ -34,6 +35,9 @@ export default async function handler(request) {
   const fromDate = new Date(now.getTime() - 7*24*60*60*1000).toISOString();
   const toDate = new Date(now.getTime() + 6*24*60*60*1000).toISOString();
 
+  // -------------------------------------------------------------
+  // ФАЗА 1: Уведомления об истечении подписки и выставление дедлайнов
+  // -------------------------------------------------------------
   const users = await supabaseFetch(`users?role=eq.premium&premium_until=gte.${fromDate}&premium_until=lte.${toDate}&select=telegram_id,premium_until,role`);
 
   let sent = 0;
@@ -50,7 +54,7 @@ export default async function handler(request) {
       const dayWord = (daysLeft % 10 === 1 && daysLeft % 100 !== 11) ? 'день' : ((daysLeft % 10 >= 2 && daysLeft % 10 <= 4 && (daysLeft % 100 < 10 || daysLeft % 100 >= 20)) ? 'дня' : 'дней');
       message = `⚠️ Ваша PRO-подписка истекает через ${daysLeft} ${dayWord}. Продлите, чтобы не потерять синхронизацию чатов и расширенные лимиты.`;
     } else {
-      message = `⏰ Ваша PRO-подписка истекла сегодня. Ваши чаты будут храниться ещё 7 дней. Скачайте их или продлите PRO, иначе всё будет удалено.`;
+      message = `⏰ Ваша PRO-подписка истекла сегодня. Ваши чаты будут храниться в облаке ещё 7 дней. Скачайте архив в приложении или продлите PRO, иначе облачные данные будут безвозвратно удалены.`;
       const userData = await supabaseFetch(`users?telegram_id=eq.${user.telegram_id}&select=data_deadline`);
       if (!userData[0]?.data_deadline) {
         const deadline = new Date(now.getTime() + 7*24*60*60*1000).toISOString();
@@ -92,5 +96,29 @@ export default async function handler(request) {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, sent }), { status: 200 });
+  // -------------------------------------------------------------
+  // ФАЗА 2: Физическое каскадное удаление данных по истечении 7 дней
+  // -------------------------------------------------------------
+  let deletedUsersCount = 0;
+  try {
+    // Ищем тех, у кого дедлайн меньше или равен текущему времени
+    const expiredUsers = await supabaseFetch(`users?data_deadline=lte.${now.toISOString()}&select=telegram_id`);
+    
+    for (const expUser of expiredUsers) {
+      // Удаляем все чаты пользователя. За счёт FOREIGN KEY ... ON DELETE CASCADE
+      // в базе данных Supabase автоматически сотрутся все сообщения и избранное этого юзера.
+      await supabaseFetch(`chats?user_id=eq.${expUser.telegram_id}`, { method: 'DELETE' });
+      
+      // Сбрасываем дедлайн в null, чтобы очистка не выполнялась циклически
+      await supabaseFetch(`users?telegram_id=eq.${expUser.telegram_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ data_deadline: null })
+      });
+      deletedUsersCount++;
+    }
+  } catch (cleanErr) {
+    console.error('Ошибка в фазе очистки просроченных данных:', cleanErr.message);
+  }
+
+  return new Response(JSON.stringify({ success: true, sent, deletedUsers: deletedUsersCount }), { status: 200 });
 }
