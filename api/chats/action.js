@@ -11,8 +11,25 @@ export default async function handler(request) {
     'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
   };
 
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+  }
+
+  // Безопасное чтение тела запроса
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    console.error('Ошибка парсинга JSON:', err.message);
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: corsHeaders
+    });
+  }
 
   try {
     const initData = request.headers.get('x-telegram-init-data');
@@ -31,82 +48,45 @@ export default async function handler(request) {
     
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
     
-    const body = await request.json();
     const { action, chatId, message, messageId, newTitle, isFavorite, maxContext, chat, firstMessage } = body;
     
+    // Улучшенная функция запроса к Supabase с обработкой пустых ответов
     async function supabaseFetch(path, options = {}) {
       const url = `${supabaseUrl}/rest/v1/${path}`;
       const headers = {
         'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json',
+        'Prefer': options.method === 'POST' ? 'return=representation' : undefined
       };
+      
+      // Убираем undefined заголовки
+      Object.keys(headers).forEach(key => headers[key] === undefined && delete headers[key]);
+      
       const res = await fetch(url, { ...options, headers });
+      
+      // Для DELETE запросов или пустых ответов
+      if (res.status === 204 || res.headers.get('content-length') === '0') {
+        return { success: true };
+      }
+      
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Supabase error ${res.status}: ${text}`);
+        throw new Error(`Supabase error ${res.status}: ${text.substring(0, 200)}`);
       }
-      return res.json();
+      
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        // Для POST запросов возвращаем первый элемент или данные
+        if (options.method === 'POST') {
+          return Array.isArray(data) ? (data[0] || data) : data;
+        }
+        return data;
+      }
+      
+      return { success: true };
     }
-    
-    // Обработчик для batch_messages (массовая отправка сообщений)
-if (action === 'batch_messages') {
-  const { chatId, topicId, chatTitle, maxContext, userRenamed, messages } = body;
-  
-  // Проверяем существование чата (и создаем если нет)
-  let chatExists = false;
-  try {
-    const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
-    chatExists = chatCheck && chatCheck.length > 0;
-  } catch (err) {
-    // Игнорируем
-  }
-  
-  if (!chatExists) {
-    const canSync = await canUserSync();
-    if (!canSync) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Синхронизация недоступна',
-        synced: false 
-      }), { status: 403, headers: corsHeaders });
-    }
-    
-    await supabaseFetch('chats', {
-      method: 'POST',
-      body: JSON.stringify({
-        id: chatId,
-        user_id: userId,
-        topic_id: topicId || 'fast',
-        title: chatTitle || 'Новый чат',
-        max_context: maxContext || 15,
-        user_renamed: userRenamed || false,
-      })
-    });
-  }
-  
-  // Сохраняем все сообщения
-  for (const msg of messages) {
-    await supabaseFetch('messages', {
-      method: 'POST',
-      body: JSON.stringify({
-        id: msg.id,
-        chat_id: chatId,
-        msg_type: msg.type,
-        text: msg.text,
-        is_favorite: msg.isFavorite || false,
-      })
-    });
-  }
-  
-  // Обновляем updated_at чата
-  await supabaseFetch(`chats?id=eq.${chatId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ updated_at: new Date().toISOString() })
-  });
-  
-  return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
-}
     
     // Вспомогательная функция для проверки прав пользователя на синхронизацию
     async function canUserSync() {
@@ -114,7 +94,7 @@ if (action === 'batch_messages') {
         const userCheck = await supabaseFetch(`users?telegram_id=eq.${userId}&select=role,premium_until`);
         if (!userCheck || userCheck.length === 0) return false;
         
-        const userData = userCheck[0];
+        const userData = Array.isArray(userCheck) ? userCheck[0] : userCheck;
         const isPro = ['creator', 'admin', 'premium'].includes(userData.role);
         const hasValidPremium = userData.premium_until && new Date(userData.premium_until) > new Date();
         
@@ -125,16 +105,22 @@ if (action === 'batch_messages') {
       }
     }
     
-    // НАЧАЛО НОВОГО ФУНКЦИОНАЛА: Удаление чата
+    // ==========================================
+    // УДАЛЕНИЕ ЧАТА
+    // ==========================================
     if (action === 'delete_chat') {
       const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
-      if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
-
+      if (!chatCheck || (Array.isArray(chatCheck) && chatCheck.length === 0)) {
+        throw new Error('Chat not found or access denied');
+      }
+      
       await supabaseFetch(`chats?id=eq.${chatId}`, { method: 'DELETE' });
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
-    // ОБНОВЛЕННЫЙ ОБРАБОТЧИК new_message с авто-созданием чата
+    // ==========================================
+    // НОВОЕ СООБЩЕНИЕ (с авто-созданием чата для PRO)
+    // ==========================================
     if (action === 'new_message') {
       // Шаг 1: Проверяем существование чата в БД
       let chatExists = false;
@@ -142,11 +128,12 @@ if (action === 'batch_messages') {
       
       try {
         const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed`);
-        chatExists = chatCheck && chatCheck.length > 0;
-        if (chatExists) existingChat = chatCheck[0];
+        if (chatCheck && Array.isArray(chatCheck) && chatCheck.length > 0) {
+          chatExists = true;
+          existingChat = chatCheck[0];
+        }
       } catch (err) {
         console.error('Ошибка проверки чата:', err);
-        // Не падаем, пробуем создать чат дальше
       }
       
       // Шаг 2: Если чата нет, проверяем права и создаем
@@ -155,7 +142,6 @@ if (action === 'batch_messages') {
         
         if (!canSync) {
           // Пользователь не имеет права на синхронизацию
-          // Возвращаем 403, НО не падаем — сообщение уже сохранено локально у клиента
           return new Response(JSON.stringify({ 
             success: false, 
             error: 'Синхронизация недоступна для вашего тарифного плана',
@@ -186,8 +172,6 @@ if (action === 'batch_messages') {
           chatExists = true;
         } catch (createErr) {
           console.error('Ошибка создания чата:', createErr);
-          // Возвращаем 200, но с флагом synced: false
-          // Сообщение уже сохранено локально, клиент повторит попытку позже
           return new Response(JSON.stringify({ 
             success: false, 
             error: 'Не удалось создать чат в облаке',
@@ -196,8 +180,8 @@ if (action === 'batch_messages') {
         }
       }
       
-      // Шаг 3: Сохраняем сообщение (чат теперь точно существует или не понадобился)
-      if (chatExists) {
+      // Шаг 3: Сохраняем сообщение
+      if (chatExists && message) {
         try {
           await supabaseFetch('messages', {
             method: 'POST',
@@ -210,7 +194,7 @@ if (action === 'batch_messages') {
             })
           });
           
-          // Обновляем updated_at чата
+          // Обновляем updated_at чата (только время, created_at не меняем)
           await supabaseFetch(`chats?id=eq.${chatId}`, {
             method: 'PATCH',
             body: JSON.stringify({ updated_at: new Date().toISOString() })
@@ -227,7 +211,6 @@ if (action === 'batch_messages') {
         }
       }
       
-      // Fallback: если что-то пошло не так
       return new Response(JSON.stringify({ 
         success: false, 
         error: 'Неизвестная ошибка синхронизации',
@@ -235,40 +218,167 @@ if (action === 'batch_messages') {
       }), { status: 200, headers: corsHeaders });
     }
     
+    // ==========================================
+    // МАССОВАЯ ОТПРАВКА СООБЩЕНИЙ (batch)
+    // ==========================================
+    if (action === 'batch_messages') {
+      const { chatId: batchChatId, topicId, chatTitle, maxContext, userRenamed, messages: batchMessages } = body;
+      
+      if (!batchMessages || !Array.isArray(batchMessages) || batchMessages.length === 0) {
+        return new Response(JSON.stringify({ success: false, error: 'No messages to save' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
+      // Проверяем существование чата
+      let chatExists = false;
+      try {
+        const chatCheck = await supabaseFetch(`chats?id=eq.${batchChatId}&user_id=eq.${userId}&select=id`);
+        chatExists = chatCheck && Array.isArray(chatCheck) && chatCheck.length > 0;
+      } catch (err) {
+        console.error('Ошибка проверки чата для batch:', err);
+      }
+      
+      if (!chatExists) {
+        const canSync = await canUserSync();
+        if (!canSync) {
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Синхронизация недоступна',
+            synced: false 
+          }), { status: 403, headers: corsHeaders });
+        }
+        
+        await supabaseFetch('chats', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: batchChatId,
+            user_id: userId,
+            topic_id: topicId || 'fast',
+            title: chatTitle || 'Новый чат',
+            max_context: maxContext || 15,
+            user_renamed: userRenamed || false,
+          })
+        });
+      }
+      
+      // Сохраняем все сообщения
+      for (const msg of batchMessages) {
+        await supabaseFetch('messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: msg.id,
+            chat_id: batchChatId,
+            msg_type: msg.type,
+            text: msg.text,
+            is_favorite: msg.isFavorite || false,
+          })
+        });
+      }
+      
+      // Обновляем updated_at чата
+      await supabaseFetch(`chats?id=eq.${batchChatId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ updated_at: new Date().toISOString() })
+      });
+      
+      return new Response(JSON.stringify({ success: true, synced: true, count: batchMessages.length }), { 
+        status: 200, 
+        headers: corsHeaders 
+      });
+    }
+    
+    // ==========================================
+    // УДАЛЕНИЕ СООБЩЕНИЯ
+    // ==========================================
     if (action === 'delete_message') {
+      if (!messageId || !chatId) {
+        return new Response(JSON.stringify({ error: 'Missing messageId or chatId' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
       await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, { method: 'DELETE' });
+      
+      // Обновляем updated_at чата
       await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
         body: JSON.stringify({ updated_at: new Date().toISOString() })
       });
+      
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
+    // ==========================================
+    // ПЕРЕИМЕНОВАНИЕ ЧАТА
+    // ==========================================
     if (action === 'rename_chat') {
+      if (!chatId || !newTitle) {
+        return new Response(JSON.stringify({ error: 'Missing chatId or newTitle' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
       await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
         body: JSON.stringify({ title: newTitle, user_renamed: true })
       });
+      
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
+    // ==========================================
+    // ИЗБРАННОЕ СООБЩЕНИЕ
+    // ==========================================
     if (action === 'favorite_message') {
+      if (!messageId || !chatId || isFavorite === undefined) {
+        return new Response(JSON.stringify({ error: 'Missing messageId, chatId or isFavorite' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
       await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, {
         method: 'PATCH',
         body: JSON.stringify({ is_favorite: isFavorite })
       });
+      
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
+    // ==========================================
+    // ОБНОВЛЕНИЕ КОНТЕКСТА (память чата)
+    // ==========================================
     if (action === 'update_context') {
+      if (!chatId || maxContext === undefined) {
+        return new Response(JSON.stringify({ error: 'Missing chatId or maxContext' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
       await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
         body: JSON.stringify({ max_context: maxContext })
       });
+      
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
+    // ==========================================
+    // НОВЫЙ ЧАТ (с приветственным сообщением)
+    // ==========================================
     if (action === 'new_chat') {
+      if (!chat || !firstMessage) {
+        return new Response(JSON.stringify({ error: 'Missing chat or firstMessage' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
       // Проверяем права перед созданием чата
       const canSync = await canUserSync();
       if (!canSync) {
@@ -278,6 +388,7 @@ if (action === 'batch_messages') {
         }), { status: 403, headers: corsHeaders });
       }
       
+      // Создаем чат
       await supabaseFetch('chats', {
         method: 'POST',
         body: JSON.stringify({
@@ -285,10 +396,12 @@ if (action === 'batch_messages') {
           user_id: userId,
           topic_id: chat.topic_id,
           title: chat.title,
-          max_context: chat.max_context,
-          user_renamed: chat.user_renamed,
+          max_context: chat.max_context || 15,
+          user_renamed: chat.user_renamed || false,
         })
       });
+      
+      // Сохраняем приветственное сообщение
       await supabaseFetch('messages', {
         method: 'POST',
         body: JSON.stringify({
@@ -296,15 +409,17 @@ if (action === 'batch_messages') {
           chat_id: chat.id,
           msg_type: firstMessage.type,
           text: firstMessage.text,
-          is_favorite: firstMessage.is_favorite,
+          is_favorite: firstMessage.is_favorite || false,
         })
       });
+      
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
     }
     
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders });
+    
   } catch (err) {
-    console.error(err);
+    console.error('Action handler error:', err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 }
