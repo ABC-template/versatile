@@ -1,6 +1,19 @@
 // js/core/app.js
 
 async function initApp() {
+    const tg = window.Telegram?.WebApp;
+if (!tg || !tg.initData) {
+    document.body.innerHTML = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; text-align:center; padding:20px;">
+            <h2>Versatile AI</h2>
+            <p>Для работы приложения необходимо запустить его через официального бота.</p>
+            <a href="https://t.me/FIBIROBOT" style="display:inline-block; margin-top:20px; padding:12px 24px; background:#2481cc; color:#fff; text-decoration:none; border-radius:8px; font-weight:bold;">
+                Открыть в Telegram
+            </a>
+        </div>
+    `;
+    return; // Останавливаем инициализацию
+}
     // 1. Инициализация Eruda строго для Администратора
     const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     const MY_TELEGRAM_ID = 1541531808; 
