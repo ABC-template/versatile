@@ -135,12 +135,26 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
     msgDiv.appendChild(act);
 
     if (activeChat) {
-        activeChat.messages.push({ 
+        const aiMessage = { 
             id: generatedAiMsgId, 
             text: finalText, 
-            type: 'ai-msg' 
-        });
+            type: 'ai-msg',
+            isFavorite: false,
+            synced: false  // Пока не синхронизировано
+        };
+        
+        activeChat.messages.push(aiMessage);
         window.saveHistoriesToLocal();
+        
+        // ==========================================
+        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Синхронизация AI ответа с облаком
+        // ==========================================
+        if (window.config && window.config.syncEnabled && activeChat.id) {
+            // Асинхронно отправляем на сервер (не блокируем UI)
+            window.syncMessageToCloud(activeChat.id, aiMessage).catch(err => {
+                console.error("Синхронизация AI ответа не удалась:", err);
+            });
+        }
     }
     
     const isNoLimit = window.config.dailyLimit >= 9000;
