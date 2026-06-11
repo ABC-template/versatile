@@ -1,3 +1,4 @@
+// api/chats/action.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
@@ -20,22 +21,17 @@ export default async function handler(request) {
     const botToken = process.env.BOT_TOKEN?.trim();
     if (!botToken) throw new Error('Bot token not configured');
     
+    // Исправлено: добавлен await для стабильной валидации
     const user = await validateTelegramInitData(initData, botToken);
     if (!user) throw new Error('Invalid init data');
     
-    // ИСПРАВЛЕНО: Теперь ID пользователя динамический, а не захардкоженный
     const userId = user.id; 
     
-    // ИСПРАВЛЕНО: Читаем твои личные переменные окружения из Vercel. 
-    // Приоритет отдаем SERVICE_ROLE ключу, чтобы корректно работать в условиях включенного RLS
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
     
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
     
-    // ПРИМЕЧАНИЕ: Вызов RPC set_app_user_id удален, так как service_role ключ 
-    // обходит RLS напрямую, экономя ~100мс на лишнем сетевом запросе к базе.
-
     const body = await request.json();
     const { action, chatId, message, messageId, newTitle, isFavorite, maxContext, chat, firstMessage } = body;
     
@@ -54,11 +50,23 @@ export default async function handler(request) {
       return res.json();
     }
     
-    // Проверяем существование чата в твоей реальной базе данных
-    if (chatId && action !== 'new_chat') {
+    // Проверяем существование чата и владение им для всех действий кроме создания нового чата и полного удаления чата
+    if (chatId && action !== 'new_chat' && action !== 'delete_chat') {
       const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
       if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
     }
+    
+    // НАЧАЛО НОВОГО ФУНКЦИОНАЛА: Удаление чата
+    if (action === 'delete_chat') {
+      const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
+      if (!chatCheck || chatCheck.length === 0) throw new Error('Chat not found or access denied');
+
+      // Физическое удаление чата. Благодаря ON DELETE CASCADE в Supabase,
+      // сообщения и избранное этого чата сотрутся автоматически.
+      await supabaseFetch(`chats?id=eq.${chatId}`, { method: 'DELETE' });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+    }
+    // КОНЕЦ НОВОГО ФУНКЦИОНАЛА
     
     if (action === 'new_message') {
       await supabaseFetch('messages', {
@@ -141,4 +149,4 @@ export default async function handler(request) {
     console.error(err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
-}
+    }
