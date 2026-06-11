@@ -24,7 +24,6 @@ async function initApp() {
         try { 
             tg.ready(); 
             tg.expand(); 
-            // Безопасно подтягиваем цвет из темы Telegram
             if (tg.themeParams && tg.themeParams.bg_color) {
                 tg.setHeaderColor(tg.themeParams.bg_color); 
             }
@@ -102,7 +101,6 @@ async function initApp() {
         const limitInfoEl = document.getElementById('limit-info');
         if (limitInfoEl) limitInfoEl.innerText = "Ошибка: ID не найден"; 
         
-        // Снимаем блокировку экрана даже при ошибке, чтобы видеть консоль
         const appScreen = document.getElementById('app-screen');
         if (appScreen) {
             appScreen.classList.remove('hidden');
@@ -110,17 +108,49 @@ async function initApp() {
         }
         return; 
     }
-    // В initApp(), после проверки подписки
-if (typeof window.initExportButtons === 'function') {
-    window.initExportButtons();
-}
 
-    // Динамическая установка флага синхронизации, как мы обсуждали ранее
+    // Динамическая установка флага синхронизации
     window.config = window.config || {};
     if (uid === MY_TELEGRAM_ID || localStorage.getItem('is_pro_user') === 'true') {
         window.config.syncEnabled = true;
     } else {
         window.config.syncEnabled = false;
+    }
+
+    // Функция для выполнения синхронизации после проверки подписки
+    async function performSyncIfNeeded() {
+        if (window.config && window.config.syncEnabled) {
+            console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
+            
+            // Сначала синхронизируем метаданные
+            if (typeof window.syncChatsMetadata === 'function') {
+                await window.syncChatsMetadata();
+            }
+            
+            // Затем полностью синхронизируем все чаты
+            if (typeof window.fullSyncAllChats === 'function') {
+                await window.fullSyncAllChats();
+            }
+            
+            // Запускаем таймер для повторной отправки несинхронизированных данных
+            if (typeof window.startUnsyncedRetryTimer === 'function') {
+                window.startUnsyncedRetryTimer();
+            }
+            
+            // Инициализируем кнопки экспорта
+            if (typeof window.initExportButtons === 'function') {
+                window.initExportButtons();
+            }
+        } else {
+            console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
+        }
+        
+        // Гарантированное снятие серого экрана
+        const appScreen = document.getElementById('app-screen');
+        if (appScreen) {
+            appScreen.classList.remove('hidden');
+            if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
+        }
     }
 
     // Восстанавливаем счетчики лимитов из CloudStorage (или LocalStorage) и дергаем бэкенд
@@ -135,40 +165,17 @@ if (typeof window.initExportButtons === 'function') {
             if (typeof window.checkSubscriptionAndLoad === 'function') {
                 await window.checkSubscriptionAndLoad(uid);
             }
+            
+            // Синхронизация после проверки подписки
+            await performSyncIfNeeded();
         });
     } else {
         if (typeof window.checkSubscriptionAndLoad === 'function') {
             await window.checkSubscriptionAndLoad(uid);
         }
-    }
-
-// Если синхронизация включена, загружаем свежие данные с сервера
-if (window.config && window.config.syncEnabled) {
-    console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
-    
-    // Сначала синхронизируем метаданные
-    if (typeof window.syncChatsMetadata === 'function') {
-        await window.syncChatsMetadata();
-    }
-    
-    // Затем полностью синхронизируем все чаты
-    if (typeof window.fullSyncAllChats === 'function') {
-        await window.fullSyncAllChats();
-    }
-    
-    // Запускаем таймер для повторной отправки несинхронизированных данных
-    if (typeof window.startUnsyncedRetryTimer === 'function') {
-        window.startUnsyncedRetryTimer();
-    }
-} else {
-    console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
-}
-
-    // Гарантированное снятие серого экрана в самом конце
-    const appScreen = document.getElementById('app-screen');
-    if (appScreen) {
-        appScreen.classList.remove('hidden');
-        if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
+        
+        // Синхронизация после проверки подписки
+        await performSyncIfNeeded();
     }
 }
 
