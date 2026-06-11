@@ -1,11 +1,10 @@
 // js/core/app.js
 
-// 1. Глобальная конфигурация приложения по умолчанию
-window.config = {
-    apiEndpoint: '/api',
-    maxContextMessages: 10,
-    syncEnabled: false // По умолчанию выключено для защиты базы данных
-};
+// 1. Безопасное расширение глобальной конфигурации (не затирая существующие свойства)
+window.config = window.config || {};
+window.config.apiEndpoint = window.config.apiEndpoint || '/api';
+window.config.maxContextMessages = window.config.maxContextMessages || 10;
+window.config.syncEnabled = false; // Базовое значение для безопасности
 
 // 2. Основной модуль управления жизненным циклом Mini App
 const App = {
@@ -13,38 +12,55 @@ const App = {
      * Стартовая инициализация всех систем
      */
     async init() {
-        // Восстанавливаем Eruda в первую очередь, чтобы не пропустить ни одного лога
+        // Включаем консоль отладки строго для администратора
         this.initEruda();
 
-        console.log('Инициализация Versatile AI Mini App...');
-        
-        // Настройка интеграции с Telegram WebApp API
-        this.initTelegramWebApp();
+        try {
+            console.log('Запуск инициализации Versatile AI Mini App...');
+            
+            // Настройка интеграции с Telegram WebApp API
+            this.initTelegramWebApp();
 
-        // Динамическое определение прав на синхронизацию (Admin / PRO)
-        this.configureSyncLimits();
+            // Динамическое определение прав на синхронизацию (Admin / PRO)
+            this.configureSyncLimits();
 
-        // Запуск гибридного слоя хранения данных (Облако или LocalStorage)
-        this.initStorageSystem();
+            // Запуск гибридного слоя хранения данных (Облако или LocalStorage)
+            this.initStorageSystem();
 
-        // Отрисовка и привязка событий пользовательского интерфейса
-        this.initUserInterface();
+            // Отрисовка и привязка событий пользовательского интерфейса
+            this.initUserInterface();
+
+            // Гарантированно снимаем серый экран после успешной сборки
+            this.revealAppScreen();
+
+        } catch (err) {
+            console.error('Критический сбой во время инициализации модулей:', err);
+            // Предохранитель: даже если что-то пошло не так, открываем экран, чтобы работала Eruda
+            this.revealAppScreen();
+        }
     },
 
     /**
-     * Инициализация консоли отладки Eruda для мобильных устройств
+     * Инициализация консоли отладки Eruda (ВИДИМА ТОЛЬКО ДЛЯ АДМИНА)
      */
     initEruda() {
-        // Вариант 1: Если скрипт Eruda уже подключен глобально (например, в index.html)
+        const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+        const adminId = 1541531808; // Твой Telegram ID
+        const isLocalDebug = localStorage.getItem('debug_mode') === 'true';
+
+        // Если это не ты и не включен режим локальной отладки — Eruda не загружается
+        if (String(currentUserId) !== String(adminId) && !isLocalDebug) {
+            return; 
+        }
+
         if (window.eruda) {
             try {
                 window.eruda.init();
-                console.log('Eruda успешно запущена из глобального контекста.');
+                console.log('Eruda запущена для администратора.');
             } catch (err) {
-                console.error('Не удалось запустить предустановленную Eruda:', err);
+                console.error('Ошибка активации предустановленной Eruda:', err);
             }
         } else {
-            // Вариант 2: Если скрипта нет, подтягиваем его на лету для мобильной отладки
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/eruda';
             script.async = true;
@@ -52,14 +68,11 @@ const App = {
                 if (window.eruda) {
                     try {
                         window.eruda.init();
-                        console.log('Eruda успешно загружена динамически и инициализирована.');
-                    } catch (err) {
-                        console.error('Ошибка при инициализации динамической Eruda:', err);
+                        console.log('Eruda динамически загружена для администратора.');
+                    } catch (e) {
+                        console.error('Ошибка активации динамической Eruda:', e);
                     }
                 }
-            };
-            script.onerror = () => {
-                console.error('Критическая ошибка: Не удалось загрузить Eruda с удаленного CDN.');
             };
             document.head.appendChild(script);
         }
@@ -72,10 +85,7 @@ const App = {
         if (window.Telegram && window.Telegram.WebApp) {
             const webApp = window.Telegram.WebApp;
             
-            // Сообщаем Telegram, что приложение готове к работе
             webApp.ready();
-            
-            // Раскрываем окно на максимум для удобства работы с чатами
             webApp.expand();
             
             // Привязываем базовые CSS переменные к теме Telegram
@@ -84,9 +94,9 @@ const App = {
             document.documentElement.style.setProperty('--tg-theme-button', webApp.buttonColor || '#2481cc');
             document.documentElement.style.setProperty('--tg-theme-button-text', webApp.buttonTextColor || '#ffffff');
             
-            console.log('Telegram WebApp успешно инициализирован.');
+            console.log('Telegram WebApp успешно настроен.');
         } else {
-            console.warn('Telegram WebApp среда не обнаружена. Запущено в режиме обычного браузера.');
+            console.warn('Среда Telegram WebApp не обнаружена. Работа в обычном браузере.');
         }
     },
 
@@ -94,22 +104,18 @@ const App = {
      * Разделение пользователей на локальный режим и облачную синхронизацию
      */
     configureSyncLimits() {
-        // Извлекаем Telegram ID текущего пользователя из безопасной прослойки Telegram
         const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-        
-        // Твой персональный Telegram ID (Администратор/Создатель системы)
         const adminId = 1541531808; 
 
-        // Проверяем: это либо ты (админ), либо пользователь с локальным флагом купленного премиума
         const isCreatorOrAdmin = currentUserId && (String(currentUserId) === String(adminId));
         const isLocalPremium = localStorage.getItem('is_pro_user') === 'true';
 
         if (isCreatorOrAdmin || isLocalPremium) {
             window.config.syncEnabled = true;
-            console.log('Синхронизация включена: Облачный режим (Разрешено для Admin/PRO).');
+            console.log('Режим работы: Облачная синхронизация (Admin/PRO).');
         } else {
             window.config.syncEnabled = false;
-            console.log('Синхронизация отключена: Автономный режим (Данные сохраняются локально в LocalStorage).');
+            console.log('Режим работы: Локальное хранилище (LocalStorage).');
         }
     },
 
@@ -119,28 +125,47 @@ const App = {
     initStorageSystem() {
         if (window.Storage && typeof window.Storage.init === 'function') {
             window.Storage.init();
-            console.log('Модуль хранилища успешно запущен.');
+            console.log('Модуль децентрализованного хранилища готов.');
         } else {
-            console.error('Критическая ошибка: Компонент window.Storage не обнаружен в системе.');
+            console.error('Ошибка: Компонент window.Storage не найден.');
         }
     },
 
     /**
-     * Инициализация визуальной разметки и интерактивных элементов
+     * Инициализация визуальной разметки интерфейса
      */
     initUserInterface() {
         if (window.UI && typeof window.UI.init === 'function') {
             window.UI.init();
-            console.log('Пользовательский интерфейс успешно отрисован.');
+            console.log('Модуль UI успешно проинициализирован.');
         } else {
-            console.warn('Предупреждение: Модуль window.UI не обнаружен или будет инициализирован позже.');
+            console.warn('Предупреждение: window.UI не обнаружен или ожидает ленивой загрузки.');
+        }
+    },
+
+    /**
+     * АНТИ-СЕРЫЙ ЭКРАН: Принудительное отображение интерфейса приложения
+     */
+    revealAppScreen() {
+        const appScreen = document.getElementById('app-screen');
+        if (appScreen) {
+            // Удаляем класс скрытия
+            appScreen.classList.remove('hidden');
+            
+            // Если в инлайновых стилях или CSS зашит display: none — сбрасываем его
+            if (appScreen.style.display === 'none') {
+                appScreen.style.display = '';
+            }
+            console.log('Защита сработала: Серый экран успешно убран, приложение доступно.');
+        } else {
+            console.error('Критическая ошибка разметки: Элемент #app-screen не найден в DOM.');
         }
     }
 };
 
-// Безопасный запуск всего ядра приложения строго после полной готовности DOM-структуры
+// Безопасный запуск строго после полной готовности дерева документов DOM
 document.addEventListener('DOMContentLoaded', () => {
     App.init().catch(err => {
-        console.error('Критический сбой при запуске приложения:', err);
+        console.error('Непредвиденный сбой ядра на этапе DOMContentLoaded:', err);
     });
 });
