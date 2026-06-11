@@ -49,6 +49,65 @@ export default async function handler(request) {
       return res.json();
     }
     
+    // Обработчик для batch_messages (массовая отправка сообщений)
+if (action === 'batch_messages') {
+  const { chatId, topicId, chatTitle, maxContext, userRenamed, messages } = body;
+  
+  // Проверяем существование чата (и создаем если нет)
+  let chatExists = false;
+  try {
+    const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
+    chatExists = chatCheck && chatCheck.length > 0;
+  } catch (err) {
+    // Игнорируем
+  }
+  
+  if (!chatExists) {
+    const canSync = await canUserSync();
+    if (!canSync) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Синхронизация недоступна',
+        synced: false 
+      }), { status: 403, headers: corsHeaders });
+    }
+    
+    await supabaseFetch('chats', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: chatId,
+        user_id: userId,
+        topic_id: topicId || 'fast',
+        title: chatTitle || 'Новый чат',
+        max_context: maxContext || 15,
+        user_renamed: userRenamed || false,
+      })
+    });
+  }
+  
+  // Сохраняем все сообщения
+  for (const msg of messages) {
+    await supabaseFetch('messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: msg.id,
+        chat_id: chatId,
+        msg_type: msg.type,
+        text: msg.text,
+        is_favorite: msg.isFavorite || false,
+      })
+    });
+  }
+  
+  // Обновляем updated_at чата
+  await supabaseFetch(`chats?id=eq.${chatId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ updated_at: new Date().toISOString() })
+  });
+  
+  return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
+}
+    
     // Вспомогательная функция для проверки прав пользователя на синхронизацию
     async function canUserSync() {
       try {
