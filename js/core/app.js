@@ -122,6 +122,10 @@ async function initApp() {
         if (window.config && window.config.syncEnabled) {
             console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
             
+            if (window.config.syncEnabled && typeof window.initDeviceManager === 'function') {
+                await window.initDeviceManager();
+            }
+            
             // Сначала синхронизируем метаданные
             if (typeof window.syncChatsMetadata === 'function') {
                 await window.syncChatsMetadata();
