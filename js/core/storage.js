@@ -111,11 +111,11 @@ window.syncNewChatToCloud = async function(chat) {
                     max_context: chat.maxContext,
                     user_renamed: chat.userRenamed
                 },
-                firstMessage: chat.messages[0] ? {
+              /*  firstMessage: chat.messages[0] ? {
                     type: chat.messages[0].type,
                     text: chat.messages[0].text,
                     is_favorite: false
-                } : null
+                } : null*/
             })
         });
         
