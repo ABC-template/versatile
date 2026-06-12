@@ -257,7 +257,7 @@ window.fullSyncAllChats = async function() {
     
     console.log("🔄 Начинаем полную синхронизацию всех чатов...");
     
-    await window.syncChatsMetadata();
+ //   await window.syncChatsMetadata();
     
     const topics = ['code', 'creative', 'fast', 'kitchen'];
     
@@ -269,7 +269,7 @@ window.fullSyncAllChats = async function() {
             if (cloudChatIds.has(localChat.id)) {
                 const cloudMeta = window.cloudChatsMeta[localChat.id];
                 if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
-                    await window.loadFullChat(localChat.id);
+                  //  await window.loadFullChat(localChat.id);
                 }
             }
         }
