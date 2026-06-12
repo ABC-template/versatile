@@ -31,13 +31,49 @@ window.checkSubscriptionAndLoad = async function(uid) {
         window.config.dailyLimit = data.dailyLimit || 9999;
         window.config.role = data.role || 'creator';
         window.config.syncEnabled = data.syncEnabled === true;
+        
         if (data.isMember || data.role === 'admin' || data.role === 'creator') {
             window.showChat();
             if (typeof window.renderModelSwitcher === 'function') window.renderModelSwitcher();
             if (typeof window.selectTopic === 'function') window.selectTopic(window.currentTopic);
-            // Если синхронизация включена, загружаем метаданные чатов
+            
             if (window.config.syncEnabled && typeof window.syncChatsMetadata === 'function') {
                 await window.syncChatsMetadata();
+            }
+            
+            // 🆕 Подписываемся на push-уведомления после успешной авторизации
+            if (typeof window.initPushSubscription === 'undefined') {
+                // Создаём глобальный флаг, чтобы не подписываться дважды
+                window.initPushSubscription = true;
+                
+                if (window.Telegram?.WebApp && window.Telegram.WebApp.onEvent) {
+                    window.Telegram.WebApp.onEvent('message', async (message) => {
+                        if (message.text === "🔄" && window.config?.syncEnabled) {
+                            console.log("🔄 Получен сигнал синхронизации!");
+                            
+                            if (typeof window.showSyncStatus === 'function') {
+                                window.showSyncStatus('syncing');
+                            }
+                            
+                            if (typeof window.syncChatsMetadata === 'function') {
+                                await window.syncChatsMetadata();
+                            }
+                            
+                            const activeChat = window.getCurrentActiveChat();
+                            if (activeChat && typeof window.loadFullChat === 'function') {
+                                await window.loadFullChat(activeChat.id);
+                                if (typeof window.loadActiveChatMessages === 'function') {
+                                    window.loadActiveChatMessages();
+                                }
+                            }
+                            
+                            if (typeof window.showSyncStatus === 'function') {
+                                window.showSyncStatus('success');
+                            }
+                        }
+                    });
+                    console.log("📨 Push-подписка активирована");
+                }
             }
         } else {
             window.showGuest({ msg: "403", joke: "Для доступа к ИИ необходимо подписаться на канал!" });
