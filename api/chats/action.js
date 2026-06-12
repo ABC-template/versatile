@@ -106,19 +106,6 @@ export default async function handler(request) {
     }
     
     // ==========================================
-    // УДАЛЕНИЕ ЧАТА
-    // ==========================================
-    if (action === 'delete_chat') {
-      const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
-      if (!chatCheck || (Array.isArray(chatCheck) && chatCheck.length === 0)) {
-        throw new Error('Chat not found or access denied');
-      }
-      
-      await supabaseFetch(`chats?id=eq.${chatId}`, { method: 'DELETE' });
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-    }
-    
-    // ==========================================
     // НОВОЕ СООБЩЕНИЕ (с авто-созданием чата для PRO и UPSERT)
     // ==========================================
     if (action === 'new_message') {
@@ -333,27 +320,49 @@ export default async function handler(request) {
       });
     }
     
-    // ==========================================
-    // УДАЛЕНИЕ СООБЩЕНИЯ
-    // ==========================================
-    if (action === 'delete_message') {
-      if (!messageId || !chatId) {
+// ==========================================
+// УДАЛЕНИЕ ЧАТА (SOFT DELETE → в корзину)
+// ==========================================
+if (action === 'delete_chat') {
+    const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
+    if (!chatCheck || (Array.isArray(chatCheck) && chatCheck.length === 0)) {
+        throw new Error('Chat not found or access denied');
+    }
+    
+    // SOFT DELETE
+    await supabaseFetch(`chats?id=eq.${chatId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ deleted_at: new Date().toISOString() })
+    });
+    
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+}
+
+// ==========================================
+// УДАЛЕНИЕ СООБЩЕНИЯ (SOFT DELETE → в корзину)
+// ==========================================
+if (action === 'delete_message') {
+    if (!messageId || !chatId) {
         return new Response(JSON.stringify({ error: 'Missing messageId or chatId' }), { 
-          status: 400, 
-          headers: corsHeaders 
+            status: 400, 
+            headers: corsHeaders 
         });
-      }
-      
-      await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, { method: 'DELETE' });
-      
-      // Обновляем updated_at чата
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
+    }
+    
+    // SOFT DELETE
+    await supabaseFetch(`messages?id=eq.${messageId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ deleted_at: new Date().toISOString() })
+    });
+    
+    // Обновляем updated_at чата
+    await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
         body: JSON.stringify({ updated_at: new Date().toISOString() })
-      });
-      
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-    }
+    });
+    
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+}
     
     // ==========================================
     // ПЕРЕИМЕНОВАНИЕ ЧАТА
