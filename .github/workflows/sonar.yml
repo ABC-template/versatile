@@ -1,0 +1,21 @@
+name: SonarCloud Scan
+on:
+  push:
+    branches:
+      - main # Укажите вашу основную ветку (main или master)
+
+jobs:
+  sonarcloud:
+    name: Run SonarCloud Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Важно для корректного анализа истории коммитов
+
+      - name: Run SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} # Ваш секретный токен из SonarCloud
