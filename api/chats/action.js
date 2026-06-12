@@ -200,9 +200,11 @@ if (action === 'new_message') {
       });
       console.log("📥 Результат PATCH:", updateResult);
       
-      const noRowsUpdated = !updateResult || 
-        (Array.isArray(updateResult) && updateResult.length === 0) ||
-        (updateResult.message && updateResult.message.includes('no rows'));
+// Если updateResult = { success: true } — это значит, что ничего не обновилось (204 No Content)
+const noRowsUpdated = !updateResult || 
+    updateResult.success === true ||  // ← ГЛАВНОЕ ИСПРАВЛЕНИЕ
+    (Array.isArray(updateResult) && updateResult.length === 0) ||
+    (updateResult.message && updateResult.message.includes('no rows'));
       
       if (noRowsUpdated) {
         console.log("📤 PATCH не обновил, делаем INSERT");
