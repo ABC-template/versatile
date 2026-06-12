@@ -107,146 +107,157 @@ export default async function handler(request) {
     }
     
     // ==========================================
-    // НОВОЕ СООБЩЕНИЕ
-    // ==========================================
-    if (action === 'new_message') {
-      let chatExists = false;
-      let existingChat = null;
+// НОВОЕ СООБЩЕНИЕ
+// ==========================================
+if (action === 'new_message') {
+  console.log("🔥 [new_message] Начало обработки", { chatId, userId, messageId: message?.id });
+
+  let chatExists = false;
+  let existingChat = null;
+  
+  try {
+    const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed`);
+    if (chatCheck && Array.isArray(chatCheck) && chatCheck.length > 0) {
+      chatExists = true;
+      existingChat = chatCheck[0];
+    }
+  } catch (err) {
+    console.error('Ошибка проверки чата:', err);
+  }
+  
+  if (!chatExists) {
+    console.log("⚠️ [new_message] Чат не найден, пробуем создать");
+    const canSync = await canUserSync();
+    
+    if (!canSync) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Синхронизация недоступна для вашего тарифного плана',
+        synced: false 
+      }), { status: 403, headers: corsHeaders });
+    }
+    
+    const chatTopic = body.topicId || 'fast';
+    const chatTitle = body.chatTitle || `Чат в разделе ${chatTopic}`;
+    const chatMaxContext = body.maxContext || 15;
+    const chatUserRenamed = body.userRenamed || false;
+    
+    let finalChatId = chatId;
+    if (finalChatId) {
+      const existingChatCheck = await supabaseFetch(`chats?id=eq.${finalChatId}&select=id`);
+      if (existingChatCheck && Array.isArray(existingChatCheck) && existingChatCheck.length > 0) {
+        finalChatId = generateUUID();
+        console.log(`⚠️ Чат с ID ${chatId} уже существует, используем новый ID: ${finalChatId}`);
+      }
+    } else {
+      finalChatId = generateUUID();
+    }
+    
+    try {
+      await supabaseFetch('chats', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: finalChatId,
+          user_id: userId,
+          topic_id: chatTopic,
+          title: chatTitle,
+          max_context: chatMaxContext,
+          user_renamed: chatUserRenamed,
+        })
+      });
+      chatExists = true;
       
-      try {
-        const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed`);
-        if (chatCheck && Array.isArray(chatCheck) && chatCheck.length > 0) {
-          chatExists = true;
-          existingChat = chatCheck[0];
-        }
-      } catch (err) {
-        console.error('Ошибка проверки чата:', err);
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced: true, 
+        chatId: finalChatId 
+      }), { status: 200, headers: corsHeaders });
+    } catch (createErr) {
+      console.error('Ошибка создания чата:', createErr);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Не удалось создать чат в облаке',
+        synced: false 
+      }), { status: 200, headers: corsHeaders });
+    }
+  }
+  
+  if (chatExists && message) {
+    console.log("📝 Сохраняем сообщение", { chatId, messageId: message.id, type: message.type });
+    
+    try {
+      const finalMessageId = message.id || generateUUID();
+      console.log("🆔 finalMessageId:", finalMessageId);
+      
+      const updateResult = await supabaseFetch(`messages?id=eq.${finalMessageId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          chat_id: chatId,
+          msg_type: message.type,
+          text: message.text,
+          is_favorite: message.isFavorite || false,
+        })
+      });
+      console.log("📥 Результат PATCH:", updateResult);
+      
+      const noRowsUpdated = !updateResult || 
+        (Array.isArray(updateResult) && updateResult.length === 0) ||
+        (updateResult.message && updateResult.message.includes('no rows'));
+      
+      if (noRowsUpdated) {
+        console.log("📤 PATCH не обновил, делаем INSERT");
+        await supabaseFetch('messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: finalMessageId,
+            chat_id: chatId,
+            msg_type: message.type,
+            text: message.text,
+            is_favorite: message.isFavorite || false,
+          })
+        });
+        console.log("✅ INSERT выполнен");
+      } else {
+        console.log("✅ PATCH обновил сообщение");
       }
       
-      if (!chatExists) {
-        const canSync = await canUserSync();
-        
-        if (!canSync) {
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: 'Синхронизация недоступна для вашего тарифного плана',
-            synced: false 
-          }), { status: 403, headers: corsHeaders });
-        }
-        
-        const chatTopic = body.topicId || 'fast';
-        const chatTitle = body.chatTitle || `Чат в разделе ${chatTopic}`;
-        const chatMaxContext = body.maxContext || 15;
-        const chatUserRenamed = body.userRenamed || false;
-        
-        // 🆕 Проверяем, существует ли чат с таким ID (если клиент прислал ID)
-        let finalChatId = chatId;
-        if (finalChatId) {
-          const existingChatCheck = await supabaseFetch(`chats?id=eq.${finalChatId}&select=id`);
-          if (existingChatCheck && Array.isArray(existingChatCheck) && existingChatCheck.length > 0) {
-            // Чат с таким ID уже существует — генерируем новый ID
-            finalChatId = generateUUID();
-            console.log(`⚠️ Чат с ID ${chatId} уже существует, используем новый ID: ${finalChatId}`);
-          }
-        } else {
-          finalChatId = generateUUID();
-        }
-        
-        try {
-          await supabaseFetch('chats', {
-            method: 'POST',
-            body: JSON.stringify({
-              id: finalChatId,
-              user_id: userId,
-              topic_id: chatTopic,
-              title: chatTitle,
-              max_context: chatMaxContext,
-              user_renamed: chatUserRenamed,
-            })
-          });
-          chatExists = true;
-          
-          // 🆕 Отправляем обратно правильный ID чата клиенту
-          return new Response(JSON.stringify({ 
-            success: true, 
-            synced: true, 
-            chatId: finalChatId 
-          }), { status: 200, headers: corsHeaders });
-        } catch (createErr) {
-          console.error('Ошибка создания чата:', createErr);
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: 'Не удалось создать чат в облаке',
-            synced: false 
-          }), { status: 200, headers: corsHeaders });
-        }
-      }
+      await supabaseFetch(`chats?id=eq.${chatId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ updated_at: new Date().toISOString() })
+      });
       
-      if (chatExists && message) {
-        try {
-          // 🆕 Если сообщение без ID — генерируем
-          const finalMessageId = message.id || generateUUID();
-          
-          const updateResult = await supabaseFetch(`messages?id=eq.${finalMessageId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              chat_id: chatId,
-              msg_type: message.type,
-              text: message.text,
-              is_favorite: message.isFavorite || false,
-            })
-          });
-          
-          const noRowsUpdated = !updateResult || 
-            (Array.isArray(updateResult) && updateResult.length === 0) ||
-            (updateResult.message && updateResult.message.includes('no rows'));
-          
-          if (noRowsUpdated) {
-            await supabaseFetch('messages', {
-              method: 'POST',
-              body: JSON.stringify({
-                id: finalMessageId,
-                chat_id: chatId,
-                msg_type: message.type,
-                text: message.text,
-                is_favorite: message.isFavorite || false,
-              })
-            });
-          }
-          
-          await supabaseFetch(`chats?id=eq.${chatId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ updated_at: new Date().toISOString() })
-          });
-          
-          const botToken = process.env.BOT_TOKEN?.trim();
-          scheduleSilentPush(userId, botToken);
-          
-          return new Response(JSON.stringify({ 
-            success: true, 
-            synced: true,
-            messageId: finalMessageId 
-          }), { status: 200, headers: corsHeaders });
-          
-        } catch (msgErr) {
-          if (msgErr.message && (msgErr.message.includes('duplicate key') || msgErr.message.includes('409'))) {
-            return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
-          }
-          
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: 'Сообщение не сохранено в облаке',
-            synced: false 
-          }), { status: 200, headers: corsHeaders });
-        }
+      const botToken = process.env.BOT_TOKEN?.trim();
+      scheduleSilentPush(userId, botToken);
+      
+      console.log("✅ [new_message] Сообщение успешно сохранено, возвращаем success");
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced: true,
+        messageId: finalMessageId 
+      }), { status: 200, headers: corsHeaders });
+      
+    } catch (msgErr) {
+      console.error("❌ Ошибка при сохранении сообщения:", msgErr);
+      if (msgErr.message && (msgErr.message.includes('duplicate key') || msgErr.message.includes('409'))) {
+        console.log("⚠️ Duplicate key, считаем успехом");
+        return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
       }
       
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'Неизвестная ошибка синхронизации',
+        error: 'Сообщение не сохранено в облаке',
         synced: false 
       }), { status: 200, headers: corsHeaders });
     }
+  }
+  
+  console.log("❌ Неизвестная ошибка: chatExists или message не верны");
+  return new Response(JSON.stringify({ 
+    success: false, 
+    error: 'Неизвестная ошибка синхронизации',
+    synced: false 
+  }), { status: 200, headers: corsHeaders });
+} 
     
     // ==========================================
     // МАССОВАЯ ОТПРАВКА СООБЩЕНИЙ (batch)
