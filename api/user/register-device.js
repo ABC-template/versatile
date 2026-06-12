@@ -20,61 +20,50 @@ export default async function handler(request) {
     }
 
     try {
-        // 1. Проверка авторизации
         const initData = request.headers.get('x-telegram-init-data');
         if (!initData) {
             return new Response(JSON.stringify({ error: 'Missing init data' }), {
-                status: 401,
-                headers: corsHeaders
+                status: 401, headers: corsHeaders
             });
         }
 
         const botToken = process.env.BOT_TOKEN?.trim();
         if (!botToken) {
             return new Response(JSON.stringify({ error: 'Bot token not configured' }), {
-                status: 500,
-                headers: corsHeaders
+                status: 500, headers: corsHeaders
             });
         }
 
         const user = await validateTelegramInitData(initData, botToken);
         if (!user) {
             return new Response(JSON.stringify({ error: 'Invalid init data' }), {
-                status: 401,
-                headers: corsHeaders
+                status: 401, headers: corsHeaders
             });
         }
 
         const userId = user.id;
-
-        // 2. Парсим тело запроса
         let body;
         try {
             body = await request.json();
         } catch (err) {
             return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-                status: 400,
-                headers: corsHeaders
+                status: 400, headers: corsHeaders
             });
         }
 
-        const { deviceFingerprint, deviceName, platform } = body;
-
+        const { deviceFingerprint } = body;
         if (!deviceFingerprint) {
             return new Response(JSON.stringify({ error: 'Missing deviceFingerprint' }), {
-                status: 400,
-                headers: corsHeaders
+                status: 400, headers: corsHeaders
             });
         }
 
-        // 3. Подключаемся к Supabase
         const supabaseUrl = process.env.SUPABASE_URL?.trim();
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
 
         if (!supabaseUrl || !supabaseKey) {
             return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
-                status: 500,
-                headers: corsHeaders
+                status: 500, headers: corsHeaders
             });
         }
 
@@ -96,50 +85,35 @@ export default async function handler(request) {
             return res.json();
         }
 
-        // 4. Регистрируем или обновляем устройство
-        const existingDevice = await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}&select=*`);
+        // Проверяем, существует ли устройство
+        const existing = await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}&select=id`);
 
-        if (existingDevice && existingDevice.length > 0) {
-            // Устройство существует — обновляем last_seen
-            await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}`, {
-                method: 'PATCH',
-                body: JSON.stringify({
-                    last_seen: new Date().toISOString(),
-                    is_active: true,
-                    device_name: deviceName || existingDevice[0].device_name,
-                    platform: platform || existingDevice[0].platform
-                })
-            });
+        if (existing && existing.length > 0) {
+            // Устройство уже есть
             return new Response(JSON.stringify({
                 success: true,
-                isNew: false,
-                device_id: existingDevice[0].id
+                isNew: false
             }), { status: 200, headers: corsHeaders });
         } else {
-            // Новое устройство — создаем
-            const newDevice = await supabaseFetch('user_devices', {
+            // Новое устройство
+            await supabaseFetch('user_devices', {
                 method: 'POST',
                 body: JSON.stringify({
                     user_id: userId,
                     device_fingerprint: deviceFingerprint,
-                    device_name: deviceName || 'Unknown Device',
-                    platform: platform || 'unknown',
-                    last_seen: new Date().toISOString(),
                     is_active: true
                 })
             });
             return new Response(JSON.stringify({
                 success: true,
-                isNew: true,
-                device_id: newDevice.id
+                isNew: true
             }), { status: 200, headers: corsHeaders });
         }
 
     } catch (err) {
         console.error('Register device error:', err);
         return new Response(JSON.stringify({ error: err.message }), {
-            status: 500,
-            headers: corsHeaders
+            status: 500, headers: corsHeaders
         });
     }
 }
