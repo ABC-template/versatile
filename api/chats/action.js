@@ -4,6 +4,11 @@ import { scheduleSilentPush } from '../_lib/send-push.js';
 
 export const config = { runtime: 'edge' };
 
+// Генерация UUID на сервере
+function generateUUID() {
+    return crypto.randomUUID();
+}
+
 export default async function handler(request) {
   const corsHeaders = {
     'Content-Type': 'application/json',
@@ -134,11 +139,24 @@ export default async function handler(request) {
         const chatMaxContext = body.maxContext || 15;
         const chatUserRenamed = body.userRenamed || false;
         
+        // 🆕 Проверяем, существует ли чат с таким ID (если клиент прислал ID)
+        let finalChatId = chatId;
+        if (finalChatId) {
+          const existingChatCheck = await supabaseFetch(`chats?id=eq.${finalChatId}&select=id`);
+          if (existingChatCheck && Array.isArray(existingChatCheck) && existingChatCheck.length > 0) {
+            // Чат с таким ID уже существует — генерируем новый ID
+            finalChatId = generateUUID();
+            console.log(`⚠️ Чат с ID ${chatId} уже существует, используем новый ID: ${finalChatId}`);
+          }
+        } else {
+          finalChatId = generateUUID();
+        }
+        
         try {
           await supabaseFetch('chats', {
             method: 'POST',
             body: JSON.stringify({
-              id: chatId,
+              id: finalChatId,
               user_id: userId,
               topic_id: chatTopic,
               title: chatTitle,
@@ -147,6 +165,13 @@ export default async function handler(request) {
             })
           });
           chatExists = true;
+          
+          // 🆕 Отправляем обратно правильный ID чата клиенту
+          return new Response(JSON.stringify({ 
+            success: true, 
+            synced: true, 
+            chatId: finalChatId 
+          }), { status: 200, headers: corsHeaders });
         } catch (createErr) {
           console.error('Ошибка создания чата:', createErr);
           return new Response(JSON.stringify({ 
@@ -159,7 +184,10 @@ export default async function handler(request) {
       
       if (chatExists && message) {
         try {
-          const updateResult = await supabaseFetch(`messages?id=eq.${message.id}`, {
+          // 🆕 Если сообщение без ID — генерируем
+          const finalMessageId = message.id || generateUUID();
+          
+          const updateResult = await supabaseFetch(`messages?id=eq.${finalMessageId}`, {
             method: 'PATCH',
             body: JSON.stringify({
               chat_id: chatId,
@@ -177,7 +205,7 @@ export default async function handler(request) {
             await supabaseFetch('messages', {
               method: 'POST',
               body: JSON.stringify({
-                id: message.id,
+                id: finalMessageId,
                 chat_id: chatId,
                 msg_type: message.type,
                 text: message.text,
@@ -191,11 +219,14 @@ export default async function handler(request) {
             body: JSON.stringify({ updated_at: new Date().toISOString() })
           });
           
-          // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
           const botToken = process.env.BOT_TOKEN?.trim();
           scheduleSilentPush(userId, botToken);
           
-          return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
+          return new Response(JSON.stringify({ 
+            success: true, 
+            synced: true,
+            messageId: finalMessageId 
+          }), { status: 200, headers: corsHeaders });
           
         } catch (msgErr) {
           if (msgErr.message && (msgErr.message.includes('duplicate key') || msgErr.message.includes('409'))) {
@@ -263,7 +294,9 @@ export default async function handler(request) {
       
       for (const msg of batchMessages) {
         try {
-          await supabaseFetch(`messages?id=eq.${msg.id}`, {
+          const finalMsgId = msg.id || generateUUID();
+          
+          await supabaseFetch(`messages?id=eq.${finalMsgId}`, {
             method: 'PATCH',
             body: JSON.stringify({
               chat_id: batchChatId,
@@ -277,7 +310,7 @@ export default async function handler(request) {
             await supabaseFetch('messages', {
               method: 'POST',
               body: JSON.stringify({
-                id: msg.id,
+                id: msg.id || generateUUID(),
                 chat_id: batchChatId,
                 msg_type: msg.type,
                 text: msg.text,
@@ -293,7 +326,6 @@ export default async function handler(request) {
         body: JSON.stringify({ updated_at: new Date().toISOString() })
       });
       
-      // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
       const botToken = process.env.BOT_TOKEN?.trim();
       scheduleSilentPush(userId, botToken);
       
@@ -307,9 +339,21 @@ export default async function handler(request) {
     // УДАЛЕНИЕ ЧАТА (SOFT DELETE → в корзину)
     // ==========================================
     if (action === 'delete_chat') {
+      if (!chatId) {
+        return new Response(JSON.stringify({ error: 'Missing chatId' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
+      // 🆕 Сначала проверяем существование чата
       const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
       if (!chatCheck || (Array.isArray(chatCheck) && chatCheck.length === 0)) {
-        throw new Error('Chat not found or access denied');
+        // Чат не найден — возможно уже удалён
+        return new Response(JSON.stringify({ success: true, alreadyDeleted: true }), { 
+          status: 200, 
+          headers: corsHeaders 
+        });
       }
       
       await supabaseFetch(`chats?id=eq.${chatId}`, {
@@ -317,7 +361,6 @@ export default async function handler(request) {
         body: JSON.stringify({ deleted_at: new Date().toISOString() })
       });
       
-      // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
       const botToken = process.env.BOT_TOKEN?.trim();
       scheduleSilentPush(userId, botToken);
       
@@ -335,6 +378,15 @@ export default async function handler(request) {
         });
       }
       
+      // 🆕 Проверяем существование сообщения
+      const msgCheck = await supabaseFetch(`messages?id=eq.${messageId}&select=id`);
+      if (!msgCheck || (Array.isArray(msgCheck) && msgCheck.length === 0)) {
+        return new Response(JSON.stringify({ success: true, alreadyDeleted: true }), { 
+          status: 200, 
+          headers: corsHeaders 
+        });
+      }
+      
       await supabaseFetch(`messages?id=eq.${messageId}`, {
         method: 'PATCH',
         body: JSON.stringify({ deleted_at: new Date().toISOString() })
@@ -345,7 +397,6 @@ export default async function handler(request) {
         body: JSON.stringify({ updated_at: new Date().toISOString() })
       });
       
-      // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
       const botToken = process.env.BOT_TOKEN?.trim();
       scheduleSilentPush(userId, botToken);
       
@@ -363,12 +414,20 @@ export default async function handler(request) {
         });
       }
       
+      // 🆕 Проверяем существование чата
+      const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
+      if (!chatCheck || (Array.isArray(chatCheck) && chatCheck.length === 0)) {
+        return new Response(JSON.stringify({ error: 'Chat not found' }), { 
+          status: 404, 
+          headers: corsHeaders 
+        });
+      }
+      
       await supabaseFetch(`chats?id=eq.${chatId}`, {
         method: 'PATCH',
         body: JSON.stringify({ title: newTitle, user_renamed: true })
       });
       
-      // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
       const botToken = process.env.BOT_TOKEN?.trim();
       scheduleSilentPush(userId, botToken);
       
@@ -391,7 +450,6 @@ export default async function handler(request) {
         body: JSON.stringify({ is_favorite: isFavorite })
       });
       
-      // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
       const botToken = process.env.BOT_TOKEN?.trim();
       scheduleSilentPush(userId, botToken);
       
@@ -421,8 +479,8 @@ export default async function handler(request) {
     // НОВЫЙ ЧАТ
     // ==========================================
     if (action === 'new_chat') {
-      if (!chat || !firstMessage) {
-        return new Response(JSON.stringify({ error: 'Missing chat or firstMessage' }), { 
+      if (!chat) {
+        return new Response(JSON.stringify({ error: 'Missing chat' }), { 
           status: 400, 
           headers: corsHeaders 
         });
@@ -436,10 +494,13 @@ export default async function handler(request) {
         }), { status: 403, headers: corsHeaders });
       }
       
+      // 🆕 Генерируем ID на сервере
+      const newChatId = generateUUID();
+      
       await supabaseFetch('chats', {
         method: 'POST',
         body: JSON.stringify({
-          id: chat.id,
+          id: newChatId,
           user_id: userId,
           topic_id: chat.topic_id,
           title: chat.title,
@@ -448,22 +509,14 @@ export default async function handler(request) {
         })
       });
       
-      try {
-        await supabaseFetch(`messages?id=eq.${firstMessage.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            chat_id: chat.id,
-            msg_type: firstMessage.type,
-            text: firstMessage.text,
-            is_favorite: firstMessage.is_favorite || false,
-          })
-        });
-      } catch (err) {
+      let firstMessageId = null;
+      if (firstMessage) {
+        firstMessageId = generateUUID();
         await supabaseFetch('messages', {
           method: 'POST',
           body: JSON.stringify({
-            id: firstMessage.id,
-            chat_id: chat.id,
+            id: firstMessageId,
+            chat_id: newChatId,
             msg_type: firstMessage.type,
             text: firstMessage.text,
             is_favorite: firstMessage.is_favorite || false,
@@ -471,11 +524,14 @@ export default async function handler(request) {
         });
       }
       
-      // 🆕 ОТПРАВЛЯЕМ PUSH УВЕДОМЛЕНИЕ
       const botToken = process.env.BOT_TOKEN?.trim();
       scheduleSilentPush(userId, botToken);
       
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify({ 
+        success: true, 
+        chatId: newChatId,
+        messageId: firstMessageId
+      }), { status: 200, headers: corsHeaders });
     }
     
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders });
