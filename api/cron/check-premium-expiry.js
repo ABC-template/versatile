@@ -28,7 +28,6 @@ export default async function handler(request) {
       throw new Error(`Supabase error ${res.status}: ${text.substring(0, 200)}`);
     }
     
-    // Обработка пустых ответов
     if (res.status === 204 || res.headers.get('content-length') === '0') {
       return { success: true };
     }
@@ -141,12 +140,12 @@ export default async function handler(request) {
           const existingWarning = await supabaseFetch(`premium_notifications?user_id=eq.${expUser.telegram_id}&notification_type=eq.delete_warning&notified_at=eq.${today}&select=notified_at`);
           if (existingWarning && existingWarning.length > 0) continue;
           
-          const message = `⚠️ **ВНИМАНИЕ!** Завтра (${new Date(expUser.data_deadline).toLocaleDateString()}) ваши облачные чаты будут **безвозвратно удалены**.\n\n📥 Скачайте архив прямо сейчас через приложение Versatile AI, чтобы сохранить историю диалогов.\n\n💎 Продлите PRO-подписку, чтобы продолжить пользоваться облачной синхронизацией.`;
+          const message = `⚠️ ВНИМАНИЕ! Завтра (${new Date(expUser.data_deadline).toLocaleDateString()}) ваши облачные чаты будут безвозвратно удалены. Скачайте архив прямо сейчас через приложение Versatile AI, чтобы сохранить историю диалогов. Продлите PRO-подписку, чтобы продолжить пользоваться облачной синхронизацией.`;
           
           const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
           const resp = await fetch(tgUrl, {
             method: 'POST',
-            headers: { 'Content-Type':application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chat_id: expUser.telegram_id,
               text: message,
