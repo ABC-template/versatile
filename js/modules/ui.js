@@ -466,3 +466,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+// Добавить в конец файла js/modules/ui.js
+
+// Индикатор статуса синхронизации
+window.showSyncStatus = function(status, isError = false) {
+    const indicator = document.getElementById('chat-model-indicator');
+    if (!indicator) return;
+    
+    const originalText = indicator.innerText;
+    
+    if (status === 'syncing') {
+        indicator.innerHTML = '<span style="opacity:0.7;">🔄 синхр...</span>';
+        // Возвращаем исходный текст через 2 секунды
+        setTimeout(() => {
+            if (indicator.innerHTML === '<span style="opacity:0.7;">🔄 синхр...</span>') {
+                indicator.innerText = originalText;
+            }
+        }, 2000);
+    } else if (status === 'success') {
+        indicator.innerHTML = '<span style="color: #27ae60;">✓ синхр.</span>';
+        setTimeout(() => {
+            if (indicator.innerHTML === '<span style="color: #27ae60;">✓ синхр.</span>') {
+                indicator.innerText = originalText;
+            }
+        }, 1500);
+    } else if (status === 'error') {
+        indicator.innerHTML = '<span style="color: #e74c3c;">⚠️ офлайн</span>';
+    }
+};
