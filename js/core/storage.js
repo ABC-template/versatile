@@ -35,21 +35,21 @@ window.getCurrentActiveChat = function() {
 };
 
 // Вместо существующей window.createNewChat
-window.createNewChat = function() {
+// Найти функцию createNewChat и заменить на:
+
+window.createNewChat = async function() {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     
     const newId = window.generateUUID();
     const currentList = window.chatHistories[window.currentTopic];
     const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
     
-    // Форматируем дату и время для названия
     const now = new Date();
     const dateStr = now.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     const startTitle = `Новый чат в "${sectionName}" (${dateStr} ${timeStr})`;
     
     const sysLang = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru';
-    const welcomeMsgId = window.generateUUID();
     const welcomeText = window.welcomeTexts[window.currentTopic] || `Привет! Я Versatile AI в режиме "${sectionName}". Чем могу помочь?`;
     
     const newChat = {
@@ -62,11 +62,12 @@ window.createNewChat = function() {
         created_at: now.toISOString(),
         updated_at: now.toISOString(),
         messages: [{
-            id: welcomeMsgId,
+            id: window.generateUUID(),
             text: welcomeText,
             type: "ai-msg",
             isFavorite: false,
-            synced: false  // Пока не синхронизировано с сервером
+            synced: false,
+            created_at: now.toISOString()
         }]
     };
 
@@ -76,21 +77,20 @@ window.createNewChat = function() {
     
     window.refreshUiAfterChatSelection();
     
-    // Скрываем профиль, если открыт
     const card = document.getElementById('profile-card');
     if (card) {
         card.classList.add('hidden');
         if (window.tg?.BackButton) window.tg.BackButton.hide();
     }
     
-    // СИНХРОНИЗАЦИЯ С ОБЛАКОМ (если включена)
+    // Синхронизация с облаком
     if (window.config.syncEnabled) {
-        window.syncNewChatToCloud(newChat, welcomeMsgId, welcomeText);
+        await window.syncNewChatToCloud(newChat);
     }
 };
 
-// Новая функция для синхронизации нового чата с облаком
-window.syncNewChatToCloud = async function(chat, welcomeMsgId, welcomeText) {
+// Обновить syncNewChatToCloud
+window.syncNewChatToCloud = async function(chat) {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) return;
     
@@ -99,7 +99,8 @@ window.syncNewChatToCloud = async function(chat, welcomeMsgId, welcomeText) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': initData
+                'X-Telegram-Init-Data': initData,
+                'X-Device-Fingerprint': window.getDeviceFingerprint()
             },
             body: JSON.stringify({
                 action: 'new_chat',
@@ -110,48 +111,34 @@ window.syncNewChatToCloud = async function(chat, welcomeMsgId, welcomeText) {
                     max_context: chat.maxContext,
                     user_renamed: chat.userRenamed
                 },
-                firstMessage: {
-                    id: welcomeMsgId,
-                    type: 'ai-msg',
-                    text: welcomeText,
+                firstMessage: chat.messages[0] ? {
+                    type: chat.messages[0].type,
+                    text: chat.messages[0].text,
                     is_favorite: false
-                }
+                } : null
             })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            // Помечаем приветственное сообщение как синхронизированное
-            const activeChat = window.getCurrentActiveChat();
-            if (activeChat && activeChat.id === chat.id) {
-                const welcomeMsg = activeChat.messages.find(m => m.id === welcomeMsgId);
-                if (welcomeMsg) welcomeMsg.synced = true;
+            // Если сервер вернул новый ID чата — обновляем локально
+            if (data.chatId && data.chatId !== chat.id) {
+                chat.id = data.chatId;
+                window.activeChatIds[window.currentTopic] = data.chatId;
+                window.saveHistoriesToLocal();
+            }
+            if (data.messageId && chat.messages[0]) {
+                chat.messages[0].id = data.messageId;
+                chat.messages[0].synced = true;
                 window.saveHistoriesToLocal();
             }
             console.log(`Чат ${chat.id} синхронизирован с облаком`);
         } else {
             console.error("Ошибка синхронизации нового чата:", data.error);
-            // Добавляем в очередь для повторной попытки
-            if (!window.unsyncedChats) window.unsyncedChats = [];
-            window.unsyncedChats.push({
-                chat: chat,
-                welcomeMsgId: welcomeMsgId,
-                welcomeText: welcomeText,
-                timestamp: new Date().toISOString()
-            });
-            window.saveHistoriesToLocal();
         }
     } catch (err) {
         console.error("Сбой синхронизации нового чата:", err);
-        if (!window.unsyncedChats) window.unsyncedChats = [];
-        window.unsyncedChats.push({
-            chat: chat,
-            welcomeMsgId: welcomeMsgId,
-            welcomeText: welcomeText,
-            timestamp: new Date().toISOString()
-        });
-        window.saveHistoriesToLocal();
     }
 };
 
