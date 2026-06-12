@@ -275,6 +275,9 @@ window.fullSyncAllChats = async function() {
         }
     }
     
+if (typeof window.processPendingDeletions === 'function') {
+    await window.processPendingDeletions();
+}
     console.log("✅ Полная синхронизация завершена");
     
     window.startUnsyncedRetryTimer();
