@@ -70,7 +70,7 @@ export default async function handler(request) {
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
         // ТОТАЛЬНАЯ СТРАХОВКА: Если есть фото — сразу выставляем зрячую модель, минуя любые ветвления!
-        let openRouterModelId = 'openai/gpt-5.4';
+        let openRouterModelId = 'openai/gpt-5';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.4;
 
