@@ -1,5 +1,6 @@
 // api/sync/pending.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { isValidUUID } from '../_lib/validate-uuid.js'; // ← ДОБАВИТЬ
 
 export const config = { runtime: 'edge' };
 
