@@ -1,5 +1,6 @@
 // api/chats/get.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { isValidUUID } from '../_lib/validate-uuid.js';
 
 export const config = { runtime: 'edge' };
 
@@ -33,6 +34,12 @@ export default async function handler(request) {
     const { searchParams } = new URL(request.url);
     const chatId = searchParams.get('id');
     if (!chatId) throw new Error('Missing chat id');
+    if (!isValidUUID(chatId)) {
+    return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
+        status: 400,
+        headers: corsHeaders
+    });
+    }
 
     // Устанавливаем RLS контекст в базе данных
     try {
