@@ -3,8 +3,7 @@ import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
 
-// Лимиты для экспорта (Vercel Hobby: 4.5MB, оставляем запас 0.5MB)
-const MAX_EXPORT_SIZE_BYTES = 4000000; // 4MB
+const MAX_EXPORT_SIZE_BYTES = 4000000;
 const MAX_MESSAGES_PER_CHUNK = 1000;
 
 export default async function handler(request) {
@@ -17,10 +16,8 @@ export default async function handler(request) {
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   
-  // POST для локального экспорта, GET для облачного
   const isLocalExport = request.method === 'POST';
   
-  // Проверка авторизации только для облачного экспорта
   let userId = null;
   let isAuthenticated = false;
   
@@ -47,7 +44,7 @@ export default async function handler(request) {
   }
 
   // ==========================================
-  // ЛОКАЛЬНЫЙ ЭКСПОРТ (доступен всем)
+  // ЛОКАЛЬНЫЙ ЭКСПОРТ (без изменений)
   // ==========================================
   if (isLocalExport) {
     try {
@@ -61,14 +58,12 @@ export default async function handler(request) {
         });
       }
       
-      // Формируем архив из локальных данных с сортировкой сообщений
       const archive = [];
       let totalMessages = 0;
       let totalSize = 0;
       
       for (const [topicId, chats] of Object.entries(chatHistories)) {
         for (const chat of chats) {
-          // Сортируем сообщения по created_at (если есть) или по порядку в массиве
           const sortedMessages = [...(chat.messages || [])].sort((a, b) => {
             if (a.created_at && b.created_at) {
               return new Date(a.created_at) - new Date(b.created_at);
@@ -93,11 +88,9 @@ export default async function handler(request) {
         }
       }
       
-      // Проверяем размер
       const archiveJson = JSON.stringify(archive);
       totalSize = new TextEncoder().encode(archiveJson).length;
       
-      // Если размер превышает лимит, разбиваем на части
       if (totalSize > MAX_EXPORT_SIZE_BYTES || totalMessages > MAX_MESSAGES_PER_CHUNK) {
         const chunks = [];
         let currentChunk = [];
@@ -127,7 +120,6 @@ export default async function handler(request) {
           chunks.push(currentChunk);
         }
         
-        // Получаем номер запрошенной части
         const part = parseInt(exportOptions.part || request.headers.get('X-Request-Part') || '1', 10);
         const totalParts = chunks.length;
         
@@ -154,7 +146,6 @@ export default async function handler(request) {
         });
       }
       
-      // Размер в пределах лимита, отдаем одним файлом
       return new Response(JSON.stringify({
         success: true,
         total_parts: 1,
@@ -173,7 +164,7 @@ export default async function handler(request) {
   }
 
   // ==========================================
-  // ОБЛАЧНЫЙ ЭКСПОРТ (только для PRO и grace period)
+  // ОБЛАЧНЫЙ ЭКСПОРТ (С БЕЗОПАСНОЙ ЗАГРУЗКОЙ)
   // ==========================================
   try {
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -196,7 +187,6 @@ export default async function handler(request) {
       return res.json();
     }
 
-    // Проверяем права пользователя
     const userCheck = await supabaseFetch(`users?telegram_id=eq.${userId}&select=role,data_deadline,premium_until`);
     if (!userCheck || userCheck.length === 0) throw new Error('User not found');
 
@@ -215,7 +205,6 @@ export default async function handler(request) {
       }
     }
 
-    // Если не PRO и нет grace period — доступ закрыт
     if (!isPro && !hasGracePeriod) {
       return new Response(JSON.stringify({ 
         success: false, 
@@ -224,34 +213,45 @@ export default async function handler(request) {
       }), { status: 403, headers: corsHeaders });
     }
 
-    // Получаем все чаты пользователя с сортировкой
     const chats = await supabaseFetch(`chats?user_id=eq.${userId}&select=*&order=updated_at.desc`);
     
     let compiledArchive = [];
     let totalMessages = 0;
 
     if (chats.length > 0) {
-      const chatIdsQuery = chats.map(c => c.id).join(',');
-      
-      // Получаем сообщения с пагинацией и сортировкой по created_at
+      // ==========================================
+      // БЕЗОПАСНАЯ ЗАГРУЗКА СООБЩЕНИЙ (Вариант 1)
+      // Загружаем сообщения для каждого чата по отдельности
+      // ==========================================
       let allMessages = [];
-      let offset = 0;
-      const limit = 500;
-      let hasMore = true;
       
-      while (hasMore) {
-        const messagesBatch = await supabaseFetch(`messages?chat_id=in.(${chatIdsQuery})&order=created_at.asc&limit=${limit}&offset=${offset}`);
-        if (messagesBatch && messagesBatch.length > 0) {
-          allMessages.push(...messagesBatch);
-          offset += limit;
-        } else {
-          hasMore = false;
+      for (const chat of chats) {
+        try {
+          // encodeURIComponent защищает от инъекций
+          const encodedChatId = encodeURIComponent(chat.id);
+          let offset = 0;
+          const limit = 500;
+          let hasMore = true;
+          
+          while (hasMore) {
+            const messagesBatch = await supabaseFetch(
+              `messages?chat_id=eq.${encodedChatId}&order=created_at.asc&limit=${limit}&offset=${offset}`
+            );
+            
+            if (messagesBatch && messagesBatch.length > 0) {
+              allMessages.push(...messagesBatch);
+              offset += limit;
+            } else {
+              hasMore = false;
+            }
+          }
+        } catch (err) {
+          console.error(`Ошибка загрузки сообщений для чата ${chat.id}:`, err);
         }
       }
       
       totalMessages = allMessages.length;
       
-      // Структурируем архив
       compiledArchive = chats.map(chat => {
         const chatMessages = allMessages.filter(m => m.chat_id === chat.id);
         return {
@@ -273,7 +273,6 @@ export default async function handler(request) {
       });
     }
     
-    // Проверяем размер архива
     const archiveData = {
       success: true,
       exported_at: new Date().toISOString(),
@@ -285,11 +284,81 @@ export default async function handler(request) {
     const archiveJson = JSON.stringify(archiveData);
     const archiveSize = new TextEncoder().encode(archiveJson).length;
     
-    // Если размер превышает лимит, разбиваем на части
     if (archiveSize > MAX_EXPORT_SIZE_BYTES || totalMessages > MAX_MESSAGES_PER_CHUNK) {
       const chunks = [];
       let currentChunk = [];
       let currentSize = 0;
+      let currentMessages = 0;
+      
+      for (const chat of compiledArchive) {
+        const chatJson = JSON.stringify(chat);
+        const chatSize = new TextEncoder().encode(chatJson).length;
+        const chatMessages = chat.messages.length;
+        
+        if (currentChunk.length > 0 && 
+            (currentSize + chatSize > MAX_EXPORT_SIZE_BYTES || 
+             currentMessages + chatMessages > MAX_MESSAGES_PER_CHUNK)) {
+          chunks.push(currentChunk);
+          currentChunk = [];
+          currentSize = 0;
+          currentMessages = 0;
+        }
+        
+        currentChunk.push(chat);
+        currentSize += chatSize;
+        currentMessages += chatMessages;
+      }
+      
+      if (currentChunk.length > 0) {
+        chunks.push(currentChunk);
+      }
+      
+      const part = parseInt(request.headers.get('X-Request-Part') || '1', 10);
+      const totalParts = chunks.length;
+      
+      if (part > totalParts) {
+        return new Response(JSON.stringify({ error: 'Invalid part number' }), { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      
+      return new Response(JSON.stringify({
+        success: true,
+        total_parts: totalParts,
+        current_part: part,
+        total_messages: totalMessages,
+        grace_period_days_left: hasGracePeriod ? daysLeft : null,
+        archive: chunks[part - 1]
+      }), {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'X-Total-Parts': totalParts.toString(),
+          'X-Current-Part': part.toString()
+        }
+      });
+    }
+    
+    return new Response(archiveJson, { 
+      status: 200, 
+      headers: {
+        ...corsHeaders,
+        'Content-Disposition': `attachment; filename="versatile_ai_archive_${userId}.json"`
+      } 
+    });
+
+  } catch (err) {
+    console.error('Cloud export error:', err);
+    return new Response(JSON.stringify({ 
+      error: err.message,
+      fallbackToLocal: true
+    }), { 
+      status: 500, 
+      headers: corsHeaders 
+    });
+  }
+}ize = 0;
       let currentMessages = 0;
       
       for (const chat of compiledArchive) {
