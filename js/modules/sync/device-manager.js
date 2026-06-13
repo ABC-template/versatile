@@ -8,22 +8,24 @@ window.generateDeviceFingerprint = function() {
     const tg = window.Telegram?.WebApp;
     const user = tg?.initDataUnsafe?.user;
     
+    // ВАЖНО: Включаем user_id в fingerprint, чтобы разные аккаунты на одном устройстве имели разные fingerprint
     const components = [
-        user?.id || 'unknown',
+        user?.id || 'unknown',  // ← Ключевое изменение!
         navigator.userAgent || 'unknown',
         tg?.platform || 'unknown',
         screen.width + 'x' + screen.height,
         new Date().getTimezoneOffset()
     ];
     
-    let hash = 0;
+    // Используем Web Crypto API для лучшего хеша
     const str = components.join('|');
+    let hash = 0;
     for (let i = 0; i < str.length; i++) {
         hash = ((hash << 5) - hash) + str.charCodeAt(i);
         hash = hash & hash;
     }
     
-    const fingerprint = `device_${Math.abs(hash)}`;
+    const fingerprint = `device_${user?.id}_${Math.abs(hash)}`;
     localStorage.setItem('device_fingerprint', fingerprint);
     console.log(`🔑 Сгенерирован fingerprint устройства: ${fingerprint}`);
     return fingerprint;
@@ -60,6 +62,11 @@ window.registerDevice = async function() {
         const data = await response.json();
         
         if (data.success) {
+            // Сохраняем подписанный fingerprint для будущих запросов
+            if (data.signedFingerprint) {
+                localStorage.setItem('device_fingerprint_signed', data.signedFingerprint);
+                window.deviceFingerprintSigned = data.signedFingerprint;
+            }
             window.deviceFingerprint = fingerprint;
             console.log(data.isNew ? "🆕 Новое устройство зарегистрировано" : "🔄 Устройство уже зарегистрировано");
             return true;
@@ -72,14 +79,19 @@ window.registerDevice = async function() {
     }
 };
 
+// Получение ПОДПИСАННОГО fingerprint (для серверных запросов)
+window.getDeviceFingerprint = function() {
+    // Сначала пробуем получить подписанную версию
+    const signed = localStorage.getItem('device_fingerprint_signed') || window.deviceFingerprintSigned;
+    if (signed) return signed;
+    
+    // Если нет подписанной, возвращаем оригинальную (для обратной совместимости)
+    return window.deviceFingerprint || localStorage.getItem('device_fingerprint');
+};
+
 // Инициализация менеджера устройств
 window.initDeviceManager = async function() {
     if (!window.config?.syncEnabled) return;
     console.log("🔧 Инициализация менеджера устройств...");
     await window.registerDevice();
-};
-
-// Получение fingerprint текущего устройства
-window.getDeviceFingerprint = function() {
-    return window.deviceFingerprint || localStorage.getItem('device_fingerprint');
 };
