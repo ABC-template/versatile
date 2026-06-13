@@ -430,4 +430,3 @@ export default async function handler(request) {
       headers: corsHeaders 
     });
   }
-                                                                  }
