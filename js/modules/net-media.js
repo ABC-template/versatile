@@ -45,7 +45,7 @@ window.triggerMediaSelector = function() {
 
 // Обновленная функция processAndResizeImage
 window.processAndResizeImage = function(file) {
-    // Проверка размера ДО сжатия
+    // ← ДОБАВИТЬ ПРОВЕРКУ РАЗМЕРА
     const MAX_FILE_SIZE_MB = 10;
     const maxSizeBytes = MAX_FILE_SIZE_MB * 1024 * 1024;
     
@@ -55,7 +55,6 @@ window.processAndResizeImage = function(file) {
         } else {
             alert(`Файл слишком большой! Максимум ${MAX_FILE_SIZE_MB}MB.`);
         }
-        // Очищаем input
         const fileInput = document.getElementById('hidden-file-input');
         if (fileInput) fileInput.value = '';
         return;
@@ -68,7 +67,7 @@ window.processAndResizeImage = function(file) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            const maxDimension = 1024; // Максимальное разрешение по большей стороне
+            const maxDimension = 1024;
             let width = img.width;
             let height = img.height;
             
@@ -88,7 +87,6 @@ window.processAndResizeImage = function(file) {
             canvas.height = height;
             ctx.drawImage(img, 0, 0, width, height);
             
-            // Переводим в легкий JPEG с качеством 75% (~50-120 КБ)
             window.currentAttachedImageBase64 = canvas.toDataURL('image/jpeg', 0.75);
             window.renderImagePreview();
         };
