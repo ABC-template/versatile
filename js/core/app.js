@@ -118,44 +118,40 @@ async function initApp() {
     }
 
     // Функция для выполнения синхронизации после проверки подписки
-    async function performSyncIfNeeded() {
-        if (window.config && window.config.syncEnabled) {
-            console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
-            
-            if (window.config.syncEnabled && typeof window.initDeviceManager === 'function') {
-                await window.initDeviceManager();
-            }
-            
-            // Сначала синхронизируем метаданные
-            if (typeof window.syncChatsMetadata === 'function') {
-                await window.syncChatsMetadata();
-            }
-            
-            // Затем полностью синхронизируем все чаты
-            if (typeof window.fullSyncAllChats === 'function') {
-                await window.fullSyncAllChats();
-            }
-            
-            // Запускаем таймер для повторной отправки несинхронизированных данных
-            if (typeof window.startUnsyncedRetryTimer === 'function') {
-                window.startUnsyncedRetryTimer();
-            }
-            
-            // Инициализируем кнопки экспорта
-            if (typeof window.initExportButtons === 'function') {
-                window.initExportButtons();
-            }
-        } else {
-            console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
+async function performSyncIfNeeded() {
+    if (window.config && window.config.syncEnabled) {
+        console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
+        
+        // 🆕 РЕГИСТРИРУЕМ УСТРОЙСТВО
+        if (typeof window.initDeviceManager === 'function') {
+            await window.initDeviceManager();
         }
         
-        // Гарантированное снятие серого экрана
-        const appScreen = document.getElementById('app-screen');
-        if (appScreen) {
-            appScreen.classList.remove('hidden');
-            if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
+        if (typeof window.syncChatsMetadata === 'function') {
+            await window.syncChatsMetadata();
         }
+        
+        if (typeof window.fullSyncAllChats === 'function') {
+            await window.fullSyncAllChats();
+        }
+        
+        if (typeof window.startUnsyncedRetryTimer === 'function') {
+            window.startUnsyncedRetryTimer();
+        }
+        
+        if (typeof window.initExportButtons === 'function') {
+            window.initExportButtons();
+        }
+    } else {
+        console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
     }
+    
+    const appScreen = document.getElementById('app-screen');
+    if (appScreen) {
+        appScreen.classList.remove('hidden');
+        if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
+    }
+}
 
     // Восстанавливаем счетчики лимитов из CloudStorage (или LocalStorage) и дергаем бэкенд
     if (tg?.CloudStorage) {
