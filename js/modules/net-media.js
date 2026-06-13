@@ -43,8 +43,24 @@ window.triggerMediaSelector = function() {
     }
 };
 
-// Клиентское сжатие через Canvas: предотвращает Payload Limit на сервере Vercel
+// Обновленная функция processAndResizeImage
 window.processAndResizeImage = function(file) {
+    // Проверка размера ДО сжатия
+    const MAX_FILE_SIZE_MB = 10;
+    const maxSizeBytes = MAX_FILE_SIZE_MB * 1024 * 1024;
+    
+    if (file.size > maxSizeBytes) {
+        if (window.tg?.showAlert) {
+            window.tg.showAlert(`Файл слишком большой! Максимум ${MAX_FILE_SIZE_MB}MB.`);
+        } else {
+            alert(`Файл слишком большой! Максимум ${MAX_FILE_SIZE_MB}MB.`);
+        }
+        // Очищаем input
+        const fileInput = document.getElementById('hidden-file-input');
+        if (fileInput) fileInput.value = '';
+        return;
+    }
+    
     const reader = new FileReader();
     reader.onload = function(event) {
         const img = new Image();
