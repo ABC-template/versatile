@@ -393,5 +393,33 @@ window.syncBatchMessagesToCloud = async function(chatId, messages) {
         return false;
     }
 };
+// Загрузка сообщений для всех чатов, которые обновились
+window.syncAllUpdatedChats = async function() {
+    if (!window.config.syncEnabled) return;
+    
+    const topics = ['code', 'creative', 'fast', 'kitchen'];
+    
+    for (const topic of topics) {
+        const localChats = window.chatHistories[topic] || [];
+        
+        for (const localChat of localChats) {
+            const cloudMeta = window.cloudChatsMeta?.[localChat.id];
+            
+            // Если на сервере чат новее, чем локально — загружаем
+            if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
+                console.log(`🔄 Загружаем обновления для чата ${localChat.id}`);
+                await window.loadFullChat(localChat.id);
+            }
+        }
+    }
+    
+    // Обновляем UI текущего чата, если нужно
+    if (typeof window.loadActiveChatMessages === 'function') {
+        window.loadActiveChatMessages();
+    }
+    if (typeof window.renderHistoryChatsList === 'function') {
+        window.renderHistoryChatsList();
+    }
+};
 
 console.log("✅ net-sync.js полностью загружен");
