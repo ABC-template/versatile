@@ -1,5 +1,6 @@
 // api/chats/trash.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { isValidUUID, validateChatId, validateMessageId } from '../_lib/validate-uuid.js';
 
 export const config = { runtime: 'edge' };
 
@@ -73,17 +74,14 @@ export default async function handler(request) {
         // GET — получить содержимое корзины
         // ==========================================
         if (request.method === 'GET') {
-            // Чаты в корзине
             const deletedChats = await supabaseFetch(`
                 chats?user_id=eq.${userId}&deleted_at=not.is.null&select=id,title,topic_id,deleted_at,created_at&order=deleted_at.desc
             `);
 
-            // Сообщения в корзине (только из живых чатов)
             const deletedMessages = await supabaseFetch(`
                 messages?user_id=eq.${userId}&deleted_at=not.is.null&select=id,text,chat_id,deleted_at,created_at&order=deleted_at.desc
             `);
 
-            // Для сообщений подтягиваем названия чатов
             const messagesWithChats = await Promise.all((deletedMessages || []).map(async (msg) => {
                 const chat = await supabaseFetch(`chats?id=eq.${msg.chat_id}&select=title`);
                 return {
@@ -113,7 +111,7 @@ export default async function handler(request) {
                 });
             }
 
-            const { id, type } = body; // type: 'chat' или 'message'
+            const { id, type } = body;
 
             if (!id || !type) {
                 return new Response(JSON.stringify({ error: 'Missing id or type' }), {
@@ -122,14 +120,20 @@ export default async function handler(request) {
                 });
             }
 
+            // ВАЛИДАЦИЯ UUID
+            if (!isValidUUID(id)) {
+                return new Response(JSON.stringify({ error: 'Invalid ID format' }), {
+                    status: 400,
+                    headers: corsHeaders
+                });
+            }
+
             if (type === 'chat') {
-                // Восстанавливаем чат
                 await supabaseFetch(`chats?id=eq.${id}`, {
                     method: 'PATCH',
                     body: JSON.stringify({ deleted_at: null })
                 });
             } else if (type === 'message') {
-                // Восстанавливаем сообщение
                 await supabaseFetch(`messages?id=eq.${id}`, {
                     method: 'PATCH',
                     body: JSON.stringify({ deleted_at: null })
@@ -148,7 +152,7 @@ export default async function handler(request) {
         }
 
         // ==========================================
-        // DELETE — удаление навсегда (HARD DELETE)
+        // DELETE — удаление навсегда
         // ==========================================
         if (request.method === 'DELETE') {
             let body;
@@ -170,25 +174,28 @@ export default async function handler(request) {
                 });
             }
 
-            // Получаем список активных устройств
+            // ВАЛИДАЦИЯ UUID
+            if (!isValidUUID(id)) {
+                return new Response(JSON.stringify({ error: 'Invalid ID format' }), {
+                    status: 400,
+                    headers: corsHeaders
+                });
+            }
+
             const devices = await supabaseFetch(`user_devices?user_id=eq.${userId}&is_active=eq.true&select=device_fingerprint`);
             const deviceFingerprints = (devices || []).map(d => d.device_fingerprint).filter(fp => fp !== deviceFingerprint);
 
-            // Создаем pending_deletions
             let entityCreatedAt = null;
             if (type === 'chat') {
                 const chat = await supabaseFetch(`chats?id=eq.${id}&select=created_at`);
                 entityCreatedAt = chat[0]?.created_at;
-                // Удаляем чат
                 await supabaseFetch(`chats?id=eq.${id}`, { method: 'DELETE' });
             } else {
                 const msg = await supabaseFetch(`messages?id=eq.${id}&select=created_at`);
                 entityCreatedAt = msg[0]?.created_at;
-                // Удаляем сообщение
                 await supabaseFetch(`messages?id=eq.${id}`, { method: 'DELETE' });
             }
 
-            // Создаем запись в pending_deletions если есть другие устройства
             if (deviceFingerprints.length > 0) {
                 await supabaseFetch('pending_deletions', {
                     method: 'POST',
