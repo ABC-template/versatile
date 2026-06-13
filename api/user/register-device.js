@@ -124,19 +124,16 @@ export default async function handler(request) {
             });
         }
 
-        // Определяем платформу
         const userAgent = request.headers.get('user-agent') || '';
         const platform = userAgent.includes('Android') ? 'android' : 
                          userAgent.includes('iPhone') || userAgent.includes('iPad') ? 'ios' : 'web';
 
         console.log(`📱 Регистрация устройства: userId=${userId}, platform=${platform}`);
 
-        // Проверяем, существует ли устройство (по ПОДПИСАННОМУ fingerprint)
+        // Проверяем по ПОДПИСАННОМУ fingerprint
         const existing = await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(signedFingerprint)}&select=id`);
 
         if (existing && existing.length > 0) {
-            // Устройство уже есть — обновляем last_seen
-            console.log(`🔄 Устройство уже зарегистрировано, обновляем last_seen`);
             await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(signedFingerprint)}`, {
                 method: 'PATCH',
                 body: JSON.stringify({ 
@@ -147,17 +144,15 @@ export default async function handler(request) {
             return new Response(JSON.stringify({
                 success: true,
                 isNew: false,
-                signedFingerprint: signedFingerprint // Возвращаем подписанную версию для клиента
+                signedFingerprint: signedFingerprint
             }), { status: 200, headers: corsHeaders });
         } else {
-            // Новое устройство
-            console.log(`🆕 Регистрируем новое устройство для пользователя ${userId}`);
             await supabaseFetch('user_devices', {
                 method: 'POST',
                 body: JSON.stringify({
                     user_id: userId,
-                    device_fingerprint: signedFingerprint, // Сохраняем подписанную версию!
-                    raw_fingerprint: deviceFingerprint,    // Сохраняем оригинал для отладки
+                    device_fingerprint: signedFingerprint,
+                    raw_fingerprint: deviceFingerprint,
                     platform: platform,
                     is_active: true,
                     last_seen: new Date().toISOString(),
