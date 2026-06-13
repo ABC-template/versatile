@@ -83,8 +83,9 @@ export default async function handler(request) {
             return res.json();
         }
 
-        // ВАЖНО: ОДНА СТРОКА БЕЗ РАЗРЫВОВ И ЛИШНИХ ПРОБЕЛОВ
-        const pending = await supabaseFetch(`pending_deletions?user_id=eq.${userId}&devices_pending=cs.${JSON.stringify([deviceFingerprint])}&select=id,entity_type,parent_id`);
+        // ИСПРАВЛЕНО: Используем оператор @> (contains) для JSONB
+        // Вместо cs. используем @> для проверки вхождения элемента в массив
+        const pending = await supabaseFetch(`pending_deletions?user_id=eq.${userId}&devices_pending@>${JSON.stringify([deviceFingerprint])}&select=id,entity_type,parent_id`);
 
         return new Response(JSON.stringify({
             success: true,
