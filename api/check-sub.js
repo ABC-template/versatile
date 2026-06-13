@@ -1,3 +1,4 @@
+// api/check-sub.js 
 import { validateTelegramInitData } from './_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
@@ -33,11 +34,11 @@ export default async function handler(req) {
     if (!channel) return jsonResponse({ error: "Channel not configured" }, 500, corsHeaders);
 
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim();
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
 
     let dbUser = null;
     if (supabaseUrl && supabaseKey) {
-      // Инициализируем сессию пользователя в Supabase через RPC
+      // Устанавливаем контекст пользователя для RLS
       await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
         method: 'POST',
         headers: {
@@ -48,15 +49,44 @@ export default async function handler(req) {
         body: JSON.stringify({ uid: userId })
       });
 
-      // Делаем чистый GET-запрос вместо SDK-метода .select()
-      const userRes = await fetch(`${supabaseUrl}/rest/v1/users?telegram_id=eq.${userId}&select=role,premium_until`, {
+      // 🆕 ПРОВЕРЯЕМ И СОЗДАЁМ ПОЛЬЗОВАТЕЛЯ
+      const userRes = await fetch(`${supabaseUrl}/rest/v1/users?telegram_id=eq.${userId}&select=telegram_id,role,premium_until`, {
         method: 'GET',
-        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+        headers: { 
+          'apikey': supabaseKey, 
+          'Authorization': `Bearer ${supabaseKey}` 
+        }
       });
       
       if (userRes.ok) {
         const users = await userRes.json();
         dbUser = users[0] || null;
+        
+        // Если пользователь не существует — создаём
+        if (!dbUser) {
+          console.log(`🆕 Создаём нового пользователя: ${userId}`);
+          
+          await fetch(`${supabaseUrl}/rest/v1/users`, {
+            method: 'POST',
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              telegram_id: userId,
+              username: user.username || null,
+              role: 'trial',
+              user_lang: user.language_code || 'ru',
+              created_at: new Date().toISOString()
+            })
+          });
+          
+          console.log(`✅ Пользователь ${userId} создан`);
+          dbUser = { role: 'trial' };
+        } else {
+          console.log(`👤 Пользователь ${userId} уже существует`);
+        }
       }
     }
 
@@ -96,6 +126,7 @@ export default async function handler(req) {
     }, 200, corsHeaders);
 
   } catch (err) {
+    console.error("Check-sub error:", err);
     return jsonResponse({ error: err.message }, 500, corsHeaders);
   }
 }
