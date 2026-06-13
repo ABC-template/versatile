@@ -8,16 +8,15 @@ window.generateDeviceFingerprint = function() {
     const tg = window.Telegram?.WebApp;
     const user = tg?.initDataUnsafe?.user;
     
-    // ВАЖНО: Включаем user_id в fingerprint, чтобы разные аккаунты на одном устройстве имели разные fingerprint
+    // Включаем user_id в fingerprint для уникальности пары (устройство + аккаунт)
     const components = [
-        user?.id || 'unknown',  // ← Ключевое изменение!
+        user?.id || 'unknown',
         navigator.userAgent || 'unknown',
         tg?.platform || 'unknown',
         screen.width + 'x' + screen.height,
         new Date().getTimezoneOffset()
     ];
     
-    // Используем Web Crypto API для лучшего хеша
     const str = components.join('|');
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -31,7 +30,7 @@ window.generateDeviceFingerprint = function() {
     return fingerprint;
 };
 
-// Регистрация устройства при входе в приложение
+// Регистрация устройства
 window.registerDevice = async function() {
     if (!window.config?.syncEnabled) {
         console.log("Синхронизация отключена, устройство не регистрируется");
@@ -62,7 +61,6 @@ window.registerDevice = async function() {
         const data = await response.json();
         
         if (data.success) {
-            // Сохраняем подписанный fingerprint для будущих запросов
             if (data.signedFingerprint) {
                 localStorage.setItem('device_fingerprint_signed', data.signedFingerprint);
                 window.deviceFingerprintSigned = data.signedFingerprint;
@@ -79,13 +77,10 @@ window.registerDevice = async function() {
     }
 };
 
-// Получение ПОДПИСАННОГО fingerprint (для серверных запросов)
+// Получение подписанного fingerprint для сервера
 window.getDeviceFingerprint = function() {
-    // Сначала пробуем получить подписанную версию
     const signed = localStorage.getItem('device_fingerprint_signed') || window.deviceFingerprintSigned;
     if (signed) return signed;
-    
-    // Если нет подписанной, возвращаем оригинальную (для обратной совместимости)
     return window.deviceFingerprint || localStorage.getItem('device_fingerprint');
 };
 
