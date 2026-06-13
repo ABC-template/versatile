@@ -83,7 +83,7 @@ export default async function handler(request) {
             return res.json();
         }
 
-        // ВАЖНО: БЕЗ ЛИШНИХ ПРОБЕЛОВ В СТРОКЕ!
+        // ВАЖНО: ОДНА СТРОКА БЕЗ РАЗРЫВОВ И ЛИШНИХ ПРОБЕЛОВ
         const pending = await supabaseFetch(`pending_deletions?user_id=eq.${userId}&devices_pending=cs.${JSON.stringify([deviceFingerprint])}&select=id,entity_type,parent_id`);
 
         return new Response(JSON.stringify({
