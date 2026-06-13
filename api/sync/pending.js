@@ -84,9 +84,7 @@ export default async function handler(request) {
         }
 
         // Получаем все pending записи для этого устройства
-        const pending = await supabaseFetch(`
-            pending_deletions?user_id=eq.${userId}&devices_pending=cs.${JSON.stringify([deviceFingerprint])}&select=id,entity_type,parent_id
-        `);
+        const pending = await supabaseFetch(`pending_deletions?user_id=eq.${userId}&devices_pending=cs.${JSON.stringify([deviceFingerprint])}&select=id,entity_type,parent_id`);
 
         return new Response(JSON.stringify({
             success: true,
