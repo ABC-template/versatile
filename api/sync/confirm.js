@@ -1,5 +1,6 @@
 // api/sync/confirm.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { isValidUUID } from '../_lib/validate-uuid.js';
 
 export const config = { runtime: 'edge' };
 
@@ -64,72 +65,13 @@ export default async function handler(request) {
             });
         }
 
+        // ВАЛИДАЦИЯ UUID
+        if (!isValidUUID(id)) {
+            return new Response(JSON.stringify({ error: 'Invalid ID format' }), {
+                status: 400,
+                headers: corsHeaders
+            });
+        }
+
         const supabaseUrl = process.env.SUPABASE_URL?.trim();
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-
-        if (!supabaseUrl || !supabaseKey) {
-            return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
-                status: 500,
-                headers: corsHeaders
-            });
-        }
-
-        async function supabaseFetch(path, options = {}) {
-            const url = `${supabaseUrl}/rest/v1/${path}`;
-            const headers = {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Content-Type': 'application/json',
-            };
-            const res = await fetch(url, { ...options, headers });
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Supabase error ${res.status}: ${text.substring(0, 200)}`);
-            }
-            if (res.status === 204 || res.headers.get('content-length') === '0') {
-                return { success: true };
-            }
-            return res.json();
-        }
-
-        // Получаем текущую запись
-        const pending = await supabaseFetch(`pending_deletions?id=eq.${id}&select=devices_pending`);
-        
-        if (!pending || pending.length === 0) {
-            // Запись уже очищена
-            return new Response(JSON.stringify({ success: true, alreadyCleaned: true }), {
-                status: 200,
-                headers: corsHeaders
-            });
-        }
-
-        const devicesPending = pending[0].devices_pending || [];
-        const updatedDevices = devicesPending.filter(fp => fp !== deviceFingerprint);
-
-        if (updatedDevices.length === 0) {
-            // Все устройства подтвердили → удаляем запись
-            await supabaseFetch(`pending_deletions?id=eq.${id}`, { method: 'DELETE' });
-            return new Response(JSON.stringify({ success: true, cleaned: true }), {
-                status: 200,
-                headers: corsHeaders
-            });
-        } else {
-            // Обновляем список ожидающих
-            await supabaseFetch(`pending_deletions?id=eq.${id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ devices_pending: updatedDevices })
-            });
-            return new Response(JSON.stringify({ success: true, cleaned: false, remaining: updatedDevices.length }), {
-                status: 200,
-                headers: corsHeaders
-            });
-        }
-
-    } catch (err) {
-        console.error('Confirm error:', err);
-        return new Response(JSON.stringify({ error: err.message }), {
-            status: 500,
-            headers: corsHeaders
-        });
-    }
-}
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim
