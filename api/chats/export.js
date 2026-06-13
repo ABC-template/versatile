@@ -44,7 +44,7 @@ export default async function handler(request) {
   }
 
   // ==========================================
-  // ЛОКАЛЬНЫЙ ЭКСПОРТ
+  // ЛОКАЛЬНЫЙ ЭКСПОРТ (доступен всем)
   // ==========================================
   if (isLocalExport) {
     try {
@@ -164,7 +164,7 @@ export default async function handler(request) {
   }
 
   // ==========================================
-  // ОБЛАЧНЫЙ ЭКСПОРТ (С БЕЗОПАСНОЙ ЗАГРУЗКОЙ)
+  // ОБЛАЧНЫЙ ЭКСПОРТ (только для PRO и grace period)
   // ==========================================
   try {
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -219,6 +219,10 @@ export default async function handler(request) {
     let totalMessages = 0;
 
     if (chats.length > 0) {
+      // ==========================================
+      // БЕЗОПАСНАЯ ЗАГРУЗКА СООБЩЕНИЙ
+      // Загружаем сообщения для каждого чата по отдельности
+      // ==========================================
       let allMessages = [];
       
       for (const chat of chats) {
@@ -335,6 +339,7 @@ export default async function handler(request) {
       });
     }
     
+    // Отдаем одним файлом
     return new Response(archiveJson, { 
       status: 200, 
       headers: {
