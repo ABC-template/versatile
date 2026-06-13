@@ -1,6 +1,7 @@
-// api/chats/action.js (Часть 1)
+// api/chats/action.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 import { scheduleSilentPush } from '../_lib/send-push.js';
+import { isValidUUID, validateChatId, validateMessageId } from '../_lib/validate-uuid.js'; // ← ДОБАВИТЬ
 
 export const config = { runtime: 'edge' };
 
@@ -354,6 +355,10 @@ export default async function handler(request) {
     // УДАЛЕНИЕ ЧАТА (SOFT DELETE → в корзину)
     // ==========================================
     if (action === 'delete_chat') {
+        
+    const chatValidationError = validateChatId(chatId, corsHeaders);
+    if (chatValidationError) return chatValidationError;
+    
       if (!chatId) {
         return new Response(JSON.stringify({ error: 'Missing chatId' }), { 
           status: 400, 
@@ -384,6 +389,13 @@ export default async function handler(request) {
     // УДАЛЕНИЕ СООБЩЕНИЯ (SOFT DELETE → в корзину)
     // ==========================================
     if (action === 'delete_message') {
+        
+    const chatValidationError = validateChatId(chatId, corsHeaders);
+    if (chatValidationError) return chatValidationError;
+    
+    const msgValidationError = validateMessageId(messageId, corsHeaders);
+    if (msgValidationError) return msgValidationError;
+    
       if (!messageId || !chatId) {
         return new Response(JSON.stringify({ error: 'Missing messageId or chatId' }), { 
           status: 400, 
@@ -427,6 +439,10 @@ export default async function handler(request) {
     // ПЕРЕИМЕНОВАНИЕ ЧАТА
     // ==========================================
     if (action === 'rename_chat') {
+        
+    const chatValidationError = validateChatId(chatId, corsHeaders);
+    if (chatValidationError) return chatValidationError;
+    
       if (!chatId || !newTitle) {
         return new Response(JSON.stringify({ error: 'Missing chatId or newTitle' }), { 
           status: 400, 
@@ -457,6 +473,13 @@ export default async function handler(request) {
     // ИЗБРАННОЕ СООБЩЕНИЕ
     // ==========================================
     if (action === 'favorite_message') {
+        
+    const chatValidationError = validateChatId(chatId, corsHeaders);
+    if (chatValidationError) return chatValidationError;
+    
+    const msgValidationError = validateMessageId(messageId, corsHeaders);
+    if (msgValidationError) return msgValidationError;
+    
       if (!messageId || !chatId || isFavorite === undefined) {
         return new Response(JSON.stringify({ error: 'Missing messageId, chatId or isFavorite' }), { 
           status: 400, 
@@ -487,6 +510,10 @@ export default async function handler(request) {
     // ОБНОВЛЕНИЕ КОНТЕКСТА (память чата)
     // ==========================================
     if (action === 'update_context') {
+        
+    const chatValidationError = validateChatId(chatId, corsHeaders);
+    if (chatValidationError) return chatValidationError;
+    
       if (!chatId || maxContext === undefined) {
         return new Response(JSON.stringify({ error: 'Missing chatId or maxContext' }), { 
           status: 400, 
