@@ -46,97 +46,20 @@ window.resolveChatConflict = function(localChat, serverChat) {
     }
 };
 
-// Отправка батча новых сообщений на сервер (только unsynced)
+// Обновляем существующую функцию sendUnsyncedMessagesBatch
 window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, chatTitle, maxContext, userRenamed) {
     if (!window.config.syncEnabled) return { success: true, syncedCount: 0 };
     if (!messages || messages.length === 0) return { success: true, syncedCount: 0 };
     
-    const BATCH_SIZE_LIMIT = 50;
-    const BATCH_BYTES_LIMIT = 1000000;
+    // Используем новую функцию с retry
+    const result = await window.sendBatchWithRetry(chatId, messages, topicId, chatTitle, maxContext, userRenamed, 3);
     
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return { success: false, error: 'No init data' };
-    
-    let syncedCount = 0;
-    let currentBatch = [];
-    let currentBatchSize = 0;
-    
-    const sendBatch = async (batch) => {
-        const payload = {
-            action: 'batch_messages',
-            chatId: chatId,
-            topicId: topicId,
-            chatTitle: chatTitle,
-            maxContext: maxContext,
-            userRenamed: userRenamed,
-            messages: batch.map(msg => ({
-                id: msg.id,
-                text: msg.text,
-                type: msg.type,
-                isFavorite: msg.isFavorite || false
-            }))
-        };
-        
-        try {
-            const response = await fetch('/api/chats/action', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Telegram-Init-Data': initData
-                },
-                body: JSON.stringify(payload)
-            });
-            
-            const data = await response.json();
-            
-            if (data.synced === true || data.success === true) {
-                return { success: true, messageIds: batch.map(m => m.id) };
-            } else {
-                return { success: false, error: data.error };
-            }
-        } catch (err) {
-            console.error("Ошибка отправки батча:", err);
-            return { success: false, error: err.message };
-        }
-    };
-    
-    for (const msg of messages) {
-        const msgSize = new TextEncoder().encode(JSON.stringify(msg)).length;
-        
-        if (currentBatch.length >= BATCH_SIZE_LIMIT || 
-            (currentBatchSize + msgSize) >= BATCH_BYTES_LIMIT) {
-            
-            if (currentBatch.length > 0) {
-                const result = await sendBatch(currentBatch);
-                if (result.success) {
-                    syncedCount += currentBatch.length;
-                    window.markMessagesSynced(chatId, result.messageIds);
-                } else {
-                    console.error("Батч не отправлен:", result.error);
-                    return { success: false, syncedCount: syncedCount, error: result.error };
-                }
-            }
-            
-            currentBatch = [];
-            currentBatchSize = 0;
-        }
-        
-        currentBatch.push(msg);
-        currentBatchSize += msgSize;
+    if (result.success) {
+        window.markMessagesSynced(chatId, result.messageIds);
+        return { success: true, syncedCount: result.messageIds.length };
     }
     
-    if (currentBatch.length > 0) {
-        const result = await sendBatch(currentBatch);
-        if (result.success) {
-            syncedCount += currentBatch.length;
-            window.markMessagesSynced(chatId, result.messageIds);
-        } else {
-            console.error("Финальный батч не отправлен:", result.error);
-            return { success: false, syncedCount: syncedCount, error: result.error };
-        }
-    }
-    
-    return { success: true, syncedCount: syncedCount };
+    return { success: false, syncedCount: 0, error: result.error };
 };
 
 // Загрузка полного чата с сервера с конфликт-резолвингом
@@ -427,6 +350,74 @@ window.syncAllUpdatedChats = async function() {
     }
     
     console.log(`✅ Проверка завершена, обновлено ${updatedCount} чатов`);
+};
+
+// Добавить в конец файла net-sync.js
+
+// Функция отправки с retry
+window.sendBatchWithRetry = async function(chatId, messages, topicId, chatTitle, maxContext, userRenamed, retries = 3) {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) return { success: false, error: 'No init data' };
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const response = await fetch('/api/chats/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Telegram-Init-Data': initData
+                },
+                body: JSON.stringify({
+                    action: 'batch_messages',
+                    chatId: chatId,
+                    topicId: topicId,
+                    chatTitle: chatTitle,
+                    maxContext: maxContext,
+                    userRenamed: userRenamed,
+                    messages: messages.map(msg => ({
+                        id: msg.id,
+                        text: msg.text,
+                        type: msg.type,
+                        isFavorite: msg.isFavorite || false
+                    }))
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.synced === true || data.success === true) {
+                console.log(`✅ Batch отправлен (попытка ${attempt})`);
+                return { success: true, messageIds: messages.map(m => m.id) };
+            }
+            
+            // Если ошибка не временная (403, 401) — не retry
+            if (response.status === 401 || response.status === 403) {
+                return { success: false, error: data.error };
+            }
+            
+            // Временная ошибка — продолжаем retry
+            if (attempt < retries) {
+                const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+                console.log(`⚠️ Batch не отправился, retry через ${delay}ms (попытка ${attempt}/${retries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error(`❌ Batch не отправился после ${retries} попыток`);
+                return { success: false, error: data.error };
+            }
+            
+        } catch (err) {
+            if (attempt < retries) {
+                const delay = Math.pow(2, attempt) * 1000;
+                console.log(`⚠️ Ошибка сети, retry через ${delay}ms (попытка ${attempt}/${retries}):`, err.message);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error(`❌ Ошибка сети после ${retries} попыток:`, err);
+                return { success: false, error: err.message };
+            }
+        }
+    }
+    
+    return { success: false, error: 'Max retries exceeded' };
 };
 
 console.log("✅ net-sync.js полностью загружен");
