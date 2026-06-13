@@ -85,25 +85,45 @@ export default async function handler(request) {
             return res.json();
         }
 
+        // Определяем платформу
+        const userAgent = request.headers.get('user-agent') || '';
+        const platform = userAgent.includes('Android') ? 'android' : 
+                         userAgent.includes('iPhone') || userAgent.includes('iPad') ? 'ios' : 'web';
+
+        console.log(`📱 Регистрация устройства: userId=${userId}, fingerprint=${deviceFingerprint}, platform=${platform}`);
+
         // Проверяем, существует ли устройство
         const existing = await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}&select=id`);
 
         if (existing && existing.length > 0) {
-            // Устройство уже есть
+            // Устройство уже есть — обновляем last_seen
+            console.log(`🔄 Устройство уже зарегистрировано, обновляем last_seen`);
+            await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ 
+                    last_seen: new Date().toISOString(),
+                    is_active: true
+                })
+            });
             return new Response(JSON.stringify({
                 success: true,
                 isNew: false
             }), { status: 200, headers: corsHeaders });
         } else {
             // Новое устройство
+            console.log(`🆕 Регистрируем новое устройство для пользователя ${userId}`);
             await supabaseFetch('user_devices', {
                 method: 'POST',
                 body: JSON.stringify({
                     user_id: userId,
                     device_fingerprint: deviceFingerprint,
-                    is_active: true
+                    platform: platform,
+                    is_active: true,
+                    last_seen: new Date().toISOString(),
+                    created_at: new Date().toISOString()
                 })
             });
+            console.log(`✅ Устройство зарегистрировано`);
             return new Response(JSON.stringify({
                 success: true,
                 isNew: true
