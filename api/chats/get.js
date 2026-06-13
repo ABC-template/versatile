@@ -1,6 +1,6 @@
 // api/chats/get.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
-import { isValidUUID } from '../_lib/validate-uuid.js';
+import { isValidUUID } from '../_lib/validate-uuid.js'; // ← ДОБАВИТЬ
 
 export const config = { runtime: 'edge' };
 
@@ -34,14 +34,16 @@ export default async function handler(request) {
     const { searchParams } = new URL(request.url);
     const chatId = searchParams.get('id');
     if (!chatId) throw new Error('Missing chat id');
+    
+    // ← ДОБАВИТЬ ВАЛИДАЦИЮ UUID
     if (!isValidUUID(chatId)) {
-    return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
+      return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
         status: 400,
         headers: corsHeaders
-    });
+      });
     }
 
-    // Устанавливаем RLS контекст в базе данных
+    // Устанавливаем RLS контекст
     try {
       await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
         method: 'POST',
@@ -56,7 +58,6 @@ export default async function handler(request) {
       console.error('RPC set_app_user_id error:', err);
     }
 
-    // Запрашиваем конкретный чат (проверяя владельца через сессию)
     const chatRes = await fetch(`${supabaseUrl}/rest/v1/chats?id=eq.${chatId}&user_id=eq.${userId}&select=*`, {
       method: 'GET',
       headers: {
@@ -69,7 +70,6 @@ export default async function handler(request) {
     if (!chatRes.ok) throw new Error('Chat not found or access denied');
     const chat = await chatRes.json();
 
-    // Подгружаем историю сообщений чата с сортировкой по created_at (важно для последовательности!)
     const msgRes = await fetch(`${supabaseUrl}/rest/v1/messages?chat_id=eq.${chatId}&order=created_at.asc&limit=500`, {
       method: 'GET',
       headers: { 
