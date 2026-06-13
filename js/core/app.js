@@ -185,44 +185,21 @@ async function initApp() {
     // ==========================================
     // ПОДПИСКА НА ТИХИЕ PUSH-УВЕДОМЛЕНИЯ
     // ==========================================
-    if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.onEvent('message', async (message) => {
-            // Только наш специальный сигнал синхронизации
-            if (message.text === "🔄" && window.config?.syncEnabled) {
-                console.log("🔄 Получен сигнал синхронизации от бота!");
-                
-                if (typeof window.showSyncStatus === 'function') {
-                    window.showSyncStatus('syncing');
-                }
-                
-                try {
-                    // 1. Синхронизируем метаданные (список чатов)
-                    if (typeof window.syncChatsMetadata === 'function') {
-                        await window.syncChatsMetadata();
-                    }
-                    
-                    // 2. Загружаем сообщения для всех обновлённых чатов
-                    if (typeof window.syncAllUpdatedChats === 'function') {
-                        await window.syncAllUpdatedChats();
-                    }
-                    
-                    if (typeof window.showSyncStatus === 'function') {
-                        window.showSyncStatus('success');
-                    }
-                    
-                    console.log("✅ Синхронизация по push завершена");
-                    
-                } catch (err) {
-                    console.error("❌ Ошибка синхронизации по push:", err);
-                    if (typeof window.showSyncStatus === 'function') {
-                        window.showSyncStatus('error', true);
-                    }
-                }
-            }
-        });
+if (window.Telegram?.WebApp) {
+    window.Telegram.WebApp.onEvent('message', async (message) => {
+        console.log("📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:", message);
+        console.log("ТЕКСТ СООБЩЕНИЯ:", message.text);
+        console.log("ДЛИНА ТЕКСТА:", message.text?.length);
+        console.log("КОДЫ СИМВОЛОВ:", message.text?.split('').map(c => c.charCodeAt(0)));
         
-        console.log("📨 Подписка на push-уведомления активирована");
-    }
+        if (message.text === "🔄") {
+            console.log("✅ СИГНАЛ РАСПОЗНАН!");
+            // здесь твой код синхронизации
+        } else {
+            console.log("❌ Неизвестный текст, синхронизация не запущена");
+        }
+    });
+}
 }
 
 // Запускаем всё после рендеринга страницы
