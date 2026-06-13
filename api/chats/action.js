@@ -1,11 +1,10 @@
-// api/chats/action.js
+// api/chats/action.js - ЧАСТЬ 1
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 import { scheduleSilentPush } from '../_lib/send-push.js';
-import { isValidUUID, validateChatId, validateMessageId } from '../_lib/validate-uuid.js'; // ← ДОБАВИТЬ
+import { isValidUUID, validateChatId, validateMessageId } from '../_lib/validate-uuid.js';
 
 export const config = { runtime: 'edge' };
 
-// Генерация UUID на сервере
 function generateUUID() {
     return crypto.randomUUID();
 }
@@ -113,11 +112,18 @@ export default async function handler(request) {
     if (action === 'new_message') {
       console.log("🔥 [new_message] Начало обработки", { chatId, userId, messageId: message?.id });
 
+      // ВАЛИДАЦИЯ CHAT_ID (если передан)
+      if (chatId && !isValidUUID(chatId)) {
+        return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
+          status: 400,
+          headers: corsHeaders
+        });
+      }
+
       let chatExists = false;
       let existingChat = null;
       let finalChatId = chatId;
       
-      // Проверяем, существует ли чат с таким ID и принадлежит ли он пользователю
       try {
         const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed`);
         if (chatCheck && Array.isArray(chatCheck) && chatCheck.length > 0) {
@@ -129,9 +135,8 @@ export default async function handler(request) {
         console.error('Ошибка проверки чата:', err);
       }
       
-      // Если чат не существует или не принадлежит пользователю — создаём новый
       if (!chatExists) {
-        console.log("⚠️ [new_message] Чат не найден или не принадлежит пользователю, создаём новый");
+        console.log("⚠️ [new_message] Чат не найден, создаём новый");
         const canSync = await canUserSync();
         
         if (!canSync) {
@@ -147,7 +152,6 @@ export default async function handler(request) {
         const chatMaxContext = body.maxContext || 15;
         const chatUserRenamed = body.userRenamed || false;
         
-        // Генерируем НОВЫЙ ID чата (не доверяем клиенту)
         finalChatId = generateUUID();
         
         try {
@@ -164,7 +168,6 @@ export default async function handler(request) {
           });
           chatExists = true;
           
-          // Отправляем обратно правильный ID чата клиенту
           return new Response(JSON.stringify({ 
             success: true, 
             synced: true, 
@@ -180,13 +183,19 @@ export default async function handler(request) {
         }
       }
       
-      // Сохраняем сообщение
       if (chatExists && message) {
+        // ВАЛИДАЦИЯ ID СООБЩЕНИЯ
+        if (message.id && !isValidUUID(message.id)) {
+          return new Response(JSON.stringify({ error: 'Invalid message ID format' }), {
+            status: 400,
+            headers: corsHeaders
+          });
+        }
+        
         console.log("📝 Сохраняем сообщение", { chatId: finalChatId, messageId: message.id, type: message.type });
         
         try {
           const finalMessageId = message.id || generateUUID();
-          console.log("🆔 finalMessageId:", finalMessageId);
           
           const updateResult = await supabaseFetch(`messages?id=eq.${finalMessageId}`, {
             method: 'PATCH',
@@ -197,7 +206,6 @@ export default async function handler(request) {
               is_favorite: message.isFavorite || false,
             })
           });
-          console.log("📥 Результат PATCH:", updateResult);
           
           const noRowsUpdated = !updateResult || 
             updateResult.success === true ||
@@ -205,7 +213,6 @@ export default async function handler(request) {
             (updateResult.message && updateResult.message.includes('no rows'));
           
           if (noRowsUpdated) {
-            console.log("📤 PATCH не обновил, делаем INSERT");
             await supabaseFetch('messages', {
               method: 'POST',
               body: JSON.stringify({
@@ -216,9 +223,6 @@ export default async function handler(request) {
                 is_favorite: message.isFavorite || false,
               })
             });
-            console.log("✅ INSERT выполнен");
-          } else {
-            console.log("✅ PATCH обновил сообщение");
           }
           
           await supabaseFetch(`chats?id=eq.${finalChatId}`, {
@@ -229,7 +233,6 @@ export default async function handler(request) {
           const botToken = process.env.BOT_TOKEN?.trim();
           scheduleSilentPush(userId, botToken);
           
-          console.log("✅ [new_message] Сообщение успешно сохранено, возвращаем success");
           return new Response(JSON.stringify({ 
             success: true, 
             synced: true,
@@ -240,7 +243,6 @@ export default async function handler(request) {
         } catch (msgErr) {
           console.error("❌ Ошибка при сохранении сообщения:", msgErr);
           if (msgErr.message && (msgErr.message.includes('duplicate key') || msgErr.message.includes('409'))) {
-            console.log("⚠️ Duplicate key, считаем успехом");
             return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
           }
           
@@ -252,18 +254,38 @@ export default async function handler(request) {
         }
       }
       
-      console.log("❌ Неизвестная ошибка: chatExists или message не верны");
       return new Response(JSON.stringify({ 
         success: false, 
         error: 'Неизвестная ошибка синхронизации',
         synced: false 
       }), { status: 200, headers: corsHeaders });
-                }
-          // ==========================================
+    }
+    
+    // ==========================================
     // МАССОВАЯ ОТПРАВКА СООБЩЕНИЙ (batch)
     // ==========================================
     if (action === 'batch_messages') {
       const { chatId: batchChatId, topicId, chatTitle, maxContext, userRenamed, messages: batchMessages } = body;
+      
+      // ВАЛИДАЦИЯ CHAT_ID
+      if (batchChatId && !isValidUUID(batchChatId)) {
+        return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
+          status: 400,
+          headers: corsHeaders
+        });
+      }
+      
+      // ВАЛИДАЦИЯ КАЖДОГО MESSAGE ID
+      if (batchMessages && Array.isArray(batchMessages)) {
+        for (const msg of batchMessages) {
+          if (msg.id && !isValidUUID(msg.id)) {
+            return new Response(JSON.stringify({ error: 'Invalid message ID format in batch' }), {
+              status: 400,
+              headers: corsHeaders
+            });
+          }
+        }
+      }
       
       if (!batchMessages || !Array.isArray(batchMessages) || batchMessages.length === 0) {
         return new Response(JSON.stringify({ success: false, error: 'No messages to save' }), { 
@@ -349,16 +371,17 @@ export default async function handler(request) {
         status: 200, 
         headers: corsHeaders 
       });
-    }
+      }
+      // api/chats/action.js - ЧАСТЬ 2 (продолжение)
     
     // ==========================================
-    // УДАЛЕНИЕ ЧАТА (SOFT DELETE → в корзину)
+    // УДАЛЕНИЕ ЧАТА
     // ==========================================
     if (action === 'delete_chat') {
-        
-    const chatValidationError = validateChatId(chatId, corsHeaders);
-    if (chatValidationError) return chatValidationError;
-    
+      // ВАЛИДАЦИЯ
+      const validationError = validateChatId(chatId, corsHeaders);
+      if (validationError) return validationError;
+      
       if (!chatId) {
         return new Response(JSON.stringify({ error: 'Missing chatId' }), { 
           status: 400, 
@@ -386,16 +409,16 @@ export default async function handler(request) {
     }
     
     // ==========================================
-    // УДАЛЕНИЕ СООБЩЕНИЯ (SOFT DELETE → в корзину)
+    // УДАЛЕНИЕ СООБЩЕНИЯ
     // ==========================================
     if (action === 'delete_message') {
-        
-    const chatValidationError = validateChatId(chatId, corsHeaders);
-    if (chatValidationError) return chatValidationError;
-    
-    const msgValidationError = validateMessageId(messageId, corsHeaders);
-    if (msgValidationError) return msgValidationError;
-    
+      // ВАЛИДАЦИЯ
+      const chatValidationError = validateChatId(chatId, corsHeaders);
+      if (chatValidationError) return chatValidationError;
+      
+      const msgValidationError = validateMessageId(messageId, corsHeaders);
+      if (msgValidationError) return msgValidationError;
+      
       if (!messageId || !chatId) {
         return new Response(JSON.stringify({ error: 'Missing messageId or chatId' }), { 
           status: 400, 
@@ -439,10 +462,10 @@ export default async function handler(request) {
     // ПЕРЕИМЕНОВАНИЕ ЧАТА
     // ==========================================
     if (action === 'rename_chat') {
-        
-    const chatValidationError = validateChatId(chatId, corsHeaders);
-    if (chatValidationError) return chatValidationError;
-    
+      // ВАЛИДАЦИЯ
+      const validationError = validateChatId(chatId, corsHeaders);
+      if (validationError) return validationError;
+      
       if (!chatId || !newTitle) {
         return new Response(JSON.stringify({ error: 'Missing chatId or newTitle' }), { 
           status: 400, 
@@ -473,13 +496,13 @@ export default async function handler(request) {
     // ИЗБРАННОЕ СООБЩЕНИЕ
     // ==========================================
     if (action === 'favorite_message') {
-        
-    const chatValidationError = validateChatId(chatId, corsHeaders);
-    if (chatValidationError) return chatValidationError;
-    
-    const msgValidationError = validateMessageId(messageId, corsHeaders);
-    if (msgValidationError) return msgValidationError;
-    
+      // ВАЛИДАЦИЯ
+      const chatValidationError = validateChatId(chatId, corsHeaders);
+      if (chatValidationError) return chatValidationError;
+      
+      const msgValidationError = validateMessageId(messageId, corsHeaders);
+      if (msgValidationError) return msgValidationError;
+      
       if (!messageId || !chatId || isFavorite === undefined) {
         return new Response(JSON.stringify({ error: 'Missing messageId, chatId or isFavorite' }), { 
           status: 400, 
@@ -510,10 +533,10 @@ export default async function handler(request) {
     // ОБНОВЛЕНИЕ КОНТЕКСТА (память чата)
     // ==========================================
     if (action === 'update_context') {
-        
-    const chatValidationError = validateChatId(chatId, corsHeaders);
-    if (chatValidationError) return chatValidationError;
-    
+      // ВАЛИДАЦИЯ
+      const validationError = validateChatId(chatId, corsHeaders);
+      if (validationError) return validationError;
+      
       if (!chatId || maxContext === undefined) {
         return new Response(JSON.stringify({ error: 'Missing chatId or maxContext' }), { 
           status: 400, 
@@ -538,9 +561,11 @@ export default async function handler(request) {
     }
     
     // ==========================================
-    // НОВЫЙ ЧАТ
+    // НОВЫЙ ЧАТ (ID генерируется на сервере)
     // ==========================================
     if (action === 'new_chat') {
+      // ВАЛИДАЦИЯ НЕ ТРЕБУЕТСЯ - ID генерируется на сервере
+      
       if (!chat) {
         return new Response(JSON.stringify({ error: 'Missing chat' }), { 
           status: 400, 
