@@ -83,13 +83,27 @@ export default async function handler(request) {
             return res.json();
         }
 
-        // ИСПРАВЛЕНО: Используем оператор @> (contains) для JSONB
-        // Вместо cs. используем @> для проверки вхождения элемента в массив
-        const pending = await supabaseFetch(`pending_deletions?user_id=eq.${userId}&devices_pending@>${JSON.stringify([deviceFingerprint])}&select=id,entity_type,parent_id`);
+        // Получаем ВСЕ pending записи пользователя
+        const allPending = await supabaseFetch(`pending_deletions?user_id=eq.${userId}&select=id,entity_type,parent_id,devices_pending`);
+        
+        // Фильтруем: оставляем только те, где deviceFingerprint есть в devices_pending
+        const pending = (allPending || []).filter(item => {
+            if (!item.devices_pending) return false;
+            // devices_pending может быть массивом или JSON строкой
+            let devices = item.devices_pending;
+            if (typeof devices === 'string') {
+                try {
+                    devices = JSON.parse(devices);
+                } catch (e) {
+                    return false;
+                }
+            }
+            return Array.isArray(devices) && devices.includes(deviceFingerprint);
+        });
 
         return new Response(JSON.stringify({
             success: true,
-            pending: pending || []
+            pending: pending
         }), { status: 200, headers: corsHeaders });
 
     } catch (err) {
