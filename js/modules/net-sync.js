@@ -397,7 +397,10 @@ window.syncBatchMessagesToCloud = async function(chatId, messages) {
 window.syncAllUpdatedChats = async function() {
     if (!window.config.syncEnabled) return;
     
+    console.log("🔄 Проверяем обновления во всех чатах...");
+    
     const topics = ['code', 'creative', 'fast', 'kitchen'];
+    let updatedCount = 0;
     
     for (const topic of topics) {
         const localChats = window.chatHistories[topic] || [];
@@ -405,21 +408,25 @@ window.syncAllUpdatedChats = async function() {
         for (const localChat of localChats) {
             const cloudMeta = window.cloudChatsMeta?.[localChat.id];
             
-            // Если на сервере чат новее, чем локально — загружаем
             if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
-                console.log(`🔄 Загружаем обновления для чата ${localChat.id}`);
+                console.log(`🔄 Загружаем обновления для чата ${localChat.title} (${localChat.id})`);
                 await window.loadFullChat(localChat.id);
+                updatedCount++;
             }
         }
     }
     
-    // Обновляем UI текущего чата, если нужно
-    if (typeof window.loadActiveChatMessages === 'function') {
-        window.loadActiveChatMessages();
+    // Обновляем UI
+    if (updatedCount > 0) {
+        if (typeof window.loadActiveChatMessages === 'function') {
+            window.loadActiveChatMessages();
+        }
+        if (typeof window.renderHistoryChatsList === 'function') {
+            window.renderHistoryChatsList();
+        }
     }
-    if (typeof window.renderHistoryChatsList === 'function') {
-        window.renderHistoryChatsList();
-    }
+    
+    console.log(`✅ Проверка завершена, обновлено ${updatedCount} чатов`);
 };
 
 console.log("✅ net-sync.js полностью загружен");
