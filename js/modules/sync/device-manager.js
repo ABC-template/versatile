@@ -11,7 +11,9 @@ window.generateDeviceFingerprint = function() {
     const components = [
         user?.id || 'unknown',
         navigator.userAgent || 'unknown',
-        tg?.platform || 'unknown'
+        tg?.platform || 'unknown',
+        screen.width + 'x' + screen.height,
+        new Date().getTimezoneOffset()
     ];
     
     let hash = 0;
@@ -23,6 +25,7 @@ window.generateDeviceFingerprint = function() {
     
     const fingerprint = `device_${Math.abs(hash)}`;
     localStorage.setItem('device_fingerprint', fingerprint);
+    console.log(`🔑 Сгенерирован fingerprint устройства: ${fingerprint}`);
     return fingerprint;
 };
 
@@ -36,9 +39,13 @@ window.registerDevice = async function() {
     const fingerprint = window.generateDeviceFingerprint();
     const initData = window.Telegram?.WebApp?.initData;
     
-    if (!initData) return false;
+    if (!initData) {
+        console.error("Нет initData для регистрации устройства");
+        return false;
+    }
     
     try {
+        console.log("📤 Отправляем запрос на регистрацию устройства...");
         const response = await fetch('/api/user/register-device', {
             method: 'POST',
             headers: {
@@ -54,14 +61,22 @@ window.registerDevice = async function() {
         
         if (data.success) {
             window.deviceFingerprint = fingerprint;
-            console.log(data.isNew ? "🆕 Новое устройство" : "🔄 Устройство уже зарегистрировано");
+            console.log(data.isNew ? "🆕 Новое устройство зарегистрировано" : "🔄 Устройство уже зарегистрировано");
             return true;
         }
+        console.error("Ошибка регистрации устройства:", data.error);
         return false;
     } catch (err) {
         console.error("Ошибка регистрации устройства:", err);
         return false;
     }
+};
+
+// Инициализация менеджера устройств
+window.initDeviceManager = async function() {
+    if (!window.config?.syncEnabled) return;
+    console.log("🔧 Инициализация менеджера устройств...");
+    await window.registerDevice();
 };
 
 // Получение fingerprint текущего устройства
