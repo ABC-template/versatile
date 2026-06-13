@@ -44,7 +44,7 @@ export default async function handler(request) {
   }
 
   // ==========================================
-  // ЛОКАЛЬНЫЙ ЭКСПОРТ (без изменений)
+  // ЛОКАЛЬНЫЙ ЭКСПОРТ
   // ==========================================
   if (isLocalExport) {
     try {
@@ -219,15 +219,10 @@ export default async function handler(request) {
     let totalMessages = 0;
 
     if (chats.length > 0) {
-      // ==========================================
-      // БЕЗОПАСНАЯ ЗАГРУЗКА СООБЩЕНИЙ (Вариант 1)
-      // Загружаем сообщения для каждого чата по отдельности
-      // ==========================================
       let allMessages = [];
       
       for (const chat of chats) {
         try {
-          // encodeURIComponent защищает от инъекций
           const encodedChatId = encodeURIComponent(chat.id);
           let offset = 0;
           const limit = 500;
@@ -358,75 +353,4 @@ export default async function handler(request) {
       headers: corsHeaders 
     });
   }
-}ize = 0;
-      let currentMessages = 0;
-      
-      for (const chat of compiledArchive) {
-        const chatJson = JSON.stringify(chat);
-        const chatSize = new TextEncoder().encode(chatJson).length;
-        const chatMessages = chat.messages.length;
-        
-        if (currentChunk.length > 0 && 
-            (currentSize + chatSize > MAX_EXPORT_SIZE_BYTES || 
-             currentMessages + chatMessages > MAX_MESSAGES_PER_CHUNK)) {
-          chunks.push(currentChunk);
-          currentChunk = [];
-          currentSize = 0;
-          currentMessages = 0;
-        }
-        
-        currentChunk.push(chat);
-        currentSize += chatSize;
-        currentMessages += chatMessages;
-      }
-      
-      if (currentChunk.length > 0) {
-        chunks.push(currentChunk);
-      }
-      
-      const part = parseInt(request.headers.get('X-Request-Part') || '1', 10);
-      const totalParts = chunks.length;
-      
-      if (part > totalParts) {
-        return new Response(JSON.stringify({ error: 'Invalid part number' }), { 
-          status: 400, 
-          headers: corsHeaders 
-        });
-      }
-      
-      return new Response(JSON.stringify({
-        success: true,
-        total_parts: totalParts,
-        current_part: part,
-        total_messages: totalMessages,
-        grace_period_days_left: hasGracePeriod ? daysLeft : null,
-        archive: chunks[part - 1]
-      }), {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'X-Total-Parts': totalParts.toString(),
-          'X-Current-Part': part.toString()
-        }
-      });
-    }
-    
-    // Отдаем одним файлом
-    return new Response(archiveJson, { 
-      status: 200, 
-      headers: {
-        ...corsHeaders,
-        'Content-Disposition': `attachment; filename="versatile_ai_archive_${userId}.json"`
-      } 
-    });
-
-  } catch (err) {
-    console.error('Cloud export error:', err);
-    return new Response(JSON.stringify({ 
-      error: err.message,
-      fallbackToLocal: true
-    }), { 
-      status: 500, 
-      headers: corsHeaders 
-    });
-  }
+}
