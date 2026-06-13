@@ -1,7 +1,33 @@
 // api/user/register-device.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { logSecurityEvent } from '../_lib/security-logger.js';
 
 export const config = { runtime: 'edge' };
+
+// Генерация HMAC подписи для fingerprint
+async function signDeviceFingerprint(fingerprint, userId) {
+    const secret = process.env.DEVICE_SECRET?.trim();
+    if (!secret) {
+        throw new Error('DEVICE_SECRET not configured');
+    }
+    
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    const message = encoder.encode(`${userId}:${fingerprint}`);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, message);
+    return Array.from(new Uint8Array(signature))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
 
 export default async function handler(request) {
     const corsHeaders = {
@@ -22,6 +48,7 @@ export default async function handler(request) {
     try {
         const initData = request.headers.get('x-telegram-init-data');
         if (!initData) {
+            await logSecurityEvent(null, 'register_device_no_initdata', {}, request);
             return new Response(JSON.stringify({ error: 'Missing init data' }), {
                 status: 401, headers: corsHeaders
             });
@@ -36,6 +63,7 @@ export default async function handler(request) {
 
         const user = await validateTelegramInitData(initData, botToken);
         if (!user) {
+            await logSecurityEvent(null, 'register_device_invalid_token', {}, request);
             return new Response(JSON.stringify({ error: 'Invalid init data' }), {
                 status: 401, headers: corsHeaders
             });
@@ -85,20 +113,31 @@ export default async function handler(request) {
             return res.json();
         }
 
+        // Генерируем подписанную версию fingerprint
+        let signedFingerprint;
+        try {
+            signedFingerprint = await signDeviceFingerprint(deviceFingerprint, userId);
+        } catch (err) {
+            console.error('Failed to sign fingerprint:', err);
+            return new Response(JSON.stringify({ error: 'Security configuration error' }), {
+                status: 500, headers: corsHeaders
+            });
+        }
+
         // Определяем платформу
         const userAgent = request.headers.get('user-agent') || '';
         const platform = userAgent.includes('Android') ? 'android' : 
                          userAgent.includes('iPhone') || userAgent.includes('iPad') ? 'ios' : 'web';
 
-        console.log(`📱 Регистрация устройства: userId=${userId}, fingerprint=${deviceFingerprint}, platform=${platform}`);
+        console.log(`📱 Регистрация устройства: userId=${userId}, platform=${platform}`);
 
-        // Проверяем, существует ли устройство
-        const existing = await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}&select=id`);
+        // Проверяем, существует ли устройство (по ПОДПИСАННОМУ fingerprint)
+        const existing = await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(signedFingerprint)}&select=id`);
 
         if (existing && existing.length > 0) {
             // Устройство уже есть — обновляем last_seen
             console.log(`🔄 Устройство уже зарегистрировано, обновляем last_seen`);
-            await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(deviceFingerprint)}`, {
+            await supabaseFetch(`user_devices?device_fingerprint=eq.${encodeURIComponent(signedFingerprint)}`, {
                 method: 'PATCH',
                 body: JSON.stringify({ 
                     last_seen: new Date().toISOString(),
@@ -107,7 +146,8 @@ export default async function handler(request) {
             });
             return new Response(JSON.stringify({
                 success: true,
-                isNew: false
+                isNew: false,
+                signedFingerprint: signedFingerprint // Возвращаем подписанную версию для клиента
             }), { status: 200, headers: corsHeaders });
         } else {
             // Новое устройство
@@ -116,7 +156,8 @@ export default async function handler(request) {
                 method: 'POST',
                 body: JSON.stringify({
                     user_id: userId,
-                    device_fingerprint: deviceFingerprint,
+                    device_fingerprint: signedFingerprint, // Сохраняем подписанную версию!
+                    raw_fingerprint: deviceFingerprint,    // Сохраняем оригинал для отладки
                     platform: platform,
                     is_active: true,
                     last_seen: new Date().toISOString(),
@@ -126,12 +167,14 @@ export default async function handler(request) {
             console.log(`✅ Устройство зарегистрировано`);
             return new Response(JSON.stringify({
                 success: true,
-                isNew: true
+                isNew: true,
+                signedFingerprint: signedFingerprint
             }), { status: 200, headers: corsHeaders });
         }
 
     } catch (err) {
         console.error('Register device error:', err);
+        await logSecurityEvent(null, 'register_device_exception', { error: err.message }, request);
         return new Response(JSON.stringify({ error: err.message }), {
             status: 500, headers: corsHeaders
         });
