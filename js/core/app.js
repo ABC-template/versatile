@@ -181,53 +181,48 @@ async function initApp() {
         // Синхронизация после проверки подписки
         await performSyncIfNeeded();
     }
-    
-    // ДОБАВИТЬ В КОНЕЦ ФУНКЦИИ initApp(), ПЕРЕД ПОСЛЕДНЕЙ ЗАКРЫВАЮЩЕЙ СКОБКОЙ
 
-// Подписываемся на тихие push-уведомления от бота
-if (window.Telegram?.WebApp) {
-    window.Telegram.WebApp.onEvent('message', async (message) => {
-        // Только наш специальный сигнал синхронизации
-        if (message.text === "🔄" && window.config?.syncEnabled) {
-            console.log("🔄 Получен сигнал синхронизации от бота!");
-            
-            // Показываем индикатор (если функция существует)
-            if (typeof window.showSyncStatus === 'function') {
-                window.showSyncStatus('syncing');
-            }
-            
-            try {
-                // Синхронизируем метаданные (список чатов, избранное)
-                if (typeof window.syncChatsMetadata === 'function') {
-                    await window.syncChatsMetadata();
+    // ==========================================
+    // ПОДПИСКА НА ТИХИЕ PUSH-УВЕДОМЛЕНИЯ
+    // ==========================================
+    if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.onEvent('message', async (message) => {
+            // Только наш специальный сигнал синхронизации
+            if (message.text === "🔄" && window.config?.syncEnabled) {
+                console.log("🔄 Получен сигнал синхронизации от бота!");
+                
+                if (typeof window.showSyncStatus === 'function') {
+                    window.showSyncStatus('syncing');
                 }
                 
-                // Обновляем активный чат, если он есть
-                const activeChat = window.getCurrentActiveChat();
-                if (activeChat && typeof window.loadFullChat === 'function') {
-                    await window.loadFullChat(activeChat.id);
-                    if (typeof window.loadActiveChatMessages === 'function') {
-                        window.loadActiveChatMessages();
+                try {
+                    // 1. Синхронизируем метаданные (список чатов)
+                    if (typeof window.syncChatsMetadata === 'function') {
+                        await window.syncChatsMetadata();
+                    }
+                    
+                    // 2. Загружаем сообщения для всех обновлённых чатов
+                    if (typeof window.syncAllUpdatedChats === 'function') {
+                        await window.syncAllUpdatedChats();
+                    }
+                    
+                    if (typeof window.showSyncStatus === 'function') {
+                        window.showSyncStatus('success');
+                    }
+                    
+                    console.log("✅ Синхронизация по push завершена");
+                    
+                } catch (err) {
+                    console.error("❌ Ошибка синхронизации по push:", err);
+                    if (typeof window.showSyncStatus === 'function') {
+                        window.showSyncStatus('error', true);
                     }
                 }
-                
-                if (typeof window.showSyncStatus === 'function') {
-                    window.showSyncStatus('success');
-                }
-                
-                console.log("✅ Синхронизация по push завершена");
-                
-            } catch (err) {
-                console.error("❌ Ошибка синхронизации по push:", err);
-                if (typeof window.showSyncStatus === 'function') {
-                    window.showSyncStatus('error', true);
-                }
             }
-        }
-    });
-    
-    console.log("📨 Подписка на push-уведомления активирована");
-}
+        });
+        
+        console.log("📨 Подписка на push-уведомления активирована");
+    }
 }
 
 // Запускаем всё после рендеринга страницы
@@ -239,4 +234,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
-}
+        }
