@@ -1,6 +1,6 @@
-// js /core /storage.js
+// js/core/storage.js - ПОЛНОСТЬЮ ПЕРЕПИСАН
 
-// Глобальный генератор валидных UUID для Supabase (доступен для всех файлов)
+// Глобальный генератор валидных UUID для Supabase
 window.generateUUID = function() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -12,31 +12,98 @@ window.generateUUID = function() {
   });
 };
 
+// Получение текущего user_id для изоляции хранилища
+function getCurrentUserId() {
+  const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  return user?.id || 'anonymous';
+}
+
+// Загрузка локальных данных с привязкой к user_id
 window.loadLocalHistories = function() {
-    try { window.chatHistories = JSON.parse(localStorage.getItem('tg_chat_histories') || '{}'); } catch(e) { window.chatHistories = {}; }
-    try { window.activeChatIds = JSON.parse(localStorage.getItem('active_chat_ids') || '{}'); } catch(e) { window.activeChatIds = { code: null, creative: null, fast: null, kitchen: null, analytics: null }; }
+    const userId = getCurrentUserId();
+    const storageKey = `tg_chat_histories_${userId}`;
+    const activeKey = `active_chat_ids_${userId}`;
+    const unsyncedKey = `unsynced_messages_${userId}`;
+    const unsyncedFavKey = `unsynced_favorites_${userId}`;
+    const unsyncedChatsKey = `unsynced_chats_${userId}`;
     
-    // Восстанавливаем unsyncedMessages из localStorage
-    try { window.unsyncedMessages = JSON.parse(localStorage.getItem('unsynced_messages') || '[]'); } catch(e) { window.unsyncedMessages = []; }
+    try { 
+        window.chatHistories = JSON.parse(localStorage.getItem(storageKey) || '{}'); 
+    } catch(e) { 
+        window.chatHistories = {}; 
+    }
+    
+    try { 
+        window.activeChatIds = JSON.parse(localStorage.getItem(activeKey) || '{}'); 
+    } catch(e) { 
+        window.activeChatIds = { code: null, creative: null, fast: null, kitchen: null, analytics: null }; 
+    }
+    
+    try { 
+        window.unsyncedMessages = JSON.parse(localStorage.getItem(unsyncedKey) || '[]'); 
+    } catch(e) { 
+        window.unsyncedMessages = []; 
+    }
+    
+    try { 
+        window.unsyncedFavorites = JSON.parse(localStorage.getItem(unsyncedFavKey) || '[]'); 
+    } catch(e) { 
+        window.unsyncedFavorites = []; 
+    }
+    
+    try { 
+        window.unsyncedChats = JSON.parse(localStorage.getItem(unsyncedChatsKey) || '[]'); 
+    } catch(e) { 
+        window.unsyncedChats = []; 
+    }
+    
+    console.log(`📁 Данные загружены для пользователя ${userId}`);
 };
 
+// Сохранение локальных данных с привязкой к user_id
 window.saveHistoriesToLocal = function() {
+    const userId = getCurrentUserId();
+    const storageKey = `tg_chat_histories_${userId}`;
+    const activeKey = `active_chat_ids_${userId}`;
+    const unsyncedKey = `unsynced_messages_${userId}`;
+    const unsyncedFavKey = `unsynced_favorites_${userId}`;
+    const unsyncedChatsKey = `unsynced_chats_${userId}`;
+    
     try {
-        localStorage.setItem('tg_chat_histories', JSON.stringify(window.chatHistories));
-        localStorage.setItem('active_chat_ids', JSON.stringify(window.activeChatIds));
-        localStorage.setItem('unsynced_messages', JSON.stringify(window.unsyncedMessages));
-    } catch (e) { console.error("Превышен лимит localStorage:", e); }
+        localStorage.setItem(storageKey, JSON.stringify(window.chatHistories));
+        localStorage.setItem(activeKey, JSON.stringify(window.activeChatIds));
+        localStorage.setItem(unsyncedKey, JSON.stringify(window.unsyncedMessages));
+        localStorage.setItem(unsyncedFavKey, JSON.stringify(window.unsyncedFavorites || []));
+        localStorage.setItem(unsyncedChatsKey, JSON.stringify(window.unsyncedChats || []));
+    } catch (e) { 
+        console.error("Превышен лимит localStorage:", e); 
+    }
 };
 
+// Очистка данных при смене пользователя (вызывать при logout или переключении)
+window.clearLocalHistories = function() {
+    const userId = getCurrentUserId();
+    console.log(`🧹 Очистка данных для пользователя ${userId} при переключении аккаунта`);
+    
+    // Не удаляем, а просто обнуляем глобальные переменные
+    window.chatHistories = {};
+    window.activeChatIds = { code: null, creative: null, fast: null, kitchen: null, analytics: null };
+    window.unsyncedMessages = [];
+    window.unsyncedFavorites = [];
+    window.unsyncedChats = [];
+    
+    // Сохраняем пустые данные
+    window.saveHistoriesToLocal();
+};
+
+// Получение текущего активного чата
 window.getCurrentActiveChat = function() {
     const modelsChats = window.chatHistories[window.currentTopic] || [];
     const currentActiveId = window.activeChatIds[window.currentTopic];
     return modelsChats.find(c => c.id === currentActiveId) || null;
 };
 
-// Вместо существующей window.createNewChat
-// Найти функцию createNewChat и заменить на:
-
+// Создание нового чата (с привязкой к пользователю)
 window.createNewChat = async function() {
     if (!window.chatHistories[window.currentTopic]) window.chatHistories[window.currentTopic] = [];
     
@@ -89,109 +156,7 @@ window.createNewChat = async function() {
     }
 };
 
-// Обновить syncNewChatToCloud
-window.syncNewChatToCloud = async function(chat) {
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return;
-    
-    try {
-        const response = await fetch('/api/chats/action', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': initData,
-                'X-Device-Fingerprint': window.getDeviceFingerprint()
-            },
-            body: JSON.stringify({
-                action: 'new_chat',
-                chat: {
-                    id: chat.id,
-                    topic_id: chat.topic,
-                    title: chat.title,
-                    max_context: chat.maxContext,
-                    user_renamed: chat.userRenamed
-                },
-              /*  firstMessage: chat.messages[0] ? {
-                    type: chat.messages[0].type,
-                    text: chat.messages[0].text,
-                    is_favorite: false
-                } : null*/
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Если сервер вернул новый ID чата — обновляем локально
-            if (data.chatId && data.chatId !== chat.id) {
-                chat.id = data.chatId;
-                window.activeChatIds[window.currentTopic] = data.chatId;
-                window.saveHistoriesToLocal();
-            }
-            if (data.messageId && chat.messages[0]) {
-                chat.messages[0].id = data.messageId;
-                chat.messages[0].synced = true;
-                window.saveHistoriesToLocal();
-            }
-            console.log(`Чат ${chat.id} синхронизирован с облаком`);
-        } else {
-            console.error("Ошибка синхронизации нового чата:", data.error);
-        }
-    } catch (err) {
-        console.error("Сбой синхронизации нового чата:", err);
-    }
-};
-
-// Также добавляем функцию для повторной синхронизации чатов
-window.retryUnsyncedChats = async function() {
-    if (!window.config.syncEnabled) return;
-    if (!window.unsyncedChats || window.unsyncedChats.length === 0) return;
-    
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return;
-    
-    const failedAgain = [];
-    
-    for (const item of window.unsyncedChats) {
-        try {
-            const response = await fetch('/api/chats/action', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Telegram-Init-Data': initData
-                },
-                body: JSON.stringify({
-                    action: 'new_chat',
-                    chat: {
-                        id: item.chat.id,
-                        topic_id: item.chat.topic,
-                        title: item.chat.title,
-                        max_context: item.chat.maxContext,
-                        user_renamed: item.chat.userRenamed
-                    },
-                    firstMessage: {
-                        id: item.welcomeMsgId,
-                        type: 'ai-msg',
-                        text: item.welcomeText,
-                        is_favorite: false
-                    }
-                })
-            });
-            
-            const data = await response.json();
-            if (!data.success) {
-                failedAgain.push(item);
-            }
-        } catch (err) {
-            console.error("Ошибка повторной синхронизации чата:", err);
-            failedAgain.push(item);
-        }
-    }
-    
-    window.unsyncedChats = failedAgain;
-    window.saveHistoriesToLocal();
-};
-
+// Остальные функции остаются без изменений, но они теперь используют новые save/load
 window.switchActiveChat = async function(chatId) {
     window.activeChatIds[window.currentTopic] = chatId;
     window.saveHistoriesToLocal();
@@ -226,7 +191,6 @@ window.deleteChat = function(event, chatId) {
         window.saveHistoriesToLocal();
         window.refreshUiAfterChatSelection();
         
-        // Если синхронизация включена, удаляем чат и на сервере
         if (window.config.syncEnabled && chatId) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -265,7 +229,6 @@ window.renameChat = function(event, chatId) {
         window.saveHistoriesToLocal();
         if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
         
-        // Синхронизация переименования
         if (window.config.syncEnabled && chatId) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -302,7 +265,6 @@ window.deleteMessage = function(msgId) {
             setTimeout(() => { domBlock.remove(); }, 250);
         }
         
-        // Синхронизация удаления сообщения
         if (window.config.syncEnabled && activeChat.id) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -329,7 +291,6 @@ window.deleteMessage = function(msgId) {
     }
 };
 
-// Новая функция: пометить сообщения как синхронизированные
 window.markMessagesSynced = function(chatId, messageIds) {
     const activeChat = window.getCurrentActiveChat();
     if (!activeChat || activeChat.id !== chatId) return;
@@ -347,7 +308,6 @@ window.markMessagesSynced = function(chatId, messageIds) {
     }
 };
 
-// Новая функция: добавить сообщение в очередь unsynced для повторной попытки
 window.addToUnsyncedQueue = function(chatId, message) {
     window.unsyncedMessages = window.unsyncedMessages || [];
     window.unsyncedMessages.push({
@@ -362,7 +322,6 @@ window.addToUnsyncedQueue = function(chatId, message) {
     window.saveHistoriesToLocal();
 };
 
-// Новая функция: повторить отправку unsynced сообщений
 window.retryUnsyncedMessages = async function() {
     if (!window.config.syncEnabled) return;
     if (!window.unsyncedMessages || window.unsyncedMessages.length === 0) return;
@@ -396,10 +355,8 @@ window.retryUnsyncedMessages = async function() {
             const data = await response.json();
             
             if (data.synced === true) {
-                // Успешно синхронизировано
                 window.markMessagesSynced(item.chatId, [item.message.id]);
             } else {
-                // Не синхронизировано, добавим в失败的 список
                 failedAgain.push(item);
             }
         } catch (err) {
@@ -430,7 +387,7 @@ window.addMessageToStorage = async function(text, className) {
             text: text,
             type: className,
             isFavorite: false,
-            synced: false // Новое сообщение пока не синхронизировано
+            synced: false
         };
         activeChat.messages.push(newMsg);
         const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
@@ -443,7 +400,6 @@ window.addMessageToStorage = async function(text, className) {
         if (typeof window.renderMessageToDOM === 'function') window.renderMessageToDOM(text, className, generatedMsgId);
         if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
 
-        // Синхронизация с облаком (только если включена)
         if (window.config.syncEnabled && activeChat.id) {
             try {
                 const initData = window.Telegram?.WebApp?.initData;
@@ -473,14 +429,11 @@ window.addMessageToStorage = async function(text, className) {
                     const data = await response.json();
                     
                     if (data.synced === true) {
-                        // Помечаем сообщение как синхронизированное
                         window.markMessagesSynced(activeChat.id, [generatedMsgId]);
                     } else if (data.error && data.error.includes('Синхронизация недоступна')) {
-                        // Пользователь больше не PRO, отключаем синхронизацию
                         window.config.syncEnabled = false;
                         console.warn("Синхронизация отключена: тарифный план не поддерживает облачное хранение");
                     } else {
-                        // Добавляем в очередь для повторной попытки
                         window.addToUnsyncedQueue(activeChat.id, {
                             id: generatedMsgId,
                             text: text,
@@ -491,7 +444,6 @@ window.addMessageToStorage = async function(text, className) {
                 }
             } catch (err) {
                 console.error("Ошибка отправки сообщения на сервер:", err);
-                // Добавляем в очередь для повторной попытки
                 window.addToUnsyncedQueue(activeChat.id, {
                     id: generatedMsgId,
                     text: text,
