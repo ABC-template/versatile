@@ -23,7 +23,6 @@ function getLanguageInstruction(userLang) {
 }
 
 export default async function handler(request) {
-    // Единые CORS заголовки для Edge-рантайма
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -39,7 +38,6 @@ export default async function handler(request) {
     }
 
     try {
-        // 🔒 1. Проверка авторизации Telegram InitData
         const initData = request.headers.get('x-telegram-init-data');
         if (!initData) {
             return new Response(JSON.stringify({ error: 'Missing init data' }), {
@@ -64,18 +62,34 @@ export default async function handler(request) {
             });
         }
 
-        // Токен валиден, при необходимости здесь можно использовать user.id для лимитов
         const userId = user.id;
+        const MY_TELEGRAM_ID = 1541531808;
 
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // ТОТАЛЬНАЯ СТРАХОВКА: Если есть фото — сразу выставляем зрячую модель, минуя любые ветвления!
-        let openRouterModelId = 'openai/gpt-4-turbo';
+        // Отладка: проверяем, пришло ли изображение
+        console.log('🔍 [stream.js] attachedImage exists?', !!attachedImage);
+        console.log('🔍 [stream.js] attachedImage type:', typeof attachedImage);
+        console.log('🔍 [stream.js] attachedImage length:', attachedImage?.length);
+        console.log('🔍 [stream.js] currentTopic:', currentTopic);
+
+        // Проверка: только создатель может отправлять изображения
+        if (attachedImage && attachedImage.trim().length > 0 && userId !== MY_TELEGRAM_ID) {
+            return new Response(JSON.stringify({ 
+                error: '📸 Отправка изображений доступна только создателю приложения' 
+            }), { 
+                status: 403, 
+                headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+            });
+        }
+
+        let openRouterModelId = 'openai/gpt-5.4';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.4;
 
         // Только если фото НЕТ, мы имеем право включить слепые текстовые модели разделов
         if (!attachedImage || attachedImage.trim().length === 0) {
+            console.log('🔍 [stream.js] Нет фото, используем текстовую модель для раздела:', currentTopic);
             temperature = 0.5;
             if (currentTopic === 'code') {
                 openRouterModelId = 'deepseek/deepseek-chat';
@@ -92,7 +106,14 @@ export default async function handler(request) {
                 openRouterModelId = 'google/gemini-2.5-flash';
                 rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
                 temperature = 0.6;
+            } else if (currentTopic === 'analytics') {
+                openRouterModelId = 'openai/gpt-5.4';
+                rolePrompt = 'Ты — Versatile AI, аналитик. Помогаешь анализировать данные, делать выводы и структурировать информацию.';
+                temperature = 0.4;
             }
+        } else {
+            console.log('🔍 [stream.js] ✅ Есть фото! Используем vision модель: openai/gpt-5.4');
+            rolePrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
         }
 
         const langInstruction = getLanguageInstruction(userLang || 'ru');
@@ -102,7 +123,7 @@ export default async function handler(request) {
             { role: 'system', content: finalSystemPrompt }
         ];
 
-        // СБОРКА МУЛЬТИМОДАЛЬНОГО КОНТЕКСТА ДЛЯ OPENROUTER
+        // СБОРКА МУЛЬТИМОДАЛЬНОГО КОНТЕКСТА
         historyMessages.forEach((msg, index) => {
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
             if (!msg.text || msg.text.trim().length === 0) return;
@@ -112,13 +133,20 @@ export default async function handler(request) {
             if (role === 'user' && textContent.includes('📸 [Прикреплено изображение]')) {
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
 
-                // Если фото есть и это финальная реплика — пакуем строго по спецификации OpenRouter Vision
-                if (attachedImage && index === historyMessages.length - 1) {
+                if (attachedImage && attachedImage.trim().length > 0 && index === historyMessages.length - 1) {
+                    console.log('🖼️ [stream.js] Добавляем vision сообщение, длина base64:', attachedImage.length);
+                    
                     formattedMessages.push({
                         role: 'user',
                         content: [
-                            { type: 'text', text: textContent },
-                            { type: 'image_url', image_url: { url: attachedImage } } 
+                            { type: 'text', text: textContent || 'Что на этом изображении?' },
+                            { 
+                                type: 'image_url', 
+                                image_url: { 
+                                    url: attachedImage,
+                                    detail: 'high'
+                                } 
+                            }
                         ]
                     });
                     return;
@@ -128,6 +156,8 @@ export default async function handler(request) {
             formattedMessages.push({ role: role, content: textContent });
         });
 
+        console.log('📨 [stream.js] formattedMessages length:', formattedMessages.length);
+
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
             return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), {
@@ -135,7 +165,6 @@ export default async function handler(request) {
             });
         }
            
-        // ОТКАЗОУСТОЙЧИВЫЙ ЦИКЛ ОБРАБОТКИ ЗАПРОСА ЧЕРЕЗ ПУЛ КЛЮЧЕЙ
         let lastError = null;
         
         for (let k = 0; k < keysPool.length; k++) {
@@ -147,7 +176,8 @@ export default async function handler(request) {
                     apiKey: currentKey,
                 });
 
-                // Запускаем текстовый стрим
+                console.log('🚀 [stream.js] Отправляем запрос к модели:', openRouterModelId);
+
                 const result = await streamText({
                     model: provider(openRouterModelId),
                     messages: formattedMessages,
@@ -158,7 +188,6 @@ export default async function handler(request) {
                     temperature: temperature,
                 });
 
-                // Возвращаем чистый текстовый ответ и выходим из функции
                 return result.toTextStreamResponse({
                     headers: {
                         'X-Accel-Buffering': 'no',
@@ -171,13 +200,10 @@ export default async function handler(request) {
             } catch (err) {
                 console.error(`Сбой запроса с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
-                
-                // Failover: если токен перегружен, переходим к следующему в цикле
                 continue;
             }
         }
 
-        // Если дошли сюда, значит ни один ключ из пула не сработал
         return new Response(JSON.stringify({ 
             error: `Все доступные API-ключи перегружены или неактивны. Последний сбой: ${lastError?.message || 'Неизвестная ошибка'}` 
         }), { 
@@ -185,6 +211,7 @@ export default async function handler(request) {
         });
 
     } catch (err) {
+        console.error('Критическое исключение:', err);
         return new Response(JSON.stringify({ error: `Критическое исключение сервера: ${err.message}` }), { 
             status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
         });
