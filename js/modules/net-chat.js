@@ -159,6 +159,8 @@ window.sendMessage = async function() {
     const contextMessages = activeChat ? activeChat.messages.slice(-maxContextLimit) : [];
     
     const cleanHistoryMessages = contextMessages.map(msg => ({ type: String(msg.type), text: String(msg.text) }));
+    console.log('🔍 ПРОВЕРКА: streamAiResponse тип:', typeof window.streamAiResponse);
+console.log('🔍 ПРОВЕРКА: streamAiResponse тело:', window.streamAiResponse);
 
     try {
         if (typeof window.streamAiResponse === 'function') {
