@@ -67,12 +67,6 @@ export default async function handler(request) {
 
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // Отладка: проверяем, пришло ли изображение
-        console.log('🔍 [stream.js] attachedImage exists?', !!attachedImage);
-        console.log('🔍 [stream.js] attachedImage type:', typeof attachedImage);
-        console.log('🔍 [stream.js] attachedImage length:', attachedImage?.length);
-        console.log('🔍 [stream.js] currentTopic:', currentTopic);
-
         // Проверка: только создатель может отправлять изображения
         if (attachedImage && attachedImage.trim().length > 0 && userId !== MY_TELEGRAM_ID) {
             return new Response(JSON.stringify({ 
@@ -87,9 +81,8 @@ export default async function handler(request) {
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.4;
 
-        // Только если фото НЕТ, мы имеем право включить слепые текстовые модели разделов
+        // Только если фото НЕТ, используем текстовые модели
         if (!attachedImage || attachedImage.trim().length === 0) {
-            console.log('🔍 [stream.js] Нет фото, используем текстовую модель для раздела:', currentTopic);
             temperature = 0.5;
             if (currentTopic === 'code') {
                 openRouterModelId = 'deepseek/deepseek-chat';
@@ -112,51 +105,53 @@ export default async function handler(request) {
                 temperature = 0.4;
             }
         } else {
-            console.log('🔍 [stream.js] ✅ Есть фото! Используем vision модель: openai/gpt-5.4');
             rolePrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
         }
 
         const langInstruction = getLanguageInstruction(userLang || 'ru');
         const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
 
+        // ==========================================
+        // ПРАВИЛЬНАЯ СБОРКА СООБЩЕНИЙ ДЛЯ OPENROUTER
+        // ==========================================
         const formattedMessages = [
             { role: 'system', content: finalSystemPrompt }
         ];
 
-        // СБОРКА МУЛЬТИМОДАЛЬНОГО КОНТЕКСТА
-        historyMessages.forEach((msg, index) => {
+        // Обрабатываем историю сообщений
+        for (let i = 0; i < historyMessages.length; i++) {
+            const msg = historyMessages[i];
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
-            if (!msg.text || msg.text.trim().length === 0) return;
+            
+            if (!msg.text || msg.text.trim().length === 0) continue;
 
             let textContent = String(msg.text);
+            const isLastUserMessage = (role === 'user' && i === historyMessages.length - 1);
+            const hasImage = attachedImage && attachedImage.trim().length > 0 && isLastUserMessage;
+            const hasImageMarker = textContent.includes('📸 [Прикреплено изображение]');
 
-            if (role === 'user' && textContent.includes('📸 [Прикреплено изображение]')) {
+            if (hasImageMarker && hasImage) {
+                // Убираем маркер изображения
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
-
-                if (attachedImage && attachedImage.trim().length > 0 && index === historyMessages.length - 1) {
-                    console.log('🖼️ [stream.js] Добавляем vision сообщение, длина base64:', attachedImage.length);
-                    
-                    formattedMessages.push({
-                        role: 'user',
-                        content: [
-                            { type: 'text', text: textContent || 'Что на этом изображении?' },
-                            { 
-                                type: 'image_url', 
-                                image_url: { 
-                                    url: attachedImage,
-                                    detail: 'high'
-                                } 
-                            }
-                        ]
-                    });
-                    return;
+                if (!textContent) textContent = 'Что на этом изображении?';
+                
+                // OpenRouter vision формат: просто добавляем image_url как отдельное сообщение
+                // или как часть content в виде строки с markdown
+                // Самый надежный способ: отправить как текст + URL изображения
+                const visionText = `${textContent}\n\nИзображение: ${attachedImage}`;
+                formattedMessages.push({ role: 'user', content: visionText });
+            } else {
+                // Пропускаем дублирующиеся сообщения
+                const lastMsg = formattedMessages[formattedMessages.length - 1];
+                if (lastMsg && lastMsg.role === role && lastMsg.content === textContent) {
+                    continue;
                 }
+                formattedMessages.push({ role: role, content: textContent });
             }
-
-            formattedMessages.push({ role: role, content: textContent });
-        });
+        }
 
         console.log('📨 [stream.js] formattedMessages length:', formattedMessages.length);
+        console.log('📨 [stream.js] Последнее сообщение:', JSON.stringify(formattedMessages[formattedMessages.length - 1]).substring(0, 300));
 
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
