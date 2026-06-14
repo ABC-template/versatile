@@ -349,3 +349,34 @@ window.retryUnsyncedFavorites = async function() {
     window.unsyncedFavorites = failedAgain;
     window.saveHistoriesToLocal();
 };
+// ==========================================
+// ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА И ЗАГЛУШКА
+// ==========================================
+
+// Даем время на загрузку всех скриптов
+setTimeout(function() {
+    if (typeof window.streamAiResponse !== 'function') {
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: streamAiResponse не определена!');
+        console.log('🔍 Проверяем, загрузился ли marked:', typeof marked);
+        console.log('🔍 Проверяем, загрузился ли tg:', typeof window.Telegram);
+        
+        // СОЗДАЕМ ЗАГЛУШКУ, чтобы приложение не падало
+        window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
+            console.log('⚠️ ЗАГЛУШКА streamAiResponse вызвана с параметрами:', {
+                historyLength: cleanHistoryMessages?.length,
+                userKey: userKey,
+                hasImage: !!attachedImage
+            });
+            
+            if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
+            if (typeof window.renderMessageToDOM === 'function') {
+                window.renderMessageToDOM('⚠️ Ошибка: модуль stream не загрузился. Пожалуйста, обновите страницу.', 'ai-msg');
+            }
+            return false;
+        };
+        
+        console.log('✅ Создана временная заглушка streamAiResponse');
+    } else {
+        console.log('✅ streamAiResponse определена, тип:', typeof window.streamAiResponse);
+    }
+}, 1000); // Ждем 1 секунду
