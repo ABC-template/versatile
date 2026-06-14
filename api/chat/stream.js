@@ -112,7 +112,7 @@ export default async function handler(request) {
         const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
 
         // ==========================================
-        // ПРАВИЛЬНАЯ СБОРКА СООБЩЕНИЙ ДЛЯ OPENROUTER
+        // СБОРКА СООБЩЕНИЙ ДЛЯ OPENROUTER
         // ==========================================
         const formattedMessages = [
             { role: 'system', content: finalSystemPrompt }
@@ -133,12 +133,11 @@ export default async function handler(request) {
             if (hasImageMarker && hasImage) {
                 // Убираем маркер изображения
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
-                if (!textContent) textContent = 'Что на этом изображении?';
+                if (!textContent) textContent = 'Что изображено на фото?';
                 
-                // OpenRouter vision формат: просто добавляем image_url как отдельное сообщение
-                // или как часть content в виде строки с markdown
-                // Самый надежный способ: отправить как текст + URL изображения
-                const visionText = `${textContent}\n\nИзображение: ${attachedImage}`;
+                // OpenRouter принимает URL изображения в тексте сообщения
+                // Используем формат markdown для изображения
+                const visionText = `${textContent}\n\n![image](${attachedImage})`;
                 formattedMessages.push({ role: 'user', content: visionText });
             } else {
                 // Пропускаем дублирующиеся сообщения
@@ -151,7 +150,7 @@ export default async function handler(request) {
         }
 
         console.log('📨 [stream.js] formattedMessages length:', formattedMessages.length);
-        console.log('📨 [stream.js] Последнее сообщение:', JSON.stringify(formattedMessages[formattedMessages.length - 1]).substring(0, 300));
+        console.log('📨 [stream.js] Последнее сообщение:', JSON.stringify(formattedMessages[formattedMessages.length - 1]).substring(0, 500));
 
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
@@ -194,6 +193,7 @@ export default async function handler(request) {
 
             } catch (err) {
                 console.error(`Сбой запроса с ключом ROUTER_KEY${k}:`, err.message);
+                console.error('Детали ошибки:', err);
                 lastError = err;
                 continue;
             }
