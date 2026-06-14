@@ -164,23 +164,25 @@ window.deleteTodoTaskItem = function(taskId) {
     }
 };
 
-// Кэширование состояния в локальное хранилище устройства
 window.loadTodoItemsFromLocal = function() {
+    const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 'anonymous';
+    const todoKey = `tg_organizer_todo_list_${userId}`;
     try {
-        window.todoItemsList = JSON.parse(localStorage.getItem('tg_organizer_todo_list') || '[]');
+        window.todoItemsList = JSON.parse(localStorage.getItem(todoKey) || '[]');
     } catch(e) {
         window.todoItemsList = [];
     }
 };
 
 window.saveTodoItemsToLocal = function() {
+    const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 'anonymous';
+    const todoKey = `tg_organizer_todo_list_${userId}`;
     try {
         const jsonStr = JSON.stringify(window.todoItemsList);
-        localStorage.setItem('tg_organizer_todo_list', jsonStr);
+        localStorage.setItem(todoKey, jsonStr);
         
-        // ДУБЛИРОВАНИЕ В ОБЛАКО TELEGRAM (Для надежности):
         if (window.tg?.CloudStorage) {
-            window.tg.CloudStorage.setItem('tg_organizer_todo_list', jsonStr, (err) => {
+            window.tg.CloudStorage.setItem(todoKey, jsonStr, (err) => {
                 if (err) console.error("Ошибка сохранения в CloudStorage:", err);
             });
         }
