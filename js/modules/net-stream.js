@@ -1,159 +1,247 @@
-// js/modules/net-stream.js
-console.log("✅ net-stream.js загружен");
+import { createOpenAI } from '@ai-sdk/openai';
+import { streamText } from 'ai';
+import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
-window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
-    const container = document.getElementById('chat-container');
-    if (!container) return;
+export const config = { runtime: 'edge' };
 
-    let msgDiv = null;
-    let accumulatedText = '';
+function getRotatedKeysPool() {
+    const keys = [];
+    let i = 0;
+    while (true) {
+        const key = process.env[`ROUTER_KEY${i}`];
+        if (!key || key.trim().length === 0) break;
+        keys.push(key.trim());
+        i++;
+    }
+    return keys;
+}
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+function getLanguageInstruction(userLang) {
+    const langMap = { ru: 'русском языке', en: 'английском языке', it: 'итальянском языке' };
+    const targetLangStr = langMap[userLang] || 'русском языке';
+    return `[Системная локаль пользователя: ${userLang}]. Instruction: Всегда веди диалог, пиши пояснения и комментарии строго на ${targetLangStr}. Exception: Если пользователь отправляет текст на другом языке с явной просьбой о переводе, анализе, или напрямую просит переключить язык общения — полностью подчиняйся контексту его запроса и отвечай на выбранном им языке.`;
+}
+
+export default async function handler(request) {
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
+    };
+
+    if (request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    if (request.method !== 'POST') {
+        return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+    }
 
     try {
-        const response = await fetch('/api/chat/stream', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': window.Telegram?.WebApp?.initData || ''
-            },
-            body: JSON.stringify({
-                historyMessages: cleanHistoryMessages,
-                currentTopic: userKey,
-                userLang: userLang,
-                attachedImage: attachedImage || null  // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
-            }),
-            signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-            const errData = await response.json();
-            if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
-            if (typeof window.renderMessageToDOM === 'function') {
-                window.renderMessageToDOM(`⚠️ Ошибка: ${errData.error}`, 'ai-msg');
-            }
-            const voiceBtn = document.querySelector('.voice-btn');
-            if (voiceBtn) voiceBtn.disabled = false;
-            return false;
-        }
-
-        if (!response.ok) {
-            throw new Error(`Ошибка сети сервера: ${response.statusText}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        
-        let isFirstChunk = true;
-        let msgIndex = activeChat ? activeChat.messages.length : Date.now();
-
-        msgDiv = document.createElement('div');
-        msgDiv.className = `msg ai-msg msg-animated`;
-        msgDiv.id = `msg-block-${window.currentTopic}-${msgIndex}`;
-        
-        while (true) {
-            const chunkTimeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Превышено время ожидания ответа от сети')), 12000)
-            );
-            
-            const readPromise = reader.read();
-            const { done, value } = await Promise.race([readPromise, chunkTimeout]);
-            
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            accumulatedText += chunk;
-
-            if (isFirstChunk && accumulatedText.trim().length > 0) {
-                if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
-                container.appendChild(msgDiv);
-                isFirstChunk = false;
-            }
-
-            let renderText = accumulatedText;
-            const codeBlockCount = (renderText.match(/```/g) || []).length;
-            if (codeBlockCount % 2 !== 0) {
-                renderText += '\n```';
-            }
-
-            if (typeof marked !== 'undefined') {
-                let html = marked.parse(renderText);
-                html = html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, '<div class="table-wrapper"></td>$1<\/div>');
-                msgDiv.innerHTML = html;
-            } else {
-                msgDiv.innerText = renderText;
-            }
-
-            container.scrollTop = container.scrollHeight;
-        }
-
-        if (accumulatedText.trim().length > 0) {
-            finalizeStreamMessage(msgDiv, accumulatedText, activeChat);
-        }
-        return true;
-
-    } catch (err) {
-        if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
-        console.error("Критический сбой стрима:", err);
-        
-        if (msgDiv && accumulatedText.trim().length > 0) {
-            const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано. Пожалуйста, повторите запрос]`;
-            
-            if (typeof marked !== 'undefined') {
-                msgDiv.innerHTML = marked.parse(disconnectNotice);
-            } else {
-                msgDiv.innerText = disconnectNotice;
-            }
-            
-            finalizeStreamMessage(msgDiv, disconnectNotice, activeChat);
-        } else {
-            if (typeof window.renderMessageToDOM === 'function') {
-                window.renderMessageToDOM(`⚠️ Сбой потоковой передачи: Интернет-соединение прервано`, 'ai-msg');
-            }
-        }
-        return false;
-    }
-};
-
-function finalizeStreamMessage(msgDiv, finalText, activeChat) {
-    const generatedAiMsgId = window.generateUUID();
-    msgDiv.id = `msg-block-${generatedAiMsgId}`;
-
-    const act = document.createElement('div');
-    act.className = 'msg-actions';
-    act.innerHTML = `
-        <button class="action-btn" data-tooltip="📋" onclick="window.copyMsgText(this, '${generatedAiMsgId}')">📋</button>
-        <button class="action-btn" data-tooltip="🔗" onclick="window.shareMsgText(this, '${generatedAiMsgId}')">🔗</button>
-        <button class="action-btn" onclick="window.toggleFavoriteMsg(this, '${generatedAiMsgId}')"><span class="icon-heart">🤍</span></button>
-        <button class="action-btn" style="margin-left:auto; background:rgba(231,76,60,0.05); color:#e74c3c;" onclick="window.deleteMessage('${generatedAiMsgId}')">🗑️</button>
-    `;
-    msgDiv.appendChild(act);
-
-    if (activeChat) {
-        const aiMessage = { 
-            id: generatedAiMsgId, 
-            text: finalText, 
-            type: 'ai-msg',
-            isFavorite: false,
-            synced: false
-        };
-        
-        activeChat.messages.push(aiMessage);
-        window.saveHistoriesToLocal();
-        
-        if (window.config && window.config.syncEnabled && activeChat.id) {
-            window.syncMessageToCloud(activeChat.id, aiMessage).catch(err => {
-                console.error("Синхронизация AI ответа не удалась:", err);
+        const initData = request.headers.get('x-telegram-init-data');
+        if (!initData) {
+            return new Response(JSON.stringify({ error: 'Missing init data' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
         }
-    }
-    
-    const isNoLimit = window.config.dailyLimit >= 9000;
-    if (!isNoLimit && typeof window.incrementUsage === 'function') {
-        window.incrementUsage();
+
+        const botToken = process.env.BOT_TOKEN?.trim();
+        if (!botToken) {
+            return new Response(JSON.stringify({ error: 'Серверный токен BOT_TOKEN не настроен в Vercel.' }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+        }
+
+        const user = await validateTelegramInitData(initData, botToken);
+        if (!user) {
+            return new Response(JSON.stringify({ error: 'Invalid init data' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+        }
+
+        const userId = user.id;
+        const MY_TELEGRAM_ID = 1541531808;
+
+        const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
+
+        // Проверка: только создатель может отправлять изображения
+        if (attachedImage && attachedImage.trim().length > 0 && userId !== MY_TELEGRAM_ID) {
+            return new Response(JSON.stringify({ 
+                error: '📸 Отправка изображений доступна только создателю приложения' 
+            }), { 
+                status: 403, 
+                headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+            });
+        }
+
+        let openRouterModelId = 'openai/gpt-5.4';
+        let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
+        let temperature = 0.4;
+
+        // Только если фото НЕТ, используем текстовые модели
+        if (!attachedImage || attachedImage.trim().length === 0) {
+            temperature = 0.5;
+            if (currentTopic === 'code') {
+                openRouterModelId = 'deepseek/deepseek-chat';
+                rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
+                temperature = 0.3;
+            } else if (currentTopic === 'creative') {
+                openRouterModelId = 'openai/gpt-4o';
+                rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений.';
+                temperature = 0.9;
+            } else if (currentTopic === 'fast') {
+                openRouterModelId = 'google/gemini-2.5-flash';
+                rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий и вводных слов.';
+            } else if (currentTopic === 'kitchen') {
+                openRouterModelId = 'google/gemini-2.5-flash';
+                rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и экспертом по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
+                temperature = 0.6;
+            } else if (currentTopic === 'analytics') {
+                openRouterModelId = 'openai/gpt-5.4';
+                rolePrompt = 'Ты — Versatile AI, аналитик. Помогаешь анализировать данные, делать выводы и структурировать информацию.';
+                temperature = 0.4;
+            }
+        } else {
+            rolePrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
+        }
+
+        const langInstruction = getLanguageInstruction(userLang || 'ru');
+        const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
+
+        // ==========================================
+        // ПРАВИЛЬНАЯ СБОРКА СООБЩЕНИЙ (без дубликатов)
+        // ==========================================
+        const formattedMessages = [
+            { role: 'system', content: finalSystemPrompt }
+        ];
+
+        let lastRole = null;
+        let hasImageInLastUser = false;
+
+        for (let i = 0; i < historyMessages.length; i++) {
+            const msg = historyMessages[i];
+            const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
+            
+            if (!msg.text || msg.text.trim().length === 0) continue;
+
+            let textContent = String(msg.text);
+            const isLastUserMessage = (role === 'user' && i === historyMessages.length - 1);
+            const hasImage = attachedImage && attachedImage.trim().length > 0 && isLastUserMessage;
+            const hasImageMarker = textContent.includes('📸 [Прикреплено изображение]');
+
+            // Пропускаем дублирующиеся сообщения от одного и того же роли
+            if (lastRole === role && !hasImageMarker) {
+                continue;
+            }
+
+            if (hasImageMarker && hasImage) {
+                // Убираем маркер изображения
+                textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
+                
+                // Создаем мультимедийное сообщение
+                if (lastRole === 'user') {
+                    // Заменяем последнее user-сообщение на мультимедийное
+                    formattedMessages[formattedMessages.length - 1] = {
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: textContent || 'Что на этом изображении?' },
+                            { 
+                                type: 'image_url', 
+                                image_url: { 
+                                    url: attachedImage,
+                                    detail: 'high'
+                                } 
+                            }
+                        ]
+                    };
+                } else {
+                    // Добавляем новое мультимедийное сообщение
+                    formattedMessages.push({
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: textContent || 'Что на этом изображении?' },
+                            { 
+                                type: 'image_url', 
+                                image_url: { 
+                                    url: attachedImage,
+                                    detail: 'high'
+                                } 
+                            }
+                        ]
+                    });
+                }
+                lastRole = 'user';
+                hasImageInLastUser = true;
+            } else {
+                // Обычное текстовое сообщение
+                formattedMessages.push({ role: role, content: textContent });
+                lastRole = role;
+                hasImageInLastUser = false;
+            }
+        }
+
+        // Отладочный вывод
+        console.log('📨 [stream.js] Отправляемые сообщения:', JSON.stringify(formattedMessages, null, 2).substring(0, 500));
+
+        const keysPool = getRotatedKeysPool();
+        if (keysPool.length === 0) {
+            return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), {
+                status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+        }
+           
+        let lastError = null;
+        
+        for (let k = 0; k < keysPool.length; k++) {
+            const currentKey = keysPool[k];
+            
+            try {
+                const provider = createOpenAI({
+                    baseURL: 'https://openrouter.ai/api/v1',
+                    apiKey: currentKey,
+                });
+
+                console.log('🚀 [stream.js] Отправляем запрос к модели:', openRouterModelId);
+
+                const result = await streamText({
+                    model: provider(openRouterModelId),
+                    messages: formattedMessages,
+                    headers: {
+                        'HTTP-Referer': 'https://vercel.com',
+                        'X-Title': 'Telegram Mini App Versatile AI',
+                    },
+                    temperature: temperature,
+                });
+
+                return result.toTextStreamResponse({
+                    headers: {
+                        'X-Accel-Buffering': 'no',
+                        'Cache-Control': 'no-cache, no-transform',
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        ...corsHeaders
+                    }
+                });
+
+            } catch (err) {
+                console.error(`Сбой запроса с ключом ROUTER_KEY${k}:`, err.message);
+                lastError = err;
+                continue;
+            }
+        }
+
+        return new Response(JSON.stringify({ 
+            error: `Все доступные API-ключи перегружены или неактивны. Последний сбой: ${lastError?.message || 'Неизвестная ошибка'}` 
+        }), { 
+            status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+        });
+
+    } catch (err) {
+        console.error('Критическое исключение:', err);
+        return new Response(JSON.stringify({ error: `Критическое исключение сервера: ${err.message}` }), { 
+            status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+        });
     }
 }
