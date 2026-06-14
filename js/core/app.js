@@ -198,6 +198,30 @@ if (window.Telegram?.WebApp) {
 }
 }
 
+// Функция для отслеживания смены пользователя
+let lastUserId = null;
+
+function checkUserChanged() {
+    const currentUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    const currentUserId = currentUser?.id;
+    
+    if (lastUserId && lastUserId !== currentUserId) {
+        console.log(`🔄 Пользователь сменился с ${lastUserId} на ${currentUserId}, очищаем данные`);
+        if (typeof window.clearLocalHistories === 'function') {
+            window.clearLocalHistories();
+        }
+        // Перезагружаем данные для нового пользователя
+        if (typeof window.loadLocalHistories === 'function') {
+            window.loadLocalHistories();
+        }
+    }
+    
+    lastUserId = currentUserId;
+}
+
+// Вызывать checkUserChanged() периодически или при фокусе окна
+setInterval(checkUserChanged, 1000); // каждую секунду
+window.addEventListener('focus', checkUserChanged);
 // Запускаем всё после рендеринга страницы
 document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(err => {
