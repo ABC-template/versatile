@@ -1,4 +1,4 @@
-// js/core/storage.js - ПОЛНОСТЬЮ ПЕРЕПИСАН
+// js/core/storage.js - ПОЛНОСТЬЮ ПЕРЕПИСАН (БЕЗ УДАЛЕНИЯ)
 
 // Глобальный генератор валидных UUID для Supabase
 window.generateUUID = function() {
@@ -26,6 +26,7 @@ window.loadLocalHistories = function() {
     const unsyncedKey = `unsynced_messages_${userId}`;
     const unsyncedFavKey = `unsynced_favorites_${userId}`;
     const unsyncedChatsKey = `unsynced_chats_${userId}`;
+    const todoKey = `tg_organizer_todo_list_${userId}`;
     
     try { 
         window.chatHistories = JSON.parse(localStorage.getItem(storageKey) || '{}'); 
@@ -57,6 +58,13 @@ window.loadLocalHistories = function() {
         window.unsyncedChats = []; 
     }
     
+    // Загружаем To-Do лист для этого пользователя
+    try { 
+        window.todoItemsList = JSON.parse(localStorage.getItem(todoKey) || '[]'); 
+    } catch(e) { 
+        window.todoItemsList = []; 
+    }
+    
     console.log(`📁 Данные загружены для пользователя ${userId}`);
 };
 
@@ -68,6 +76,7 @@ window.saveHistoriesToLocal = function() {
     const unsyncedKey = `unsynced_messages_${userId}`;
     const unsyncedFavKey = `unsynced_favorites_${userId}`;
     const unsyncedChatsKey = `unsynced_chats_${userId}`;
+    const todoKey = `tg_organizer_todo_list_${userId}`;
     
     try {
         localStorage.setItem(storageKey, JSON.stringify(window.chatHistories));
@@ -75,25 +84,10 @@ window.saveHistoriesToLocal = function() {
         localStorage.setItem(unsyncedKey, JSON.stringify(window.unsyncedMessages));
         localStorage.setItem(unsyncedFavKey, JSON.stringify(window.unsyncedFavorites || []));
         localStorage.setItem(unsyncedChatsKey, JSON.stringify(window.unsyncedChats || []));
+        localStorage.setItem(todoKey, JSON.stringify(window.todoItemsList || []));
     } catch (e) { 
         console.error("Превышен лимит localStorage:", e); 
     }
-};
-
-// Очистка данных при смене пользователя (вызывать при logout или переключении)
-window.clearLocalHistories = function() {
-    const userId = getCurrentUserId();
-    console.log(`🧹 Очистка данных для пользователя ${userId} при переключении аккаунта`);
-    
-    // Не удаляем, а просто обнуляем глобальные переменные
-    window.chatHistories = {};
-    window.activeChatIds = { code: null, creative: null, fast: null, kitchen: null, analytics: null };
-    window.unsyncedMessages = [];
-    window.unsyncedFavorites = [];
-    window.unsyncedChats = [];
-    
-    // Сохраняем пустые данные
-    window.saveHistoriesToLocal();
 };
 
 // Получение текущего активного чата
@@ -150,13 +144,12 @@ window.createNewChat = async function() {
         if (window.tg?.BackButton) window.tg.BackButton.hide();
     }
     
-    // Синхронизация с облаком
     if (window.config.syncEnabled) {
         await window.syncNewChatToCloud(newChat);
     }
 };
 
-// Остальные функции остаются без изменений, но они теперь используют новые save/load
+// Остальные функции остаются без изменений
 window.switchActiveChat = async function(chatId) {
     window.activeChatIds[window.currentTopic] = chatId;
     window.saveHistoriesToLocal();
