@@ -104,6 +104,7 @@ window.incrementUsage = function() {
 };
 
 // 3. Главная асинхронная функция отправки сообщений ИИ (с анти-спам блокировкой)
+
 window.sendMessage = async function() {
     if (window.isVoiceRecording) {
         window.isExpressVoiceTarget = true; 
@@ -133,8 +134,11 @@ window.sendMessage = async function() {
     const voiceBtn = document.querySelector('.voice-btn');
     if (voiceBtn) voiceBtn.disabled = true;
 
-    // Считываем прикрепленное изображение (если оно есть)
     const mediaToAttach = window.currentAttachedImageBase64 || null;
+    
+    // Отладка
+    console.log('📸 [sendMessage] mediaToAttach:', mediaToAttach ? `есть, длина ${mediaToAttach.length}` : 'нет');
+    
     if (mediaToAttach) {
         text = `📸 [Прикреплено изображение]\n${text}`;
     }
@@ -160,7 +164,6 @@ window.sendMessage = async function() {
         if (typeof window.streamAiResponse === 'function') {
             const userLang = activeChat?.language || window.tg?.initDataUnsafe?.user?.language_code || 'ru';
             
-            // Передаем прикрепленное изображение четвертым параметром в функцию стриминга
             await window.streamAiResponse(cleanHistoryMessages, window.currentTopic, userLang, mediaToAttach, activeChat);
         }
     } catch (error) {
@@ -170,7 +173,6 @@ window.sendMessage = async function() {
             window.renderMessageToDOM(`Сбой связи с приложением: ${error.message}`, 'ai-msg');
         }
     } finally {
-        // ОБЯЗАТЕЛЬНО: Очищаем черновик и превью картинки после попытки отправки
         if (typeof window.clearImageAttachment === 'function') {
             window.clearImageAttachment();
         }
