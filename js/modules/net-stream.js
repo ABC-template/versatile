@@ -1,11 +1,10 @@
-// js /modules /net-stream.js
+// js/modules/net-stream.js
 console.log("✅ net-stream.js загружен");
-console.log("syncMessageToCloud defined:", typeof window.syncMessageToCloud);
+
 window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
     const container = document.getElementById('chat-container');
     if (!container) return;
 
-    // ОБЯЗАТЕЛЬНО: Объявляем переменную на самом верху, чтобы она была доступна в блоке catch
     let msgDiv = null;
     let accumulatedText = '';
 
@@ -21,8 +20,9 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
             },
             body: JSON.stringify({
                 historyMessages: cleanHistoryMessages,
-                currentTopic: userKey, // На фронтенде передается ID темы
-                userLang: userLang
+                currentTopic: userKey,
+                userLang: userLang,
+                attachedImage: attachedImage || null  // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
             }),
             signal: controller.signal
         });
@@ -51,7 +51,6 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
         let isFirstChunk = true;
         let msgIndex = activeChat ? activeChat.messages.length : Date.now();
 
-        // Инициализируем msgDiv строго здесь
         msgDiv = document.createElement('div');
         msgDiv.className = `msg ai-msg msg-animated`;
         msgDiv.id = `msg-block-${window.currentTopic}-${msgIndex}`;
@@ -83,7 +82,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
 
             if (typeof marked !== 'undefined') {
                 let html = marked.parse(renderText);
-                html = html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, '<div class="table-wrapper"><table>$1</table></div>');
+                html = html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, '<div class="table-wrapper"></td>$1<\/div>');
                 msgDiv.innerHTML = html;
             } else {
                 msgDiv.innerText = renderText;
@@ -101,7 +100,6 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
         console.error("Критический сбой стрима:", err);
         
-        // Теперь проверка msgDiv работает идеально и без ошибок компиляции browser'а
         if (msgDiv && accumulatedText.trim().length > 0) {
             const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано. Пожалуйста, повторите запрос]`;
             
@@ -141,17 +139,13 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
             text: finalText, 
             type: 'ai-msg',
             isFavorite: false,
-            synced: false  // Пока не синхронизировано
+            synced: false
         };
         
         activeChat.messages.push(aiMessage);
         window.saveHistoriesToLocal();
         
-        // ==========================================
-        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Синхронизация AI ответа с облаком
-        // ==========================================
         if (window.config && window.config.syncEnabled && activeChat.id) {
-            // Асинхронно отправляем на сервер (не блокируем UI)
             window.syncMessageToCloud(activeChat.id, aiMessage).catch(err => {
                 console.error("Синхронизация AI ответа не удалась:", err);
             });
