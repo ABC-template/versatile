@@ -1,6 +1,7 @@
 // api/sync/confirm.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 import { isValidUUID } from '../_lib/validate-uuid.js';
+import { getSupabaseConfig } from '../_lib/supabase-client.js';
 
 export const config = { runtime: 'edge' };
 
@@ -46,6 +47,17 @@ export default async function handler(request) {
         }
 
         const userId = user.id;
+        
+        // ==========================================
+        // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
+        // ==========================================
+        if (!Number.isInteger(userId) || userId <= 0) {
+            return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
+                status: 401,
+                headers: corsHeaders
+            });
+        }
+
         let body;
         try {
             body = await request.json();
@@ -65,7 +77,6 @@ export default async function handler(request) {
             });
         }
 
-        // ВАЛИДАЦИЯ UUID
         if (!isValidUUID(id)) {
             return new Response(JSON.stringify({ error: 'Invalid ID format' }), {
                 status: 400,
@@ -73,21 +84,13 @@ export default async function handler(request) {
             });
         }
 
-        const supabaseUrl = process.env.SUPABASE_URL?.trim();
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-
-        if (!supabaseUrl || !supabaseKey) {
-            return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
-                status: 500,
-                headers: corsHeaders
-            });
-        }
+        const config = getSupabaseConfig();
 
         async function supabaseFetch(path, options = {}) {
-            const url = `${supabaseUrl}/rest/v1/${path}`;
+            const url = `${config.url}/rest/v1/${path}`;
             const headers = {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': config.key,
+                'Authorization': `Bearer ${config.key}`,
                 'Content-Type': 'application/json',
             };
             const res = await fetch(url, { ...options, headers });
@@ -101,7 +104,8 @@ export default async function handler(request) {
             return res.json();
         }
 
-        const pending = await supabaseFetch(`pending_deletions?id=eq.${id}&select=devices_pending`);
+        // Проверяем, что запись принадлежит пользователю
+        const pending = await supabaseFetch(`pending_deletions?id=eq.${id}&user_id=eq.${userId}&select=devices_pending`);
         
         if (!pending || pending.length === 0) {
             return new Response(JSON.stringify({ success: true, alreadyCleaned: true }), {
@@ -131,7 +135,7 @@ export default async function handler(request) {
         }
 
     } catch (err) {
-        console.error('Confirm error:', err);
+        console.error('Confirm error:', err.message);
         return new Response(JSON.stringify({ error: err.message }), {
             status: 500,
             headers: corsHeaders
