@@ -419,5 +419,118 @@ window.sendBatchWithRetry = async function(chatId, messages, topicId, chatTitle,
     
     return { success: false, error: 'Max retries exceeded' };
 };
+// ==========================================
+// ФУНКЦИЯ СИНХРОНИЗАЦИИ НОВОГО ЧАТА
+// ==========================================
+
+window.syncNewChatToCloud = async function(chat) {
+    console.log("📤 syncNewChatToCloud вызвана", chat.id);
+    
+    if (!window.config.syncEnabled) {
+        console.log("Синхронизация отключена");
+        return false;
+    }
+    
+    if (!chat || !chat.id) {
+        console.error("Нет данных чата");
+        return false;
+    }
+    
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) {
+        console.error("Нет initData");
+        return false;
+    }
+    
+    // Берём первое сообщение (приветствие)
+    const firstMessage = chat.messages && chat.messages[0] ? chat.messages[0] : null;
+    
+    try {
+        const response = await fetch('/api/chats/action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': initData
+            },
+            body: JSON.stringify({
+                action: 'new_chat',
+                chat: {
+                    id: chat.id,
+                    topic_id: chat.topic || window.currentTopic,
+                    title: chat.title,
+                    max_context: chat.maxContext || 15,
+                    user_renamed: chat.userRenamed || false
+                },
+                firstMessage: firstMessage ? {
+                    id: firstMessage.id,
+                    type: firstMessage.type,
+                    text: firstMessage.text,
+                    is_favorite: firstMessage.isFavorite || false
+                } : null
+            })
+        });
+        
+        const data = await response.json();
+        console.log('📤 Результат синхронизации чата:', data);
+        
+        if (data.success) {
+            console.log(`✅ Чат ${chat.id} синхронизирован`);
+            // Обновляем метаданные
+            if (typeof window.syncChatsMetadata === 'function') {
+                await window.syncChatsMetadata();
+            }
+            return true;
+        } else {
+            console.warn(`⚠️ Чат ${chat.id} не синхронизирован:`, data.error);
+            // Добавляем в очередь несинхронизированных чатов
+            if (!window.unsyncedChats) window.unsyncedChats = [];
+            window.unsyncedChats.push({
+                chat: chat,
+                timestamp: new Date().toISOString()
+            });
+            window.saveHistoriesToLocal();
+            return false;
+        }
+    } catch (err) {
+        console.error(`❌ Ошибка синхронизации чата:`, err);
+        if (!window.unsyncedChats) window.unsyncedChats = [];
+        window.unsyncedChats.push({
+            chat: chat,
+            timestamp: new Date().toISOString()
+        });
+        window.saveHistoriesToLocal();
+        return false;
+    }
+};
+
+// ==========================================
+// ПОВТОРНАЯ СИНХРОНИЗАЦИЯ НЕСИНХРОНИЗИРОВАННЫХ ЧАТОВ
+// ==========================================
+
+window.retryUnsyncedChats = async function() {
+    if (!window.config.syncEnabled) return;
+    if (!window.unsyncedChats || window.unsyncedChats.length === 0) return;
+    
+    console.log(`🔄 Повторная отправка ${window.unsyncedChats.length} несинхронизированных чатов...`);
+    
+    const failedAgain = [];
+    
+    for (const item of window.unsyncedChats) {
+        const chat = item.chat;
+        const success = await window.syncNewChatToCloud(chat);
+        if (!success) {
+            failedAgain.push(item);
+        }
+    }
+    
+    window.unsyncedChats = failedAgain;
+    window.saveHistoriesToLocal();
+    
+    if (failedAgain.length === 0) {
+        console.log("✅ Все чаты успешно синхронизированы!");
+    } else {
+        console.log(`⚠️ ${failedAgain.length} чатов ожидают повторной синхронизации`);
+    }
+};
 
 console.log("✅ net-sync.js полностью загружен");
