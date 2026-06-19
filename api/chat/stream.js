@@ -65,7 +65,6 @@ export default async function handler(request) {
 
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
-        // Проверка: только создатель может отправлять изображения
         if (attachedImage && attachedImage.trim().length > 0 && userId !== MY_TELEGRAM_ID) {
             return new Response(JSON.stringify({ 
                 error: '📸 Отправка изображений доступна только создателю приложения' 
@@ -83,21 +82,18 @@ export default async function handler(request) {
         }
 
         // ==========================================
-        // ВЫБОР МОДЕЛИ И ПРОМПТА В ЗАВИСИМОСТИ ОТ ТЕМЫ
+        // ВЫБОР МОДЕЛИ И ПРОМПТА
         // ==========================================
         let systemPrompt = '';
         let temperature = 0.4;
         let model = 'openai/gpt-5.4';
 
-        // Если есть фото — используем vision модель
         if (attachedImage && attachedImage.trim().length > 0) {
             systemPrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
             temperature = 0.4;
-            model = 'openai/gpt-5'; // vision модель
+            model = 'openai/gpt-5';
         } else {
-            // Текстовые модели в зависимости от темы
             temperature = 0.5;
-            
             if (currentTopic === 'code') {
                 model = 'deepseek/deepseek-chat';
                 systemPrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
@@ -119,29 +115,21 @@ export default async function handler(request) {
                 systemPrompt = 'Ты — Versatile AI, аналитик. Помогаешь анализировать данные, делать выводы и структурировать информацию.';
                 temperature = 0.4;
             } else {
-                // Дефолт
                 model = 'openai/gpt-5.4';
                 systemPrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
                 temperature = 0.4;
             }
         }
 
-        // Добавляем языковую инструкцию
         const langInstruction = getLanguageInstruction(userLang || 'ru');
         const finalSystemPrompt = `${systemPrompt}\n\n${langInstruction}`;
 
         // ==========================================
-        // СБОРКА СООБЩЕНИЙ ДЛЯ OPENROUTER
+        // СБОРКА СООБЩЕНИЙ
         // ==========================================
         const openRouterMessages = [];
+        openRouterMessages.push({ role: 'system', content: finalSystemPrompt });
 
-        // Добавляем системный промпт
-        openRouterMessages.push({
-            role: 'system',
-            content: finalSystemPrompt
-        });
-
-        // Обрабатываем историю сообщений
         let lastRole = null;
         for (let i = 0; i < historyMessages.length; i++) {
             const msg = historyMessages[i];
@@ -154,17 +142,12 @@ export default async function handler(request) {
             const hasImage = attachedImage && attachedImage.trim().length > 0 && isLastUserMessage;
             const hasImageMarker = textContent.includes('📸 [Прикреплено изображение]');
 
-            // Пропускаем дубли
-            if (lastRole === role && !hasImageMarker) {
-                continue;
-            }
+            if (lastRole === role && !hasImageMarker) continue;
 
             if (hasImageMarker && hasImage) {
-                // Убираем маркер изображения
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
                 if (!textContent) textContent = 'Что изображено на фото?';
                 
-                // ПРАВИЛЬНЫЙ ФОРМАТ ДЛЯ OPENROUTER VISION
                 openRouterMessages.push({
                     role: 'user',
                     content: [
@@ -185,7 +168,6 @@ export default async function handler(request) {
             }
         }
 
-        // Если есть изображение, но нет сообщения пользователя — добавляем дефолтное
         if (attachedImage && attachedImage.trim().length > 0) {
             const lastMsg = openRouterMessages[openRouterMessages.length - 1];
             if (!lastMsg || lastMsg.role !== 'user' || typeof lastMsg.content === 'string') {
@@ -206,17 +188,14 @@ export default async function handler(request) {
         }
 
         console.log('📨 [stream.js] Модель:', model);
-        console.log('📨 [stream.js] Температура:', temperature);
         console.log('📨 [stream.js] Количество сообщений:', openRouterMessages.length);
 
-        // Пробуем ключи по очереди
         let lastError = null;
         
         for (let k = 0; k < keysPool.length; k++) {
             const currentKey = keysPool[k];
             
             try {
-                // Прямой запрос к OpenRouter API
                 const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -239,8 +218,36 @@ export default async function handler(request) {
                     throw new Error(`OpenRouter API error ${response.status}: ${errorData.substring(0, 200)}`);
                 }
 
-                // Возвращаем стрим
-                return new Response(response.body, {
+                // ==========================================
+                // ОБРАБОТКА СТРИМА: парсим JSON и извлекаем только текст
+                // ==========================================
+                const { readable, writable } = new TransformStream({
+                    transform(chunk, controller) {
+                        const text = new TextDecoder().decode(chunk);
+                        const lines = text.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const jsonStr = line.slice(6).trim();
+                                if (jsonStr === '[DONE]') continue;
+                                
+                                try {
+                                    const data = JSON.parse(jsonStr);
+                                    const content = data.choices?.[0]?.delta?.content;
+                                    if (content) {
+                                        controller.enqueue(new TextEncoder().encode(content));
+                                    }
+                                } catch (e) {
+                                    // Пропускаем некорректный JSON
+                                }
+                            }
+                        }
+                    }
+                });
+
+                const transformedStream = response.body.pipeThrough(readable);
+
+                return new Response(transformedStream, {
                     headers: {
                         'X-Accel-Buffering': 'no',
                         'Cache-Control': 'no-cache, no-transform',
