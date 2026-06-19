@@ -1,5 +1,64 @@
-// js/core/app.js
+// js/core/app.js - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ВЕРСИЯ
 
+// ==========================================
+// ДОБАВЛЕНО: ОБРАБОТКА ОФЛАЙН-РЕЖИМА
+// ==========================================
+window.addEventListener('online', () => {
+    console.log('📶 Интернет восстановлен');
+    if (window.config?.syncEnabled) {
+        console.log('🔄 Запускаем синхронизацию после восстановления сети...');
+        if (typeof window.syncChatsMetadata === 'function') {
+            window.syncChatsMetadata();
+        }
+        if (typeof window.retryUnsyncedMessages === 'function') {
+            window.retryUnsyncedMessages();
+        }
+        if (typeof window.retryUnsyncedFavorites === 'function') {
+            window.retryUnsyncedFavorites();
+        }
+        if (typeof window.processPendingDeletions === 'function') {
+            window.processPendingDeletions();
+        }
+        if (typeof window.processOfflineQueue === 'function') {
+            window.processOfflineQueue();
+        }
+    }
+});
+
+window.addEventListener('offline', () => {
+    console.warn('📶 Интернет потерян — сообщения сохраняются локально');
+    if (typeof window.showSyncStatus === 'function') {
+        window.showSyncStatus('error', true);
+    }
+});
+
+// ==========================================
+// ДОБАВЛЕНО: ОЧИСТКА СТАРЫХ ЧАТОВ (ТОЛЬКО ЛОКАЛЬНО)
+// ==========================================
+window.cleanOldChats = function(maxChatsPerTopic = 20) {
+    let cleaned = 0;
+    let totalRemoved = 0;
+    
+    for (const topic of Object.keys(window.chatHistories || {})) {
+        if (window.chatHistories[topic] && window.chatHistories[topic].length > maxChatsPerTopic) {
+            const removed = window.chatHistories[topic].length - maxChatsPerTopic;
+            window.chatHistories[topic] = window.chatHistories[topic].slice(0, maxChatsPerTopic);
+            cleaned++;
+            totalRemoved += removed;
+        }
+    }
+    
+    if (cleaned > 0) {
+        console.log(`🧹 Очищено ${cleaned} тем, удалено ${totalRemoved} старых чатов (оставлено максимум ${maxChatsPerTopic} на тему)`);
+        window.saveHistoriesToLocal();
+    }
+    
+    return { cleaned, totalRemoved };
+};
+
+// ==========================================
+// ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ
+// ==========================================
 async function initApp() {
     // 1. Инициализация Eruda строго для Администратора
     const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
@@ -118,40 +177,50 @@ async function initApp() {
     }
 
     // Функция для выполнения синхронизации после проверки подписки
-async function performSyncIfNeeded() {
-    if (window.config && window.config.syncEnabled) {
-        console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
-        
-        // 🆕 РЕГИСТРИРУЕМ УСТРОЙСТВО
-        if (typeof window.initDeviceManager === 'function') {
-            await window.initDeviceManager();
+    async function performSyncIfNeeded() {
+        if (window.config && window.config.syncEnabled) {
+            console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
+            
+            // 🆕 РЕГИСТРИРУЕМ УСТРОЙСТВО
+            if (typeof window.initDeviceManager === 'function') {
+                await window.initDeviceManager();
+            }
+            
+            if (typeof window.syncChatsMetadata === 'function') {
+                await window.syncChatsMetadata();
+            }
+            
+            if (typeof window.fullSyncAllChats === 'function') {
+                await window.fullSyncAllChats();
+            }
+            
+            if (typeof window.startUnsyncedRetryTimer === 'function') {
+                window.startUnsyncedRetryTimer();
+            }
+            
+            if (typeof window.initExportButtons === 'function') {
+                window.initExportButtons();
+            }
+            
+            // Очищаем старые чаты (только локально, безопасно для всех ролей)
+            if (typeof window.cleanOldChats === 'function') {
+                window.cleanOldChats(20);
+            }
+        } else {
+            console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
+            
+            // Даже для офлайн-режима очищаем старые чаты
+            if (typeof window.cleanOldChats === 'function') {
+                window.cleanOldChats(20);
+            }
         }
         
-        if (typeof window.syncChatsMetadata === 'function') {
-            await window.syncChatsMetadata();
+        const appScreen = document.getElementById('app-screen');
+        if (appScreen) {
+            appScreen.classList.remove('hidden');
+            if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
         }
-        
-        if (typeof window.fullSyncAllChats === 'function') {
-            await window.fullSyncAllChats();
-        }
-        
-        if (typeof window.startUnsyncedRetryTimer === 'function') {
-            window.startUnsyncedRetryTimer();
-        }
-        
-        if (typeof window.initExportButtons === 'function') {
-            window.initExportButtons();
-        }
-    } else {
-        console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
     }
-    
-    const appScreen = document.getElementById('app-screen');
-    if (appScreen) {
-        appScreen.classList.remove('hidden');
-        if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
-    }
-}
 
     // Восстанавливаем счетчики лимитов из CloudStorage (или LocalStorage) и дергаем бэкенд
     if (tg?.CloudStorage) {
@@ -168,6 +237,13 @@ async function performSyncIfNeeded() {
             
             // Синхронизация после проверки подписки
             await performSyncIfNeeded();
+            
+            // ==========================================
+            // ДОБАВЛЕНО: ЗАПУСК ОФЛАЙН-ОЧЕРЕДИ
+            // ==========================================
+            if (typeof window.startOfflineQueueProcessor === 'function') {
+                window.startOfflineQueueProcessor();
+            }
         });
     } else {
         if (typeof window.checkSubscriptionAndLoad === 'function') {
@@ -177,33 +253,58 @@ async function performSyncIfNeeded() {
         // Синхронизация после проверки подписки
         await performSyncIfNeeded();
         
+        // ==========================================
+        // ДОБАВЛЕНО: ЗАПУСК ОФЛАЙН-ОЧЕРЕДИ
+        // ==========================================
         if (typeof window.startOfflineQueueProcessor === 'function') {
-    window.startOfflineQueueProcessor();
-           }
-        
+            window.startOfflineQueueProcessor();
+        }
     }
 
     // ==========================================
     // ПОДПИСКА НА ТИХИЕ PUSH-УВЕДОМЛЕНИЯ
     // ==========================================
-if (window.Telegram?.WebApp) {
-    window.Telegram.WebApp.onEvent('message', async (message) => {
-        console.log("📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:", message);
-        console.log("ТЕКСТ СООБЩЕНИЯ:", message.text);
-        console.log("ДЛИНА ТЕКСТА:", message.text?.length);
-        console.log("КОДЫ СИМВОЛОВ:", message.text?.split('').map(c => c.charCodeAt(0)));
-        
-        if (message.text === "🔄") {
-            console.log("✅ СИГНАЛ РАСПОЗНАН!");
-            // здесь твой код синхронизации
-        } else {
-            console.log("❌ Неизвестный текст, синхронизация не запущена");
-        }
-    });
-}
+    if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.onEvent('message', async (message) => {
+            console.log("📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:", message);
+            console.log("ТЕКСТ СООБЩЕНИЯ:", message.text);
+            console.log("ДЛИНА ТЕКСТА:", message.text?.length);
+            console.log("КОДЫ СИМВОЛОВ:", message.text?.split('').map(c => c.charCodeAt(0)));
+            
+            if (message.text === "🔄") {
+                console.log("✅ СИГНАЛ РАСПОЗНАН!");
+                
+                if (window.config?.syncEnabled) {
+                    if (typeof window.showSyncStatus === 'function') {
+                        window.showSyncStatus('syncing');
+                    }
+                    
+                    if (typeof window.syncChatsMetadata === 'function') {
+                        await window.syncChatsMetadata();
+                    }
+                    
+                    const activeChat = window.getCurrentActiveChat();
+                    if (activeChat && typeof window.loadFullChat === 'function') {
+                        await window.loadFullChat(activeChat.id);
+                        if (typeof window.loadActiveChatMessages === 'function') {
+                            window.loadActiveChatMessages();
+                        }
+                    }
+                    
+                    if (typeof window.showSyncStatus === 'function') {
+                        window.showSyncStatus('success');
+                    }
+                }
+            } else {
+                console.log("❌ Неизвестный текст, синхронизация не запущена");
+            }
+        });
+    }
 }
 
-// Функция для отслеживания смены пользователя
+// ==========================================
+// ФУНКЦИЯ ДЛЯ ОТСЛЕЖИВАНИЯ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
+// ==========================================
 let lastUserId = null;
 
 function checkUserChanged() {
@@ -219,6 +320,11 @@ function checkUserChanged() {
         if (typeof window.loadLocalHistories === 'function') {
             window.loadLocalHistories();
         }
+        
+        // Очищаем офлайн-очередь для старого пользователя
+        if (typeof window.loadOfflineQueue === 'function') {
+            window.loadOfflineQueue();
+        }
     }
     
     lastUserId = currentUserId;
@@ -227,13 +333,21 @@ function checkUserChanged() {
 // Вызывать checkUserChanged() периодически или при фокусе окна
 setInterval(checkUserChanged, 1000); // каждую секунду
 window.addEventListener('focus', checkUserChanged);
-// Запускаем всё после рендеринга страницы
+
+// ==========================================
+// ЗАПУСК ВСЕГО ПОСЛЕ РЕНДЕРИНГА СТРАНИЦЫ
+// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(err => {
         console.error('Критический сбой инициализации:', err);
     });
 });
 
+// ==========================================
+// ПОЛНОЭКРАННЫЙ РЕЖИМ (если поддерживается)
+// ==========================================
 if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
-        }
+}
+
+console.log('✅ app.js полностью загружен с исправлениями');
