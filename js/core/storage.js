@@ -169,11 +169,27 @@ window.refreshUiAfterChatSelection = function() {
     if (typeof window.syncContextSliderWithActiveChat === 'function') window.syncContextSliderWithActiveChat();
 };
 
+// ==========================================
+// УДАЛЕНИЕ ЧАТА (В КОРЗИНУ)
+// ==========================================
+
 window.deleteChat = function(event, chatId) {
     if (event && event.stopPropagation) event.stopPropagation(); 
     
     const action = () => {
+        // 1. Находим чат
         let modelsChats = window.chatHistories[window.currentTopic] || [];
+        const chatToDelete = modelsChats.find(c => c.id === chatId);
+        
+        if (!chatToDelete) {
+            console.warn('Чат не найден для удаления:', chatId);
+            return;
+        }
+        
+        // 2. Сохраняем название для уведомления
+        const chatTitle = chatToDelete.title || 'Чат';
+        
+        // 3. Удаляем из списка (скрываем)
         window.chatHistories[window.currentTopic] = modelsChats.filter(c => c.id !== chatId);
 
         if (window.activeChatIds[window.currentTopic] === chatId) {
@@ -184,6 +200,7 @@ window.deleteChat = function(event, chatId) {
         window.saveHistoriesToLocal();
         window.refreshUiAfterChatSelection();
         
+        // 4. Отправляем на сервер (soft delete)
         if (window.config.syncEnabled && chatId) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -197,14 +214,35 @@ window.deleteChat = function(event, chatId) {
                         action: 'delete_chat',
                         chatId: chatId
                     })
-                }).catch(err => console.error("Ошибка удаления чата на сервере:", err));
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log(`✅ Чат ${chatId} отправлен в корзину`);
+                        // Обновляем счётчик корзины
+                        if (typeof window.loadTrashItems === 'function') {
+                            window.loadTrashItems();
+                        }
+                    }
+                })
+                .catch(err => console.error("Ошибка удаления чата:", err));
             }
+        }
+        
+        // 5. Показываем уведомление
+        const msg = `🗑️ "${chatTitle}" перемещён в корзину`;
+        if (window.tg?.showAlert) {
+            window.tg.showAlert(msg);
+        } else {
+            console.log(msg);
         }
     };
 
+    const confirmMsg = window.getLangString ? window.getLangString('confirm_del_chat') : 'Переместить чат в корзину?';
+    
     if (window.tg?.showConfirm) {
-        window.tg.showConfirm(window.getLangString('confirm_del_chat'), (ok) => { if (ok) action(); });
-    } else if (confirm(window.getLangString('confirm_del_chat'))) {
+        window.tg.showConfirm(confirmMsg, (ok) => { if (ok) action(); });
+    } else if (confirm(confirmMsg)) {
         action();
     }
 };
