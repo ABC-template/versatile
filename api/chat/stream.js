@@ -20,6 +20,58 @@ function getLanguageInstruction(userLang) {
     return `[Системная локаль пользователя: ${userLang}]. Instruction: Всегда веди диалог, пиши пояснения и комментарии строго на ${targetLangStr}. Exception: Если пользователь отправляет текст на другом языке с явной просьбой о переводе, анализе, или напрямую просит переключить язык общения — полностью подчиняйся контексту его запроса и отвечай на выбранном им языке.`;
 }
 
+// ==========================================
+// ДОБАВЛЕНО: ВАЛИДАЦИЯ ИЗОБРАЖЕНИЙ
+// ==========================================
+function validateImageSize(base64String, maxSizeMB = 5) {
+    if (!base64String) return { valid: true };
+    const base64Length = base64String.length - (base64String.indexOf(',') + 1);
+    const sizeInBytes = Math.ceil((base64Length * 3) / 4);
+    const sizeInMB = sizeInBytes / (1024 * 1024);
+    return { 
+        valid: sizeInMB <= maxSizeMB, 
+        sizeInMB: Math.round(sizeInMB * 100) / 100 
+    };
+}
+
+// ==========================================
+// ДОБАВЛЕНО: ПРОВЕРКА ЛИМИТОВ
+// ==========================================
+async function checkDailyLimit(userId, supabaseUrl, supabaseKey) {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+        const res = await fetch(`${supabaseUrl}/rest/v1/usage?user_id=eq.${userId}&date=eq.${today}&select=count`, {
+            headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+            }
+        });
+        if (!res.ok) return { allowed: true, used: 0, limit: 5 };
+        const data = await res.json();
+        const used = data[0]?.count || 0;
+        
+        // Проверяем роль пользователя для определения лимита
+        const userRes = await fetch(`${supabaseUrl}/rest/v1/users?telegram_id=eq.${userId}&select=role,premium_until`, {
+            headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+            }
+        });
+        const userData = await userRes.json();
+        const user = userData[0] || {};
+        const isPremium = user.role === 'premium' && user.premium_until && new Date(user.premium_until) > new Date();
+        const isAdmin = ['creator', 'admin'].includes(user.role);
+        
+        const dailyLimit = isAdmin ? 9999 : (isPremium ? 100 : 5);
+        const allowed = isAdmin || used < dailyLimit;
+        
+        return { allowed, used, limit: dailyLimit };
+    } catch (err) {
+        console.error('Ошибка проверки лимита:', err);
+        return { allowed: true, used: 0, limit: 5 };
+    }
+}
+
 export default async function handler(request) {
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -67,8 +119,22 @@ export default async function handler(request) {
 
         console.log('📨 [stream.js] Тема:', currentTopic);
         console.log('📨 [stream.js] Есть фото:', !!attachedImage);
-        console.log('📨 [stream.js] Длина фото:', attachedImage?.length);
         console.log('📨 [stream.js] История:', historyMessages.length);
+
+        // ==========================================
+        // ДОБАВЛЕНО: ПРОВЕРКА РАЗМЕРА ИЗОБРАЖЕНИЯ
+        // ==========================================
+        if (attachedImage && attachedImage.trim().length > 0) {
+            const validation = validateImageSize(attachedImage, 5);
+            if (!validation.valid) {
+                return new Response(JSON.stringify({ 
+                    error: `Изображение слишком большое (${validation.sizeInMB}MB). Максимум 5MB.` 
+                }), { 
+                    status: 413, 
+                    headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+                });
+            }
+        }
 
         if (attachedImage && attachedImage.trim().length > 0 && userId !== MY_TELEGRAM_ID) {
             return new Response(JSON.stringify({ 
@@ -77,6 +143,24 @@ export default async function handler(request) {
                 status: 403, 
                 headers: { 'Content-Type': 'application/json', ...corsHeaders } 
             });
+        }
+
+        // ==========================================
+        // ДОБАВЛЕНО: ПРОВЕРКА ДНЕВНОГО ЛИМИТА
+        // ==========================================
+        const supabaseUrl = process.env.SUPABASE_URL?.trim();
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+        
+        if (supabaseUrl && supabaseKey) {
+            const limitCheck = await checkDailyLimit(userId, supabaseUrl, supabaseKey);
+            if (!limitCheck.allowed) {
+                return new Response(JSON.stringify({ 
+                    error: `Ежедневный лимит запросов исчерпан (${limitCheck.used}/${limitCheck.limit})` 
+                }), { 
+                    status: 429, 
+                    headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+                });
+            }
         }
 
         const keysPool = getRotatedKeysPool();
@@ -286,6 +370,7 @@ export default async function handler(request) {
                 });
 
             } catch (err) {
+                // НЕ ВЫВОДИМ ПОЛНЫЙ STACK, ТОЛЬКО СООБЩЕНИЕ
                 console.error(`Сбой запроса с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
                 continue;
@@ -299,7 +384,7 @@ export default async function handler(request) {
         });
 
     } catch (err) {
-        console.error('Критическое исключение:', err);
+        console.error('Критическое исключение:', err.message);
         return new Response(JSON.stringify({ error: `Критическое исключение сервера: ${err.message}` }), { 
             status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
         });
