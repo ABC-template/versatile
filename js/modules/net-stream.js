@@ -1,10 +1,10 @@
-// js/modules/net-stream.js
-console.log("✅ net-stream.js загружен");
+// js/modules/net-stream.js - ВРЕМЕННАЯ ВЕРСИЯ (без vision)
+
+console.log("✅ net-stream.js загружен (временная версия)");
 
 window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
-    console.log('🎯 ОРИГИНАЛЬНАЯ streamAiResponse вызвана!');
+    console.log('🎯 streamAiResponse вызвана!');
     console.log('📸 Есть фото?', !!attachedImage);
-    console.log('📸 Длина фото:', attachedImage?.length);
     
     const container = document.getElementById('chat-container');
     if (!container) {
@@ -15,12 +15,11 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
     let msgDiv = null;
     let accumulatedText = '';
 
-    // Увеличенный таймаут до 2 минут для обработки изображений
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-        console.warn('⏰ Таймаут 120 секунд истек, отменяем запрос');
+        console.warn('⏰ Таймаут 60 секунд истек');
         controller.abort();
-    }, 120000);
+    }, 60000);
 
     try {
         const requestBody = {
@@ -31,7 +30,6 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
         };
         
         console.log('🌊 Отправляем запрос к /api/chat/stream');
-        console.log('📦 Размер запроса:', JSON.stringify(requestBody).length);
         
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
@@ -45,19 +43,9 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
 
         clearTimeout(timeoutId);
 
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-            const errData = await response.json();
-            console.error('❌ Ошибка от сервера:', errData);
-            if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
-            if (typeof window.renderMessageToDOM === 'function') {
-                window.renderMessageToDOM(`⚠️ Ошибка: ${errData.error || 'Неизвестная ошибка'}`, 'ai-msg');
-            }
-            return false;
-        }
-
         if (!response.ok) {
-            throw new Error(`Ошибка сети: ${response.status} ${response.statusText}`);
+            const text = await response.text();
+            throw new Error(`Ошибка ${response.status}: ${text.substring(0, 200)}`);
         }
 
         const reader = response.body.getReader();
@@ -76,7 +64,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
 
             const chunk = decoder.decode(value, { stream: true });
             accumulatedText += chunk;
-            console.log('📦 Получен чанк, длина:', chunk.length, 'всего:', accumulatedText.length);
+            console.log('📦 Получен чанк, длина:', chunk.length);
 
             if (isFirstChunk && accumulatedText.trim().length > 0) {
                 if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
@@ -84,18 +72,10 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
                 isFirstChunk = false;
             }
 
-            let renderText = accumulatedText;
-            const codeBlockCount = (renderText.match(/```/g) || []).length;
-            if (codeBlockCount % 2 !== 0) {
-                renderText += '\n```';
-            }
-
             if (typeof marked !== 'undefined') {
-                let html = marked.parse(renderText);
-                html = html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, '<div class="table-wrapper"><tr>$1<\/div>');
-                msgDiv.innerHTML = html;
+                msgDiv.innerHTML = marked.parse(accumulatedText);
             } else {
-                msgDiv.innerText = renderText;
+                msgDiv.innerText = accumulatedText;
             }
 
             container.scrollTop = container.scrollHeight;
@@ -107,7 +87,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
             console.warn('⚠️ Пустой ответ от сервера');
             if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
             if (typeof window.renderMessageToDOM === 'function') {
-                window.renderMessageToDOM('⚠️ Сервер вернул пустой ответ. Попробуйте еще раз.', 'ai-msg');
+                window.renderMessageToDOM('⚠️ Сервер вернул пустой ответ.', 'ai-msg');
             }
         }
         return true;
@@ -116,9 +96,8 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
         console.error("❌ Критический сбой стрима:", err);
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
         
-        // Не показываем ошибку, если уже есть частичный ответ
         if (msgDiv && accumulatedText.trim().length > 0) {
-            const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано. Пожалуйста, повторите запрос]`;
+            const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано]`;
             if (typeof marked !== 'undefined') {
                 msgDiv.innerHTML = marked.parse(disconnectNotice);
             } else {
@@ -127,11 +106,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
             finalizeStreamMessage(msgDiv, disconnectNotice, activeChat);
         } else {
             if (typeof window.renderMessageToDOM === 'function') {
-                let errorMsg = '⚠️ Сбой соединения. Попробуйте еще раз.';
-                if (err.name === 'AbortError') {
-                    errorMsg = '⏰ Превышено время ожидания ответа от сервера. Изображение слишком большое или сервер перегружен.';
-                }
-                window.renderMessageToDOM(errorMsg, 'ai-msg');
+                window.renderMessageToDOM(`⚠️ Ошибка: ${err.message || 'Неизвестная ошибка'}`, 'ai-msg');
             }
         }
         return false;
