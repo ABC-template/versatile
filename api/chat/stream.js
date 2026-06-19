@@ -65,6 +65,11 @@ export default async function handler(request) {
 
         const { historyMessages = [], currentTopic, userLang, attachedImage } = await request.json();
 
+        console.log('📨 [stream.js] Тема:', currentTopic);
+        console.log('📨 [stream.js] Есть фото:', !!attachedImage);
+        console.log('📨 [stream.js] Длина фото:', attachedImage?.length);
+        console.log('📨 [stream.js] История:', historyMessages.length);
+
         if (attachedImage && attachedImage.trim().length > 0 && userId !== MY_TELEGRAM_ID) {
             return new Response(JSON.stringify({ 
                 error: '📸 Отправка изображений доступна только создателю приложения' 
@@ -92,6 +97,7 @@ export default async function handler(request) {
             systemPrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
             temperature = 0.4;
             model = 'openai/gpt-5';
+            console.log('📨 [stream.js] Используем VISION модель:', model);
         } else {
             temperature = 0.5;
             if (currentTopic === 'code') {
@@ -111,14 +117,15 @@ export default async function handler(request) {
                 systemPrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
                 temperature = 0.6;
             } else if (currentTopic === 'analytics') {
-                model = 'openai/gpt-5.4';
+                model = 'openai/gpt-5';
                 systemPrompt = 'Ты — Versatile AI, аналитик. Помогаешь анализировать данные, делать выводы и структурировать информацию.';
                 temperature = 0.4;
             } else {
-                model = 'openai/gpt-5.4';
+                model = 'openai/gpt-5';
                 systemPrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
                 temperature = 0.4;
             }
+            console.log('📨 [stream.js] Используем текстовую модель:', model);
         }
 
         const langInstruction = getLanguageInstruction(userLang || 'ru');
@@ -148,6 +155,7 @@ export default async function handler(request) {
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
                 if (!textContent) textContent = 'Что изображено на фото?';
                 
+                console.log('📨 [stream.js] Добавляем vision сообщение');
                 openRouterMessages.push({
                     role: 'user',
                     content: [
@@ -171,6 +179,7 @@ export default async function handler(request) {
         if (attachedImage && attachedImage.trim().length > 0) {
             const lastMsg = openRouterMessages[openRouterMessages.length - 1];
             if (!lastMsg || lastMsg.role !== 'user' || typeof lastMsg.content === 'string') {
+                console.log('📨 [stream.js] Добавляем дефолтное vision сообщение');
                 openRouterMessages.push({
                     role: 'user',
                     content: [
@@ -196,6 +205,8 @@ export default async function handler(request) {
             const currentKey = keysPool[k];
             
             try {
+                console.log(`📨 [stream.js] Пробуем ключ ROUTER_KEY${k}`);
+                
                 const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -215,11 +226,14 @@ export default async function handler(request) {
 
                 if (!response.ok) {
                     const errorData = await response.text();
+                    console.error(`❌ OpenRouter ошибка ${response.status}:`, errorData.substring(0, 200));
                     throw new Error(`OpenRouter API error ${response.status}: ${errorData.substring(0, 200)}`);
                 }
 
+                console.log('✅ [stream.js] OpenRouter ответил, начинаем стрим');
+
                 // ==========================================
-                // ПРАВИЛЬНЫЙ ПАРСИНГ SSE СТРИМА
+                // ПАРСИНГ SSE СТРИМА
                 // ==========================================
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -233,10 +247,7 @@ export default async function handler(request) {
                                 if (done) break;
                                 
                                 buffer += decoder.decode(value, { stream: true });
-                                
-                                // Разбиваем по строкам
                                 const lines = buffer.split('\n');
-                                // Последняя строка может быть неполной, сохраняем её
                                 buffer = lines.pop() || '';
                                 
                                 for (const line of lines) {
@@ -252,8 +263,7 @@ export default async function handler(request) {
                                                 controller.enqueue(new TextEncoder().encode(content));
                                             }
                                         } catch (e) {
-                                            // Игнорируем некорректный JSON
-                                            console.warn('⚠️ Пропущен некорректный JSON:', jsonStr.substring(0, 100));
+                                            // Игнорируем
                                         }
                                     }
                                 }
