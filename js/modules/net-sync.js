@@ -1,15 +1,28 @@
-// js/modules/net-sync.js
+// js/modules/net-sync.js - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ВЕРСИЯ
 
-// Синхронизация метаданных (список чатов и избранное)
+// ==========================================
+// СИНХРОНИЗАЦИЯ МЕТАДАННЫХ (список чатов и избранное)
+// ==========================================
+
 window.syncChatsMetadata = async function() {
-    if (!window.config.syncEnabled) return;
+    if (!window.config.syncEnabled) {
+        console.log("Синхронизация отключена, метаданные не загружаются");
+        return;
+    }
+    
     const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return;
+    if (!initData) {
+        console.error("Нет initData для синхронизации метаданных");
+        return;
+    }
+    
     try {
+        console.log("📥 Загружаем метаданные чатов...");
         const response = await fetch('/api/chats/sync-metadata', {
             headers: { 'X-Telegram-Init-Data': initData }
         });
         const data = await response.json();
+        
         if (data.syncEnabled && data.chats) {
             if (!window.cloudChatsMeta) window.cloudChatsMeta = {};
             
@@ -20,8 +33,13 @@ window.syncChatsMetadata = async function() {
                 }
             });
             
-            if (typeof window.renderHistoryChatsList === 'function') window.renderHistoryChatsList();
+            console.log(`📥 Загружено ${data.chats.length} чатов из облака`);
+            
+            if (typeof window.renderHistoryChatsList === 'function') {
+                window.renderHistoryChatsList();
+            }
         }
+        
         if (data.favorites) {
             window.cloudFavorites = data.favorites;
         }
@@ -30,7 +48,132 @@ window.syncChatsMetadata = async function() {
     }
 };
 
-// Конфликт-резолвинг: сравниваем updated_at и решаем, кто победил
+// ==========================================
+// ЗАГРУЗКА ВСЕХ ЧАТОВ ИЗ ОБЛАКА (НОВАЯ ФУНКЦИЯ)
+// ==========================================
+
+window.loadAllCloudChats = async function() {
+    if (!window.config.syncEnabled) {
+        console.log("Синхронизация отключена");
+        return;
+    }
+    
+    console.log("📥 Загружаем все чаты из облака...");
+    
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) {
+        console.error("Нет initData");
+        return;
+    }
+    
+    try {
+        // 1. Получаем список всех чатов из облака
+        const response = await fetch('/api/chats/sync-metadata', {
+            headers: { 'X-Telegram-Init-Data': initData }
+        });
+        const data = await response.json();
+        
+        if (!data.syncEnabled || !data.chats) {
+            console.log("Нет чатов в облаке");
+            return;
+        }
+        
+        console.log(`📥 Найдено ${data.chats.length} чатов в облаке`);
+        
+        // 2. Группируем чаты по темам
+        const chatsByTopic = {};
+        for (const chat of data.chats) {
+            const topic = chat.topic_id || 'fast';
+            if (!chatsByTopic[topic]) chatsByTopic[topic] = [];
+            chatsByTopic[topic].push(chat);
+        }
+        
+        // 3. Для каждой темы загружаем все чаты
+        let loadedCount = 0;
+        for (const [topic, chats] of Object.entries(chatsByTopic)) {
+            if (!window.chatHistories[topic]) {
+                window.chatHistories[topic] = [];
+            }
+            
+            // Получаем ID уже загруженных чатов
+            const existingIds = new Set(window.chatHistories[topic].map(c => c.id));
+            
+            for (const cloudChat of chats) {
+                // Если чата нет локально — загружаем
+                if (!existingIds.has(cloudChat.id)) {
+                    console.log(`📥 Загружаем чат "${cloudChat.title}" (${cloudChat.id})`);
+                    
+                    // Загружаем полный чат
+                    const fullChat = await window.loadFullChat(cloudChat.id);
+                    if (fullChat) {
+                        loadedCount++;
+                    }
+                } else {
+                    // Обновляем метаданные существующего чата
+                    const localIndex = window.chatHistories[topic].findIndex(c => c.id === cloudChat.id);
+                    if (localIndex !== -1) {
+                        const localChat = window.chatHistories[topic][localIndex];
+                        // Если облачный чат новее — обновляем
+                        if (new Date(cloudChat.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
+                            console.log(`🔄 Обновляем чат "${cloudChat.title}"`);
+                            await window.loadFullChat(cloudChat.id);
+                        }
+                    }
+                }
+            }
+        }
+        
+        console.log(`✅ Загружено ${loadedCount} новых чатов`);
+        
+        // 4. Обновляем UI
+        if (typeof window.renderHistoryChatsList === 'function') {
+            window.renderHistoryChatsList();
+        }
+        if (typeof window.loadActiveChatMessages === 'function') {
+            window.loadActiveChatMessages();
+        }
+        
+        // 5. Сохраняем
+        window.saveHistoriesToLocal();
+        
+    } catch (err) {
+        console.error("❌ Ошибка загрузки всех чатов:", err);
+    }
+};
+
+// ==========================================
+// ПОЛНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ЧАТОВ
+// ==========================================
+
+window.fullSyncAllChats = async function() {
+    if (!window.config.syncEnabled) {
+        console.log("Синхронизация отключена, полная синхронизация не требуется");
+        return;
+    }
+    
+    console.log("🔄 Начинаем полную синхронизацию всех чатов...");
+    
+    // 1. Загружаем метаданные
+    await window.syncChatsMetadata();
+    
+    // 2. Загружаем ВСЕ чаты из облака
+    await window.loadAllCloudChats();
+    
+    // 3. Обрабатываем удаления
+    if (typeof window.processPendingDeletions === 'function') {
+        await window.processPendingDeletions();
+    }
+    
+    console.log("✅ Полная синхронизация завершена");
+    
+    // 4. Запускаем таймер повторных попыток
+    window.startUnsyncedRetryTimer();
+};
+
+// ==========================================
+// КОНФЛИКТ-РЕЗОЛВИНГ
+// ==========================================
+
 window.resolveChatConflict = function(localChat, serverChat) {
     if (!localChat || !serverChat) return { winner: 'server', chat: serverChat };
     
@@ -46,23 +189,10 @@ window.resolveChatConflict = function(localChat, serverChat) {
     }
 };
 
-// Обновляем существующую функцию sendUnsyncedMessagesBatch
-window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, chatTitle, maxContext, userRenamed) {
-    if (!window.config.syncEnabled) return { success: true, syncedCount: 0 };
-    if (!messages || messages.length === 0) return { success: true, syncedCount: 0 };
-    
-    // Используем новую функцию с retry
-    const result = await window.sendBatchWithRetry(chatId, messages, topicId, chatTitle, maxContext, userRenamed, 3);
-    
-    if (result.success) {
-        window.markMessagesSynced(chatId, result.messageIds);
-        return { success: true, syncedCount: result.messageIds.length };
-    }
-    
-    return { success: false, syncedCount: 0, error: result.error };
-};
+// ==========================================
+// ЗАГРУЗКА ПОЛНОГО ЧАТА С СЕРВЕРА
+// ==========================================
 
-// Загрузка полного чата с сервера с конфликт-резолвингом
 window.loadFullChat = async function(chatId) {
     if (!window.config.syncEnabled) return null;
     const initData = window.Telegram?.WebApp?.initData;
@@ -154,9 +284,102 @@ window.loadFullChat = async function(chatId) {
     }
 };
 
-// Периодическая проверка и повторная отправка unsynced сообщений
+// ==========================================
+// ОТПРАВКА НЕСИНХРОНИЗИРОВАННЫХ СООБЩЕНИЙ (BATCH)
+// ==========================================
+
+window.sendUnsyncedMessagesBatch = async function(chatId, messages, topicId, chatTitle, maxContext, userRenamed) {
+    if (!window.config.syncEnabled) return { success: true, syncedCount: 0 };
+    if (!messages || messages.length === 0) return { success: true, syncedCount: 0 };
+    
+    const result = await window.sendBatchWithRetry(chatId, messages, topicId, chatTitle, maxContext, userRenamed, 3);
+    
+    if (result.success) {
+        window.markMessagesSynced(chatId, result.messageIds);
+        return { success: true, syncedCount: result.messageIds.length };
+    }
+    
+    return { success: false, syncedCount: 0, error: result.error };
+};
+
+// ==========================================
+// ОТПРАВКА С RETRY
+// ==========================================
+
+window.sendBatchWithRetry = async function(chatId, messages, topicId, chatTitle, maxContext, userRenamed, retries = 3) {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) return { success: false, error: 'No init data' };
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const response = await fetch('/api/chats/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Telegram-Init-Data': initData
+                },
+                body: JSON.stringify({
+                    action: 'batch_messages',
+                    chatId: chatId,
+                    topicId: topicId,
+                    chatTitle: chatTitle,
+                    maxContext: maxContext,
+                    userRenamed: userRenamed,
+                    messages: messages.map(msg => ({
+                        id: msg.id,
+                        text: msg.text,
+                        type: msg.type,
+                        isFavorite: msg.isFavorite || false
+                    }))
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.synced === true || data.success === true) {
+                console.log(`✅ Batch отправлен (попытка ${attempt})`);
+                return { success: true, messageIds: messages.map(m => m.id) };
+            }
+            
+            if (response.status === 401 || response.status === 403) {
+                return { success: false, error: data.error };
+            }
+            
+            if (attempt < retries) {
+                const delay = Math.pow(2, attempt) * 1000;
+                console.log(`⚠️ Batch не отправился, retry через ${delay}ms (попытка ${attempt}/${retries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error(`❌ Batch не отправился после ${retries} попыток`);
+                return { success: false, error: data.error };
+            }
+            
+        } catch (err) {
+            if (attempt < retries) {
+                const delay = Math.pow(2, attempt) * 1000;
+                console.log(`⚠️ Ошибка сети, retry через ${delay}ms (попытка ${attempt}/${retries}):`, err.message);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error(`❌ Ошибка сети после ${retries} попыток:`, err);
+                return { success: false, error: err.message };
+            }
+        }
+    }
+    
+    return { success: false, error: 'Max retries exceeded' };
+};
+
+// ==========================================
+// ПЕРИОДИЧЕСКАЯ ПРОВЕРКА НЕСИНХРОНИЗИРОВАННЫХ
+// ==========================================
+
 window.startUnsyncedRetryTimer = function() {
-    setInterval(async () => {
+    // Очищаем старый таймер, если был
+    if (window._retryTimer) {
+        clearInterval(window._retryTimer);
+    }
+    
+    window._retryTimer = setInterval(async () => {
         if (window.config.syncEnabled && navigator.onLine !== false) {
             if (typeof window.retryUnsyncedMessages === 'function') {
                 await window.retryUnsyncedMessages();
@@ -171,43 +394,8 @@ window.startUnsyncedRetryTimer = function() {
     }, 30000);
 };
 
-// Синхронизация всего чата (если пользователь стал PRO)
-window.fullSyncAllChats = async function() {
-    if (!window.config.syncEnabled) {
-        console.log("Синхронизация отключена, полная синхронизация не требуется");
-        return;
-    }
-    
-    console.log("🔄 Начинаем полную синхронизацию всех чатов...");
-    
- //   await window.syncChatsMetadata();
-    
-    const topics = ['code', 'creative', 'fast', 'kitchen'];
-    
-    for (const topic of topics) {
-        const localChats = window.chatHistories[topic] || [];
-        const cloudChatIds = new Set(Object.keys(window.cloudChatsMeta || {}));
-        
-        for (const localChat of localChats) {
-            if (cloudChatIds.has(localChat.id)) {
-                const cloudMeta = window.cloudChatsMeta[localChat.id];
-                if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
-                    await window.loadFullChat(localChat.id);
-                }
-            }
-        }
-    }
-    
-if (typeof window.processPendingDeletions === 'function') {
-    await window.processPendingDeletions();
-}
-    console.log("✅ Полная синхронизация завершена");
-    
-    window.startUnsyncedRetryTimer();
-};
-
 // ==========================================
-// ФУНКЦИЯ СИНХРОНИЗАЦИИ СООБЩЕНИЙ (AI и USER)
+// СИНХРОНИЗАЦИЯ СООБЩЕНИЯ В ОБЛАКО
 // ==========================================
 
 window.syncMessageToCloud = async function(chatId, message) {
@@ -272,155 +460,8 @@ window.syncMessageToCloud = async function(chatId, message) {
     }
 };
 
-console.log("✅ syncMessageToCloud зарегистрирована в глобальной области, тип:", typeof window.syncMessageToCloud);
-
-// Функция для синхронизации нескольких сообщений разом (batch)
-window.syncBatchMessagesToCloud = async function(chatId, messages) {
-    if (!window.config.syncEnabled) return false;
-    if (!messages || messages.length === 0) return true;
-    
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return false;
-    
-    try {
-        const response = await fetch('/api/chats/action', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': initData
-            },
-            body: JSON.stringify({
-                action: 'batch_messages',
-                chatId: chatId,
-                messages: messages.map(msg => ({
-                    id: msg.id,
-                    text: msg.text,
-                    type: msg.type,
-                    isFavorite: msg.isFavorite || false
-                }))
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.synced === true || data.success === true) {
-            console.log(`✅ Batch синхронизация: ${messages.length} сообщений`);
-            if (typeof window.markMessagesSynced === 'function') {
-                window.markMessagesSynced(chatId, messages.map(m => m.id));
-            }
-            return true;
-        }
-        return false;
-    } catch (err) {
-        console.error("Ошибка batch синхронизации:", err);
-        return false;
-    }
-};
-// Загрузка сообщений для всех чатов, которые обновились
-window.syncAllUpdatedChats = async function() {
-    if (!window.config.syncEnabled) return;
-    
-    console.log("🔄 Проверяем обновления во всех чатах...");
-    
-    const topics = ['code', 'creative', 'fast', 'kitchen'];
-    let updatedCount = 0;
-    
-    for (const topic of topics) {
-        const localChats = window.chatHistories[topic] || [];
-        
-        for (const localChat of localChats) {
-            const cloudMeta = window.cloudChatsMeta?.[localChat.id];
-            
-            if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
-                console.log(`🔄 Загружаем обновления для чата ${localChat.title} (${localChat.id})`);
-                await window.loadFullChat(localChat.id);
-                updatedCount++;
-            }
-        }
-    }
-    
-    // Обновляем UI
-    if (updatedCount > 0) {
-        if (typeof window.loadActiveChatMessages === 'function') {
-            window.loadActiveChatMessages();
-        }
-        if (typeof window.renderHistoryChatsList === 'function') {
-            window.renderHistoryChatsList();
-        }
-    }
-    
-    console.log(`✅ Проверка завершена, обновлено ${updatedCount} чатов`);
-};
-
-// Добавить в конец файла net-sync.js
-
-// Функция отправки с retry
-window.sendBatchWithRetry = async function(chatId, messages, topicId, chatTitle, maxContext, userRenamed, retries = 3) {
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return { success: false, error: 'No init data' };
-    
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const response = await fetch('/api/chats/action', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Telegram-Init-Data': initData
-                },
-                body: JSON.stringify({
-                    action: 'batch_messages',
-                    chatId: chatId,
-                    topicId: topicId,
-                    chatTitle: chatTitle,
-                    maxContext: maxContext,
-                    userRenamed: userRenamed,
-                    messages: messages.map(msg => ({
-                        id: msg.id,
-                        text: msg.text,
-                        type: msg.type,
-                        isFavorite: msg.isFavorite || false
-                    }))
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.synced === true || data.success === true) {
-                console.log(`✅ Batch отправлен (попытка ${attempt})`);
-                return { success: true, messageIds: messages.map(m => m.id) };
-            }
-            
-            // Если ошибка не временная (403, 401) — не retry
-            if (response.status === 401 || response.status === 403) {
-                return { success: false, error: data.error };
-            }
-            
-            // Временная ошибка — продолжаем retry
-            if (attempt < retries) {
-                const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
-                console.log(`⚠️ Batch не отправился, retry через ${delay}ms (попытка ${attempt}/${retries})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-                console.error(`❌ Batch не отправился после ${retries} попыток`);
-                return { success: false, error: data.error };
-            }
-            
-        } catch (err) {
-            if (attempt < retries) {
-                const delay = Math.pow(2, attempt) * 1000;
-                console.log(`⚠️ Ошибка сети, retry через ${delay}ms (попытка ${attempt}/${retries}):`, err.message);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-                console.error(`❌ Ошибка сети после ${retries} попыток:`, err);
-                return { success: false, error: err.message };
-            }
-        }
-    }
-    
-    return { success: false, error: 'Max retries exceeded' };
-};
 // ==========================================
-// ФУНКЦИЯ СИНХРОНИЗАЦИИ НОВОГО ЧАТА
+// СИНХРОНИЗАЦИЯ НОВОГО ЧАТА В ОБЛАКО
 // ==========================================
 
 window.syncNewChatToCloud = async function(chat) {
@@ -530,6 +571,65 @@ window.retryUnsyncedChats = async function() {
         console.log("✅ Все чаты успешно синхронизированы!");
     } else {
         console.log(`⚠️ ${failedAgain.length} чатов ожидают повторной синхронизации`);
+    }
+};
+
+// ==========================================
+// ПРОВЕРКА ОБНОВЛЕНИЙ ВО ВСЕХ ЧАТАХ
+// ==========================================
+
+window.syncAllUpdatedChats = async function() {
+    if (!window.config.syncEnabled) return;
+    
+    console.log("🔄 Проверяем обновления во всех чатах...");
+    
+    const topics = ['code', 'creative', 'fast', 'kitchen'];
+    let updatedCount = 0;
+    
+    for (const topic of topics) {
+        const localChats = window.chatHistories[topic] || [];
+        
+        for (const localChat of localChats) {
+            const cloudMeta = window.cloudChatsMeta?.[localChat.id];
+            
+            if (cloudMeta && new Date(cloudMeta.updated_at) > new Date(localChat.updated_at || localChat.created_at)) {
+                console.log(`🔄 Загружаем обновления для чата ${localChat.title} (${localChat.id})`);
+                await window.loadFullChat(localChat.id);
+                updatedCount++;
+            }
+        }
+    }
+    
+    if (updatedCount > 0) {
+        if (typeof window.loadActiveChatMessages === 'function') {
+            window.loadActiveChatMessages();
+        }
+        if (typeof window.renderHistoryChatsList === 'function') {
+            window.renderHistoryChatsList();
+        }
+    }
+    
+    console.log(`✅ Проверка завершена, обновлено ${updatedCount} чатов`);
+};
+
+// ==========================================
+// ПОМЕТКА СООБЩЕНИЙ КАК СИНХРОНИЗИРОВАННЫХ
+// ==========================================
+
+window.markMessagesSynced = function(chatId, messageIds) {
+    const activeChat = window.getCurrentActiveChat();
+    if (!activeChat || activeChat.id !== chatId) return;
+    
+    let updated = false;
+    activeChat.messages.forEach(msg => {
+        if (messageIds.includes(msg.id) && !msg.synced) {
+            msg.synced = true;
+            updated = true;
+        }
+    });
+    
+    if (updated) {
+        window.saveHistoriesToLocal();
     }
 };
 
