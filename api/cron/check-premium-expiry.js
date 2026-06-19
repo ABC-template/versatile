@@ -226,7 +226,6 @@ export default async function handler(request) {
     messages_deleted: deletedMessagesCount
   };
   
-  console.log('✅ Cron выполнен:', JSON.stringify(report));
   // ==========================================
 // ФАЗА 4: Автоматическая очистка корзины (30 дней)
 // ==========================================
