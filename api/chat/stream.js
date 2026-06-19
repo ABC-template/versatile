@@ -112,7 +112,7 @@ export default async function handler(request) {
         const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
 
         // ==========================================
-        // СБОРКА СООБЩЕНИЙ ДЛЯ OPENROUTER
+        // ПРАВИЛЬНЫЙ VISION-ФОРМАТ ДЛЯ OPENROUTER
         // ==========================================
         const formattedMessages = [
             { role: 'system', content: finalSystemPrompt }
@@ -135,14 +135,25 @@ export default async function handler(request) {
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
                 if (!textContent) textContent = 'Что изображено на фото?';
                 
-                // OpenRouter принимает URL изображения в тексте сообщения
-                // Используем формат markdown для изображения
-                const visionText = `${textContent}\n\n![image](${attachedImage})`;
-                formattedMessages.push({ role: 'user', content: visionText });
+                // ПРАВИЛЬНЫЙ ФОРМАТ ДЛЯ OPENROUTER VISION
+                // Используем структуру content как массив с типами text и image_url
+                formattedMessages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: textContent },
+                        { 
+                            type: 'image_url', 
+                            image_url: { 
+                                url: attachedImage,
+                                detail: 'high'
+                            } 
+                        }
+                    ]
+                });
             } else {
-                // Пропускаем дублирующиеся сообщения
+                // Проверяем, не было ли уже такого сообщения
                 const lastMsg = formattedMessages[formattedMessages.length - 1];
-                if (lastMsg && lastMsg.role === role && lastMsg.content === textContent) {
+                if (lastMsg && lastMsg.role === role && typeof lastMsg.content === 'string' && lastMsg.content === textContent) {
                     continue;
                 }
                 formattedMessages.push({ role: role, content: textContent });
@@ -150,7 +161,7 @@ export default async function handler(request) {
         }
 
         console.log('📨 [stream.js] formattedMessages length:', formattedMessages.length);
-        console.log('📨 [stream.js] Последнее сообщение:', JSON.stringify(formattedMessages[formattedMessages.length - 1]).substring(0, 500));
+        console.log('📨 [stream.js] Последнее сообщение type:', typeof formattedMessages[formattedMessages.length - 1].content);
 
         const keysPool = getRotatedKeysPool();
         if (keysPool.length === 0) {
