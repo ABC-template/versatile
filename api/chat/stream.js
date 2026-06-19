@@ -77,7 +77,7 @@ export default async function handler(request) {
             });
         }
 
-        let openRouterModelId = 'openai/gpt-5.4';
+        let openRouterModelId = 'openai/gpt-5';
         let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
         let temperature = 0.4;
 
