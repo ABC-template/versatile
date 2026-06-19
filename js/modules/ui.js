@@ -494,3 +494,403 @@ window.showSyncStatus = function(status, isError = false) {
         indicator.innerHTML = '<span style="color: #e74c3c;">⚠️ офлайн</span>';
     }
 };
+// ==========================================
+// КОРЗИНА: ОТКРЫТЬ / ЗАКРЫТЬ
+// ==========================================
+
+window.openTrashModal = function() {
+    const modal = document.getElementById('trash-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.remove('hidden');
+        window.loadTrashItems();
+    }
+};
+
+window.closeTrashModal = function() {
+    const modal = document.getElementById('trash-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+    }
+};
+
+// ==========================================
+// КОРЗИНА: ЗАГРУЗИТЬ ЧАТЫ
+// ==========================================
+
+window.loadTrashItems = async function() {
+    const list = document.getElementById('trash-list');
+    const empty = document.getElementById('trash-empty');
+    const actions = document.getElementById('trash-actions');
+    const countBadge = document.getElementById('trash-count');
+    
+    if (!list) return;
+    
+    list.innerHTML = '';
+    const initData = window.Telegram?.WebApp?.initData;
+    
+    if (!initData) {
+        empty.style.display = 'block';
+        empty.innerText = '❌ Нет авторизации';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/chats/trash', {
+            headers: { 'X-Telegram-Init-Data': initData }
+        });
+        const data = await response.json();
+        
+        if (!data.success) {
+            empty.style.display = 'block';
+            empty.innerText = '❌ Ошибка загрузки корзины';
+            return;
+        }
+        
+        const deletedChats = data.chats || [];
+        
+        // Обновляем бейдж с количеством
+        if (countBadge) {
+            if (deletedChats.length > 0) {
+                countBadge.style.display = 'inline-block';
+                countBadge.innerText = deletedChats.length;
+            } else {
+                countBadge.style.display = 'none';
+            }
+        }
+        
+        if (deletedChats.length === 0) {
+            empty.style.display = 'block';
+            empty.innerText = '🗑️ Корзина пуста';
+            actions.style.display = 'none';
+            return;
+        }
+        
+        empty.style.display = 'none';
+        actions.style.display = 'block';
+        
+        // Группируем по темам
+        const grouped = {};
+        const topicNames = window.topicNames || {};
+        
+        for (const chat of deletedChats) {
+            const topic = chat.topic_id || 'fast';
+            if (!grouped[topic]) grouped[topic] = [];
+            grouped[topic].push(chat);
+        }
+        
+        // Сортируем темы
+        const sortedTopics = Object.keys(grouped).sort();
+        
+        for (const topic of sortedTopics) {
+            const chats = grouped[topic];
+            const topicName = topicNames[topic] || topic;
+            
+            // Заголовок темы
+            const topicHeader = document.createElement('div');
+            topicHeader.style.cssText = 'font-size:12px; font-weight:600; color:var(--hint-color); margin-top:8px; margin-bottom:4px; padding-left:4px;';
+            topicHeader.innerText = `📁 ${topicName} (${chats.length})`;
+            list.appendChild(topicHeader);
+            
+            // Чаты в теме
+            for (const chat of chats) {
+                const item = document.createElement('div');
+                item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--secondary-bg); border-radius:12px; margin-bottom:4px; animation:fadeInUp 0.2s ease;';
+                
+                const date = new Date(chat.deleted_at);
+                const dateStr = date.toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' });
+                
+                const info = document.createElement('div');
+                info.style.cssText = 'flex:1; overflow:hidden; min-width:0;';
+                info.innerHTML = `
+                    <div style="font-weight:500; font-size:13px; color:var(--text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${chat.title || 'Без названия'}
+                    </div>
+                    <div style="font-size:10px; color:var(--hint-color);">
+                        🗑️ ${dateStr}
+                    </div>
+                `;
+                
+                const actionsGroup = document.createElement('div');
+                actionsGroup.style.cssText = 'display:flex; gap:6px; flex-shrink:0; margin-left:8px;';
+                
+                // Кнопка "Восстановить"
+                const restoreBtn = document.createElement('button');
+                restoreBtn.innerText = '↩️';
+                restoreBtn.style.cssText = 'background:rgba(46,204,113,0.1); border:none; border-radius:8px; padding:6px 10px; cursor:pointer; font-size:14px; transition:all 0.15s ease;';
+                restoreBtn.title = 'Восстановить чат';
+                restoreBtn.onmouseenter = () => { restoreBtn.style.transform = 'scale(1.05)'; };
+                restoreBtn.onmouseleave = () => { restoreBtn.style.transform = 'scale(1)'; };
+                restoreBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const confirmMsg = `Восстановить чат "${chat.title}"?`;
+                    if (window.tg?.showConfirm) {
+                        window.tg.showConfirm(confirmMsg, async (ok) => {
+                            if (ok) await window.restoreChatFromTrash(chat.id);
+                        });
+                    } else if (confirm(confirmMsg)) {
+                        await window.restoreChatFromTrash(chat.id);
+                    }
+                };
+                
+                // Кнопка "Удалить навсегда"
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerText = '🗑️';
+                deleteBtn.style.cssText = 'background:rgba(231,76,60,0.1); border:none; border-radius:8px; padding:6px 10px; cursor:pointer; font-size:14px; transition:all 0.15s ease;';
+                deleteBtn.title = 'Удалить навсегда';
+                deleteBtn.onmouseenter = () => { deleteBtn.style.transform = 'scale(1.05)'; };
+                deleteBtn.onmouseleave = () => { deleteBtn.style.transform = 'scale(1)'; };
+                deleteBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const confirmMsg = `Удалить чат "${chat.title}" навсегда? Это действие необратимо!`;
+                    if (window.tg?.showConfirm) {
+                        window.tg.showConfirm(confirmMsg, async (ok) => {
+                            if (ok) await window.permanentDeleteChat(chat.id);
+                        });
+                    } else if (confirm(confirmMsg)) {
+                        await window.permanentDeleteChat(chat.id);
+                    }
+                };
+                
+                actionsGroup.appendChild(restoreBtn);
+                actionsGroup.appendChild(deleteBtn);
+                
+                item.appendChild(info);
+                item.appendChild(actionsGroup);
+                list.appendChild(item);
+            }
+        }
+        
+    } catch (err) {
+        console.error('Ошибка загрузки корзины:', err);
+        empty.style.display = 'block';
+        empty.innerText = '❌ Ошибка: ' + err.message;
+    }
+};
+
+// ==========================================
+// КОРЗИНА: ВОССТАНОВИТЬ ЧАТ
+// ==========================================
+
+window.restoreChatFromTrash = async function(chatId) {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) {
+        if (window.tg?.showAlert) window.tg.showAlert('❌ Нет авторизации');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/chats/trash', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': initData
+            },
+            body: JSON.stringify({ id: chatId, type: 'chat' })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log(`✅ Чат ${chatId} восстановлен`);
+            
+            // Загружаем чат с сервера
+            if (typeof window.loadFullChat === 'function') {
+                await window.loadFullChat(chatId);
+            }
+            
+            // Обновляем UI
+            if (typeof window.renderHistoryChatsList === 'function') {
+                window.renderHistoryChatsList();
+            }
+            
+            // Обновляем корзину
+            window.loadTrashItems();
+            
+            if (window.tg?.showAlert) {
+                window.tg.showAlert('✅ Чат восстановлен');
+            }
+        } else {
+            console.error('Ошибка восстановления:', data.error);
+            if (window.tg?.showAlert) {
+                window.tg.showAlert('❌ ' + (data.error || 'Ошибка восстановления'));
+            }
+        }
+    } catch (err) {
+        console.error('Ошибка восстановления:', err);
+        if (window.tg?.showAlert) {
+            window.tg.showAlert('❌ ' + err.message);
+        }
+    }
+};
+
+// ==========================================
+// КОРЗИНА: УДАЛИТЬ НАВСЕГДА (ОДИН ЧАТ)
+// ==========================================
+
+window.permanentDeleteChat = async function(chatId) {
+    const deviceFingerprint = window.getDeviceFingerprint();
+    const initData = window.Telegram?.WebApp?.initData;
+    
+    if (!initData || !deviceFingerprint) {
+        if (window.tg?.showAlert) window.tg.showAlert('❌ Нет данных для удаления');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/chats/trash', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': initData
+            },
+            body: JSON.stringify({
+                id: chatId,
+                type: 'chat',
+                deviceFingerprint: deviceFingerprint
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log(`🗑️ Чат ${chatId} удалён навсегда`);
+            
+            // Удаляем из локального хранилища
+            for (const topic of ['code', 'creative', 'fast', 'kitchen']) {
+                if (window.chatHistories[topic]) {
+                    window.chatHistories[topic] = window.chatHistories[topic].filter(c => c.id !== chatId);
+                }
+            }
+            window.saveHistoriesToLocal();
+            
+            // Обновляем UI
+            if (typeof window.renderHistoryChatsList === 'function') {
+                window.renderHistoryChatsList();
+            }
+            
+            // Обновляем корзину
+            window.loadTrashItems();
+            
+            if (window.tg?.showAlert) {
+                window.tg.showAlert('🗑️ Чат удалён навсегда');
+            }
+        } else {
+            console.error('Ошибка удаления:', data.error);
+            if (window.tg?.showAlert) {
+                window.tg.showAlert('❌ ' + (data.error || 'Ошибка удаления'));
+            }
+        }
+    } catch (err) {
+        console.error('Ошибка удаления:', err);
+        if (window.tg?.showAlert) {
+            window.tg.showAlert('❌ ' + err.message);
+        }
+    }
+};
+
+// ==========================================
+// КОРЗИНА: ОЧИСТИТЬ ВСЮ КОРЗИНУ
+// ==========================================
+
+window.clearAllTrash = async function() {
+    const confirmMsg1 = 'Вы уверены, что хотите очистить всю корзину?';
+    const confirmMsg2 = '⚠️ Это действие необратимо! Все чаты из корзины будут удалены навсегда. Продолжить?';
+    
+    const doClear = () => {
+        if (window.tg?.showConfirm) {
+            window.tg.showConfirm(confirmMsg2, async (ok) => {
+                if (ok) await window.executeClearAllTrash();
+            });
+        } else if (confirm(confirmMsg2)) {
+            window.executeClearAllTrash();
+        }
+    };
+    
+    if (window.tg?.showConfirm) {
+        window.tg.showConfirm(confirmMsg1, (ok) => {
+            if (ok) doClear();
+        });
+    } else if (confirm(confirmMsg1)) {
+        doClear();
+    }
+};
+
+window.executeClearAllTrash = async function() {
+    const initData = window.Telegram?.WebApp?.initData;
+    const deviceFingerprint = window.getDeviceFingerprint();
+    
+    if (!initData || !deviceFingerprint) {
+        if (window.tg?.showAlert) window.tg.showAlert('❌ Нет данных для очистки');
+        return;
+    }
+    
+    try {
+        // Получаем список всех чатов в корзине
+        const response = await fetch('/api/chats/trash', {
+            headers: { 'X-Telegram-Init-Data': initData }
+        });
+        const data = await response.json();
+        
+        if (!data.success || !data.chats || data.chats.length === 0) {
+            if (window.tg?.showAlert) window.tg.showAlert('Корзина уже пуста');
+            return;
+        }
+        
+        let deletedCount = 0;
+        
+        for (const chat of data.chats) {
+            try {
+                const delResponse = await fetch('/api/chats/trash', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': initData
+                    },
+                    body: JSON.stringify({
+                        id: chat.id,
+                        type: 'chat',
+                        deviceFingerprint: deviceFingerprint
+                    })
+                });
+                
+                const delData = await delResponse.json();
+                if (delData.success) {
+                    deletedCount++;
+                    
+                    // Удаляем из локального хранилища
+                    for (const topic of ['code', 'creative', 'fast', 'kitchen']) {
+                        if (window.chatHistories[topic]) {
+                            window.chatHistories[topic] = window.chatHistories[topic].filter(c => c.id !== chat.id);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Ошибка удаления чата:', err);
+            }
+        }
+        
+        window.saveHistoriesToLocal();
+        
+        // Обновляем UI
+        if (typeof window.renderHistoryChatsList === 'function') {
+            window.renderHistoryChatsList();
+        }
+        
+        // Обновляем корзину
+        window.loadTrashItems();
+        
+        if (window.tg?.showAlert) {
+            window.tg.showAlert(`🗑️ Удалено ${deletedCount} чатов навсегда`);
+        }
+        
+    } catch (err) {
+        console.error('Ошибка очистки корзины:', err);
+        if (window.tg?.showAlert) {
+            window.tg.showAlert('❌ ' + err.message);
+        }
+    }
+};
+
+console.log('✅ UI: функции корзины загружены');
