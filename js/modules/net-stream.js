@@ -1,45 +1,65 @@
-// js/modules/net-stream.js - ПОЛНОСТЬЮ ПЕРЕПИСАНА
+// js/modules/net-stream.js - ИСПРАВЛЕННАЯ ВЕРСИЯ (с сохранением разметки)
 
-console.log("✅ net-stream.js загружен (исправленная версия)");
-
-// ==========================================
-// ДОБАВЛЕНО: НАСТРОЙКА marked.js С САНИТАЙЗИНГОМ
-// ==========================================
-if (typeof marked !== 'undefined') {
-    // Настройка marked для безопасного рендеринга
-    marked.setOptions({
-        breaks: true,
-        gfm: true,
-        headerIds: false,
-        mangle: false
-    });
-    
-    // Сохраняем оригинальный parse
-    const originalParse = marked.parse;
-    
-    // Переопределяем parse с санитайзингом
-    marked.parse = function(src, options) {
-        const html = originalParse(src, options);
-        // Базовая санитизация — удаляем потенциально опасные теги
-        const temp = document.createElement('div');
-        temp.textContent = html;
-        // Возвращаем только безопасный текст
-        return temp.innerHTML;
-    };
-    
-    console.log('✅ marked.js настроен с санитайзингом');
-}
+console.log("✅ net-stream.js загружен (исправленная версия с сохранением разметки)");
 
 // ==========================================
-// ДОБАВЛЕНО: ДОПОЛНИТЕЛЬНАЯ ФУНКЦИЯ САНИТАЙЗИНГА
+// ДОБАВЛЕНО: БЕЗОПАСНАЯ САНИТАЙЗАЦИЯ ЧЕРЕЗ DOMPurify (имитация)
 // ==========================================
-function sanitizeHTML(html) {
+
+// Простая, но безопасная санитайзация — разрешаем только безопасные теги
+function safeSanitizeHTML(html) {
     if (!html) return '';
-    // Удаляем потенциально опасные теги и атрибуты
-    const temp = document.createElement('div');
-    temp.textContent = html;
-    return temp.innerHTML;
+    
+    // Список разрешённых тегов и атрибутов
+    const ALLOWED_TAGS = [
+        'p', 'br', 'strong', 'em', 'u', 'i', 'b', 
+        'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'blockquote', 
+        'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'span', 'div', 'img', 'hr', 'sub', 'sup'
+    ];
+    
+    const ALLOWED_ATTR = ['href', 'target', 'class', 'id', 'style', 'src', 'alt', 'title', 'rel'];
+    
+    // Используем DOMPurify если доступен, иначе встроенный санитайзер
+    if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(html, {
+            ALLOWED_TAGS: ALLOWED_TAGS,
+            ALLOWED_ATTR: ALLOWED_ATTR,
+            ADD_ATTR: ['target'],
+            FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button']
+        });
+    }
+    
+    // Fallback: простая санитайзация через DOM
+    try {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        
+        // Удаляем опасные теги
+        const dangerous = temp.querySelectorAll('script, style, iframe, object, embed, form, input, button');
+        dangerous.forEach(el => el.remove());
+        
+        // Обрабатываем ссылки — добавляем target="_blank" и rel="noopener"
+        const links = temp.querySelectorAll('a[href]');
+        links.forEach(link => {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+        });
+        
+        return temp.innerHTML;
+    } catch (e) {
+        console.warn('Ошибка санитайзации, возвращаем текст:', e);
+        // В крайнем случае — экранируем HTML
+        const div = document.createElement('div');
+        div.textContent = html;
+        return div.innerHTML;
+    }
 }
+
+// ==========================================
+// ФУНКЦИЯ СТРИМА
+// ==========================================
 
 window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
     console.log('🎯 streamAiResponse вызвана!');
@@ -115,13 +135,14 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
             }
 
             // ==========================================
-            // ИСПРАВЛЕНО: БЕЗОПАСНЫЙ РЕНДЕРИНГ С САНИТАЙЗИНГОМ
+            // ИСПРАВЛЕНО: БЕЗОПАСНЫЙ РЕНДЕРИНГ С СОХРАНЕНИЕМ РАЗМЕТКИ
             // ==========================================
             if (typeof marked !== 'undefined') {
                 try {
+                    // Сначала парсим Markdown в HTML
                     const rawHTML = marked.parse(accumulatedText);
-                    // Двойная санитизация через DOM
-                    const safeHTML = sanitizeHTML(rawHTML);
+                    // Затем безопасно санитайзим HTML
+                    const safeHTML = safeSanitizeHTML(rawHTML);
                     msgDiv.innerHTML = safeHTML;
                 } catch (markErr) {
                     console.warn('Ошибка marked, используем textContent:', markErr);
@@ -154,7 +175,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
             if (typeof marked !== 'undefined') {
                 try {
                     const rawHTML = marked.parse(disconnectNotice);
-                    const safeHTML = sanitizeHTML(rawHTML);
+                    const safeHTML = safeSanitizeHTML(rawHTML);
                     msgDiv.innerHTML = safeHTML;
                 } catch {
                     msgDiv.textContent = disconnectNotice;
@@ -171,6 +192,10 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
         return false;
     }
 };
+
+// ==========================================
+// ФИНАЛИЗАЦИЯ СООБЩЕНИЯ
+// ==========================================
 
 function finalizeStreamMessage(msgDiv, finalText, activeChat) {
     const generatedAiMsgId = window.generateUUID();
@@ -214,4 +239,4 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
     }
 }
 
-console.log("✅ net-stream.js полностью загружен с санитайзингом");
+console.log("✅ net-stream.js полностью загружен с сохранением разметки");
