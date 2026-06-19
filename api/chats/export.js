@@ -1,9 +1,10 @@
 // api/chats/export.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { getSupabaseConfig } from '../_lib/supabase-client.js';
 
 export const config = { runtime: 'edge' };
 
-const MAX_EXPORT_SIZE_BYTES = 4000000;
+const MAX_EXPORT_SIZE_BYTES = 10000000; // 10MB (увеличено)
 const MAX_MESSAGES_PER_CHUNK = 1000;
 
 export default async function handler(request) {
@@ -33,6 +34,14 @@ export default async function handler(request) {
       if (!user) throw new Error('Invalid init data');
       
       userId = user.id;
+      
+      // ==========================================
+      // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
+      // ==========================================
+      if (!Number.isInteger(userId) || userId <= 0) {
+        throw new Error('Invalid user ID');
+      }
+      
       isAuthenticated = true;
     } catch (err) {
       console.error('Auth error:', err);
@@ -155,7 +164,7 @@ export default async function handler(request) {
       }), { status: 200, headers: corsHeaders });
       
     } catch (err) {
-      console.error('Local export error:', err);
+      console.error('Local export error:', err.message);
       return new Response(JSON.stringify({ error: err.message }), { 
         status: 500, 
         headers: corsHeaders 
@@ -164,19 +173,16 @@ export default async function handler(request) {
   }
 
   // ==========================================
-  // ОБЛАЧНЫЙ ЭКСПОРТ (только для PRO и grace period)
+  // ОБЛАЧНЫЙ ЭКСПОРТ (только для PRO)
   // ==========================================
   try {
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-    
-    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
+    const config = getSupabaseConfig();
 
     async function supabaseFetch(path, options = {}) {
-      const url = `${supabaseUrl}/rest/v1/${path}`;
+      const url = `${config.url}/rest/v1/${path}`;
       const headers = {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': config.key,
+        'Authorization': `Bearer ${config.key}`,
         'Content-Type': 'application/json',
       };
       const res = await fetch(url, { ...options, headers });
@@ -208,7 +214,7 @@ export default async function handler(request) {
     if (!isPro && !hasGracePeriod) {
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'Скачивание облачного архива доступно только PRO-пользователям или в течение 7 дней после окончания подписки.',
+        error: 'Скачивание облачного архива доступно только PRO-пользователям',
         fallbackToLocal: true
       }), { status: 403, headers: corsHeaders });
     }
@@ -219,10 +225,6 @@ export default async function handler(request) {
     let totalMessages = 0;
 
     if (chats.length > 0) {
-      // ==========================================
-      // БЕЗОПАСНАЯ ЗАГРУЗКА СООБЩЕНИЙ
-      // Загружаем сообщения для каждого чата по отдельности
-      // ==========================================
       let allMessages = [];
       
       for (const chat of chats) {
@@ -245,7 +247,7 @@ export default async function handler(request) {
             }
           }
         } catch (err) {
-          console.error(`Ошибка загрузки сообщений для чата ${chat.id}:`, err);
+          console.error(`Ошибка загрузки сообщений для чата ${chat.id}:`, err.message);
         }
       }
       
@@ -339,7 +341,6 @@ export default async function handler(request) {
       });
     }
     
-    // Отдаем одним файлом
     return new Response(archiveJson, { 
       status: 200, 
       headers: {
@@ -349,7 +350,7 @@ export default async function handler(request) {
     });
 
   } catch (err) {
-    console.error('Cloud export error:', err);
+    console.error('Cloud export error:', err.message);
     return new Response(JSON.stringify({ 
       error: err.message,
       fallbackToLocal: true
