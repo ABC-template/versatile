@@ -2,7 +2,11 @@ import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
 
-// Быстрая конвертация бинарного потока в чистую Base64-строку
+// ==========================================
+// ДОБАВЛЕНО: ОГРАНИЧЕНИЕ РАЗМЕРА АУДИО
+// ==========================================
+const MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
 function bufferToBase64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     let binary = '';
@@ -16,7 +20,6 @@ function bufferToBase64(arrayBuffer) {
     return btoa(binary);
 }
 
-// Извлечение всех доступных ключей из переменных окружения Vercel
 function getRotatedKeysPool() {
     const keys = [];
     let i = 0;
@@ -33,7 +36,7 @@ export default async function handler(request) {
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data, X-Audio-Type',
     };
 
     if (request.method === 'OPTIONS') {
@@ -47,7 +50,6 @@ export default async function handler(request) {
     }
 
     try {
-        // 🔒 Проверка авторизации Telegram InitData
         const initData = request.headers.get('x-telegram-init-data');
         if (!initData) {
             return new Response(JSON.stringify({ error: 'Missing init data' }), {
@@ -72,6 +74,17 @@ export default async function handler(request) {
             });
         }
 
+        // ==========================================
+        // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
+        // ==========================================
+        const userId = user.id;
+        if (!Number.isInteger(userId) || userId <= 0) {
+            return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+        }
+
         const arrayBuffer = await request.arrayBuffer();
         if (!arrayBuffer || arrayBuffer.byteLength === 0) {
             return new Response(JSON.stringify({ error: 'Аудиоданные пустые.' }), { 
@@ -79,14 +92,25 @@ export default async function handler(request) {
             });
         }
 
+        // ==========================================
+        // ДОБАВЛЕНО: ПРОВЕРКА РАЗМЕРА АУДИО
+        // ==========================================
+        if (arrayBuffer.byteLength > MAX_AUDIO_SIZE_BYTES) {
+            const sizeMB = (arrayBuffer.byteLength / (1024 * 1024)).toFixed(1);
+            return new Response(JSON.stringify({ 
+                error: `Аудиофайл слишком большой (${sizeMB}MB). Максимум 5MB.` 
+            }), { 
+                status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+            });
+        }
+
         const base64Audio = bufferToBase64(arrayBuffer);
 
-        // Строгое соответствие спецификации OpenRouter Multimodal Audio Input
         const requestBody = {
             model: 'openai/whisper-large-v3-turbo', 
             input_audio: {
                 data: base64Audio,
-                format: 'wav' // Фиксируем wav для 100% стабильности распознавания на сервере
+                format: 'wav'
             }
         };
 
@@ -138,17 +162,18 @@ export default async function handler(request) {
             } catch (err) {
                 console.error(`Сбой расшифровки Whisper с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
-                continue; // Failover: тихо переключаемся на следующий ключ ротации
+                continue;
             }
         }
 
         return new Response(JSON.stringify({ 
-            error: `Модуль аудио перегружен. Детали ошибки: ${lastError?.message || 'Все ключи пула отклонены'}` 
+            error: `Модуль аудио перегружен. Детали: ${lastError?.message || 'Все ключи пула отклонены'}` 
         }), { 
             status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
         });
 
     } catch (err) {
+        console.error("Edge Runtime Audio Exception:", err.message);
         return new Response(JSON.stringify({ error: `Edge Runtime Audio Exception: ${err.message}` }), { 
             status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
         });
