@@ -10,7 +10,7 @@
     img-src 'self' data: https://gravatar.com https://*.t.me;
     connect-src 'self' https://api.telegram.org https://openrouter.ai;
     font-src 'self';
-"-->
+">-->
     <title>Versatile TMA</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
@@ -50,7 +50,12 @@
                 <div id="tab-chats" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">Ваши диалоги:</p>
-                        <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.createNewChat()">+ Новый чат</button>
+                        <div style="display: flex; gap: 6px;">
+                            <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.createNewChat()">+ Новый чат</button>
+                            <button id="trash-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px; background: rgba(231,76,60,0.1); color: #e74c3c; display: flex; align-items: center; gap: 4px;" onclick="window.openTrashModal()">
+                                🗑️ <span id="trash-count" style="font-size: 10px; background: #e74c3c; color: white; border-radius: 50%; padding: 1px 6px; min-width: 18px; text-align: center; display: none;">0</span>
+                            </button>
+                        </div>
                     </div>
                     <div id="history-chats-list"></div>
                 </div>
@@ -64,7 +69,6 @@
                     <div class="modal-sticky-header">
                         <p id="organizer-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">📅 Органайзер Прогресса</p>
                     </div>
-                    <!-- Динамические контейнеры для каждого модуля -->
                     <div id="todo-module-container" style="margin-bottom: 20px;"></div>
                     <div id="scheduler-module-container" style="margin-bottom: 20px;"></div>
                     <div id="tracker-module-container" style="margin-bottom: 20px;"></div>
@@ -72,7 +76,6 @@
             </div>
             <div id="dynamic-key-area">
                 <div id="sub-footer-key" class="hidden">
-                    <!-- КНОПКА BETA VERSION ВМЕСТО ПОЛЯ ВВОДА КЛЮЧЕЙ -->
                     <div style="width: 100%; padding: 10px; border-radius: 12px; background: rgba(var(--tg-theme-button-color, 0, 136, 204), 0.08); border: 1px dashed var(--button-color); color: var(--button-color); font-size: 13px; font-weight: 600; text-align: center; box-sizing: border-box;">
                         🚀 Versatile AI — Beta Version
                     </div>
@@ -89,6 +92,32 @@
             </div>
         </div>
     </div>
+
+    <!-- ========================================== -->
+    <!-- МОДАЛКА КОРЗИНЫ -->
+    <!-- ========================================== -->
+    <div id="trash-modal" class="hidden" style="position:fixed; top:0; left:0; width:100vw; height:100dvh; background:rgba(0,0,0,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:2000; display:none; align-items:center; justify-content:center; box-sizing:border-box; padding:20px;">
+        <div style="background:var(--bg-color); border-radius:24px; padding:20px; width:100%; max-width:420px; max-height:80dvh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-shrink:0;">
+                <h3 style="margin:0; color:var(--text-color); font-size:18px;">🗑️ Корзина</h3>
+                <button onclick="window.closeTrashModal()" style="background:transparent; border:none; font-size:22px; cursor:pointer; color:var(--hint-color); padding:0 4px;">✕</button>
+            </div>
+            
+            <div id="trash-list" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; min-height:100px;">
+                <!-- Сюда рендерятся удалённые чаты -->
+            </div>
+            
+            <p id="trash-empty" style="text-align:center; color:var(--hint-color); font-size:13px; margin:20px 0; display:none;">Корзина пуста</p>
+            
+            <div id="trash-actions" style="display:none; flex-shrink:0; margin-top:16px; border-top:1px solid rgba(0,0,0,0.06); padding-top:16px;">
+                <button class="btn" style="width:100%; padding:12px; border-radius:12px; font-size:13px; font-weight:600; background:rgba(231,76,60,0.08); color:#e74c3c; border:1px solid rgba(231,76,60,0.2);" onclick="window.clearAllTrash()">
+                    🗑️ Очистить корзину полностью
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- ========================================== -->
+
     <div id="guest-screen" class="hidden">
         <h1 id="error-title">Доступ ограничен</h1>
         <p id="joke-text">Проверка статуса подписки...</p>
@@ -119,7 +148,6 @@
     <script src="js/core/locale.js"></script>
     <script src="js/config.js"></script>
     <script src="js/core/storage.js"></script>
-    <!-- ПОДКЛЮЧЕНИЕ ТРЕХ ИЗОЛИРОВАННЫХ МОДУЛЕЙ ОРГАНАЙЗЕРА -->
     <script src="js/modules/net-todo.js"></script>
     <script src="js/modules/net-scheduler.js"></script>
     <script src="js/modules/net-tracker.js"></script>
@@ -130,16 +158,11 @@
     <script src="js/modules/net-voice.js"></script>
     <script src="js/modules/net-stream.js"></script>
     <script src="js/modules/net-chat.js"></script>
-    <!-- После net-sync.js, до app.js -->
     <script src="js/modules/sync/offline-handler.js"></script>
     <script src="js/modules/sync/device-manager.js"></script>
     <script src="js/modules/sync/pending-handler.js"></script>
     <script src="js/modules/trash/trash-manager.js"></script>
     <script src="js/core/app.js"></script>
-    <!-- Экспорт архивов -->
     <script src="js/modules/export-local.js"></script>
 </body>
 </html>
-
-
-        
