@@ -1,12 +1,25 @@
-// api/chats/action.js - ЧАСТЬ 1
+// api/chats/action.js - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 import { scheduleSilentPush } from '../_lib/send-push.js';
 import { isValidUUID, validateChatId, validateMessageId } from '../_lib/validate-uuid.js';
 
 export const config = { runtime: 'edge' };
 
+// ==========================================
+// ДОБАВЛЕНО: СПИСОК РАЗРЕШЁННЫХ ТЕМ
+// ==========================================
+const ALLOWED_TOPICS = ['code', 'creative', 'fast', 'kitchen', 'analytics'];
+
 function generateUUID() {
     return crypto.randomUUID();
+}
+
+// ==========================================
+// ДОБАВЛЕНО: ВАЛИДАЦИЯ TOPIC_ID
+// ==========================================
+function validateTopicId(topicId) {
+    if (!topicId) return true; // topicId может отсутствовать
+    return ALLOWED_TOPICS.includes(topicId);
 }
 
 export default async function handler(request) {
@@ -47,6 +60,17 @@ export default async function handler(request) {
     if (!user) throw new Error('Invalid init data');
     
     const userId = user.id;
+    
+    // ==========================================
+    // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
+    // ==========================================
+    if (!Number.isInteger(userId) || userId <= 0) {
+        return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
+            status: 401,
+            headers: corsHeaders
+        });
+    }
+    
     const deviceFingerprint = request.headers.get('x-device-fingerprint') || body.deviceFingerprint || null;
     
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -112,7 +136,6 @@ export default async function handler(request) {
     if (action === 'new_message') {
       console.log("🔥 [new_message] Начало обработки", { chatId, userId, messageId: message?.id });
 
-      // ВАЛИДАЦИЯ CHAT_ID (если передан)
       if (chatId && !isValidUUID(chatId)) {
         return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
           status: 400,
@@ -148,6 +171,17 @@ export default async function handler(request) {
         }
         
         const chatTopic = body.topicId || 'fast';
+        
+        // ==========================================
+        // ДОБАВЛЕНО: ВАЛИДАЦИЯ TOPIC_ID
+        // ==========================================
+        if (!validateTopicId(chatTopic)) {
+          return new Response(JSON.stringify({ error: 'Invalid topic' }), {
+            status: 400,
+            headers: corsHeaders
+          });
+        }
+        
         const chatTitle = body.chatTitle || `Чат в разделе ${chatTopic}`;
         const chatMaxContext = body.maxContext || 15;
         const chatUserRenamed = body.userRenamed || false;
@@ -184,7 +218,6 @@ export default async function handler(request) {
       }
       
       if (chatExists && message) {
-        // ВАЛИДАЦИЯ ID СООБЩЕНИЯ
         if (message.id && !isValidUUID(message.id)) {
           return new Response(JSON.stringify({ error: 'Invalid message ID format' }), {
             status: 400,
@@ -241,7 +274,7 @@ export default async function handler(request) {
           }), { status: 200, headers: corsHeaders });
           
         } catch (msgErr) {
-          console.error("❌ Ошибка при сохранении сообщения:", msgErr);
+          console.error("❌ Ошибка при сохранении сообщения:", msgErr.message);
           if (msgErr.message && (msgErr.message.includes('duplicate key') || msgErr.message.includes('409'))) {
             return new Response(JSON.stringify({ success: true, synced: true }), { status: 200, headers: corsHeaders });
           }
@@ -267,7 +300,6 @@ export default async function handler(request) {
     if (action === 'batch_messages') {
       const { chatId: batchChatId, topicId, chatTitle, maxContext, userRenamed, messages: batchMessages } = body;
       
-      // ВАЛИДАЦИЯ CHAT_ID
       if (batchChatId && !isValidUUID(batchChatId)) {
         return new Response(JSON.stringify({ error: 'Invalid chat ID format' }), {
           status: 400,
@@ -275,7 +307,16 @@ export default async function handler(request) {
         });
       }
       
-      // ВАЛИДАЦИЯ КАЖДОГО MESSAGE ID
+      // ==========================================
+      // ДОБАВЛЕНО: ВАЛИДАЦИЯ TOPIC_ID
+      // ==========================================
+      if (!validateTopicId(topicId)) {
+        return new Response(JSON.stringify({ error: 'Invalid topic' }), {
+          status: 400,
+          headers: corsHeaders
+        });
+      }
+      
       if (batchMessages && Array.isArray(batchMessages)) {
         for (const msg of batchMessages) {
           if (msg.id && !isValidUUID(msg.id)) {
@@ -371,14 +412,12 @@ export default async function handler(request) {
         status: 200, 
         headers: corsHeaders 
       });
-      }
-      // api/chats/action.js - ЧАСТЬ 2 (продолжение)
+    }
     
     // ==========================================
     // УДАЛЕНИЕ ЧАТА
     // ==========================================
     if (action === 'delete_chat') {
-      // ВАЛИДАЦИЯ
       const validationError = validateChatId(chatId, corsHeaders);
       if (validationError) return validationError;
       
@@ -412,7 +451,6 @@ export default async function handler(request) {
     // УДАЛЕНИЕ СООБЩЕНИЯ
     // ==========================================
     if (action === 'delete_message') {
-      // ВАЛИДАЦИЯ
       const chatValidationError = validateChatId(chatId, corsHeaders);
       if (chatValidationError) return chatValidationError;
       
@@ -462,7 +500,6 @@ export default async function handler(request) {
     // ПЕРЕИМЕНОВАНИЕ ЧАТА
     // ==========================================
     if (action === 'rename_chat') {
-      // ВАЛИДАЦИЯ
       const validationError = validateChatId(chatId, corsHeaders);
       if (validationError) return validationError;
       
@@ -496,7 +533,6 @@ export default async function handler(request) {
     // ИЗБРАННОЕ СООБЩЕНИЕ
     // ==========================================
     if (action === 'favorite_message') {
-      // ВАЛИДАЦИЯ
       const chatValidationError = validateChatId(chatId, corsHeaders);
       if (chatValidationError) return chatValidationError;
       
@@ -518,112 +554,4 @@ export default async function handler(request) {
         });
       }
       
-      await supabaseFetch(`messages?id=eq.${messageId}&chat_id=eq.${chatId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_favorite: isFavorite })
-      });
-      
-      const botToken = process.env.BOT_TOKEN?.trim();
-      scheduleSilentPush(userId, botToken);
-      
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-    }
     
-    // ==========================================
-    // ОБНОВЛЕНИЕ КОНТЕКСТА (память чата)
-    // ==========================================
-    if (action === 'update_context') {
-      // ВАЛИДАЦИЯ
-      const validationError = validateChatId(chatId, corsHeaders);
-      if (validationError) return validationError;
-      
-      if (!chatId || maxContext === undefined) {
-        return new Response(JSON.stringify({ error: 'Missing chatId or maxContext' }), { 
-          status: 400, 
-          headers: corsHeaders 
-        });
-      }
-      
-      const chatCheck = await supabaseFetch(`chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`);
-      if (!chatCheck || (Array.isArray(chatCheck) && chatCheck.length === 0)) {
-        return new Response(JSON.stringify({ error: 'Access denied' }), { 
-          status: 403, 
-          headers: corsHeaders 
-        });
-      }
-      
-      await supabaseFetch(`chats?id=eq.${chatId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ max_context: maxContext })
-      });
-      
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-    }
-    
-    // ==========================================
-    // НОВЫЙ ЧАТ (ID генерируется на сервере)
-    // ==========================================
-    if (action === 'new_chat') {
-      // ВАЛИДАЦИЯ НЕ ТРЕБУЕТСЯ - ID генерируется на сервере
-      
-      if (!chat) {
-        return new Response(JSON.stringify({ error: 'Missing chat' }), { 
-          status: 400, 
-          headers: corsHeaders 
-        });
-      }
-      
-      const canSync = await canUserSync();
-      if (!canSync) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Создание облачных чатов доступно только PRO-пользователям' 
-        }), { status: 403, headers: corsHeaders });
-      }
-      
-      const newChatId = generateUUID();
-      
-      await supabaseFetch('chats', {
-        method: 'POST',
-        body: JSON.stringify({
-          id: newChatId,
-          user_id: userId,
-          topic_id: chat.topic_id,
-          title: chat.title,
-          max_context: chat.max_context || 15,
-          user_renamed: chat.user_renamed || false,
-        })
-      });
-      
-      let firstMessageId = null;
-      if (firstMessage) {
-        firstMessageId = generateUUID();
-        await supabaseFetch('messages', {
-          method: 'POST',
-          body: JSON.stringify({
-            id: firstMessageId,
-            chat_id: newChatId,
-            msg_type: firstMessage.type,
-            text: firstMessage.text,
-            is_favorite: firstMessage.is_favorite || false,
-          })
-        });
-      }
-      
-      const botToken = process.env.BOT_TOKEN?.trim();
-      scheduleSilentPush(userId, botToken);
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        chatId: newChatId,
-        messageId: firstMessageId
-      }), { status: 200, headers: corsHeaders });
-    }
-    
-    return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders });
-    
-  } catch (err) {
-    console.error('Action handler error:', err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
-  }
-}
