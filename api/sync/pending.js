@@ -1,5 +1,6 @@
 // api/sync/pending.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { getSupabaseConfig } from '../_lib/supabase-client.js';
 
 export const config = { runtime: 'edge' };
 
@@ -45,6 +46,17 @@ export default async function handler(request) {
         }
 
         const userId = user.id;
+        
+        // ==========================================
+        // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
+        // ==========================================
+        if (!Number.isInteger(userId) || userId <= 0) {
+            return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
+                status: 401,
+                headers: corsHeaders
+            });
+        }
+
         const url = new URL(request.url);
         const deviceFingerprint = url.searchParams.get('device');
 
@@ -55,23 +67,14 @@ export default async function handler(request) {
             });
         }
 
-        const supabaseUrl = process.env.SUPABASE_URL?.trim();
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+        const config = getSupabaseConfig();
 
-        if (!supabaseUrl || !supabaseKey) {
-            return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
-                status: 500,
-                headers: corsHeaders
-            });
-        }
-
-        // ПРОСТОЙ ЗАПРОС - без всяких операторов с массивами
-        const allPendingUrl = `${supabaseUrl}/rest/v1/pending_deletions?user_id=eq.${userId}&select=id,entity_type,parent_id,devices_pending`;
+        const allPendingUrl = `${config.url}/rest/v1/pending_deletions?user_id=eq.${userId}&select=id,entity_type,parent_id,devices_pending`;
         
         const response = await fetch(allPendingUrl, {
             headers: {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': config.key,
+                'Authorization': `Bearer ${config.key}`,
             },
         });
 
@@ -82,7 +85,6 @@ export default async function handler(request) {
 
         const allPending = await response.json();
         
-        // Фильтруем в JavaScript
         const pending = (allPending || []).filter(item => {
             if (!item.devices_pending) return false;
             const devices = Array.isArray(item.devices_pending) ? item.devices_pending : [];
@@ -95,7 +97,7 @@ export default async function handler(request) {
         }), { status: 200, headers: corsHeaders });
 
     } catch (err) {
-        console.error('Get pending error:', err);
+        console.error('Get pending error:', err.message);
         return new Response(JSON.stringify({ error: err.message, pending: [] }), {
             status: 500,
             headers: corsHeaders
