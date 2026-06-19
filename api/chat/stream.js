@@ -46,7 +46,7 @@ export default async function handler(request) {
 
         const botToken = process.env.BOT_TOKEN?.trim();
         if (!botToken) {
-            return new Response(JSON.stringify({ error: 'Серверный токен BOT_TOKEN не настроен в Vercel.' }), {
+            return new Response(JSON.stringify({ error: 'BOT_TOKEN not configured' }), {
                 status: 500,
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
@@ -86,7 +86,7 @@ export default async function handler(request) {
         // ==========================================
         let systemPrompt = '';
         let temperature = 0.4;
-        let model = 'openai/gpt-5.4';
+        let model = 'openai/gpt-5';
 
         if (attachedImage && attachedImage.trim().length > 0) {
             systemPrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
@@ -219,10 +219,11 @@ export default async function handler(request) {
                 }
 
                 // ==========================================
-                // ПРАВИЛЬНАЯ ОБРАБОТКА СТРИМА (без TransformStream)
+                // ПРАВИЛЬНЫЙ ПАРСИНГ SSE СТРИМА
                 // ==========================================
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                let buffer = '';
 
                 const readable = new ReadableStream({
                     async start(controller) {
@@ -231,12 +232,17 @@ export default async function handler(request) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
                                 
-                                const chunk = decoder.decode(value);
-                                const lines = chunk.split('\n');
+                                buffer += decoder.decode(value, { stream: true });
+                                
+                                // Разбиваем по строкам
+                                const lines = buffer.split('\n');
+                                // Последняя строка может быть неполной, сохраняем её
+                                buffer = lines.pop() || '';
                                 
                                 for (const line of lines) {
-                                    if (line.startsWith('data: ')) {
-                                        const jsonStr = line.slice(6).trim();
+                                    const trimmedLine = line.trim();
+                                    if (trimmedLine.startsWith('data: ')) {
+                                        const jsonStr = trimmedLine.slice(6).trim();
                                         if (jsonStr === '[DONE]') continue;
                                         
                                         try {
@@ -246,13 +252,15 @@ export default async function handler(request) {
                                                 controller.enqueue(new TextEncoder().encode(content));
                                             }
                                         } catch (e) {
-                                            // Пропускаем некорректный JSON
+                                            // Игнорируем некорректный JSON
+                                            console.warn('⚠️ Пропущен некорректный JSON:', jsonStr.substring(0, 100));
                                         }
                                     }
                                 }
                             }
                             controller.close();
                         } catch (err) {
+                            console.error('❌ Ошибка в стриме:', err);
                             controller.error(err);
                         }
                     }
