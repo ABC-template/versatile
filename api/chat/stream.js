@@ -219,35 +219,46 @@ export default async function handler(request) {
                 }
 
                 // ==========================================
-                // ОБРАБОТКА СТРИМА: парсим JSON и извлекаем только текст
+                // ПРАВИЛЬНАЯ ОБРАБОТКА СТРИМА (без TransformStream)
                 // ==========================================
-                const { readable, writable } = new TransformStream({
-                    transform(chunk, controller) {
-                        const text = new TextDecoder().decode(chunk);
-                        const lines = text.split('\n');
-                        
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const jsonStr = line.slice(6).trim();
-                                if (jsonStr === '[DONE]') continue;
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                const readable = new ReadableStream({
+                    async start(controller) {
+                        try {
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
                                 
-                                try {
-                                    const data = JSON.parse(jsonStr);
-                                    const content = data.choices?.[0]?.delta?.content;
-                                    if (content) {
-                                        controller.enqueue(new TextEncoder().encode(content));
+                                const chunk = decoder.decode(value);
+                                const lines = chunk.split('\n');
+                                
+                                for (const line of lines) {
+                                    if (line.startsWith('data: ')) {
+                                        const jsonStr = line.slice(6).trim();
+                                        if (jsonStr === '[DONE]') continue;
+                                        
+                                        try {
+                                            const data = JSON.parse(jsonStr);
+                                            const content = data.choices?.[0]?.delta?.content;
+                                            if (content) {
+                                                controller.enqueue(new TextEncoder().encode(content));
+                                            }
+                                        } catch (e) {
+                                            // Пропускаем некорректный JSON
+                                        }
                                     }
-                                } catch (e) {
-                                    // Пропускаем некорректный JSON
                                 }
                             }
+                            controller.close();
+                        } catch (err) {
+                            controller.error(err);
                         }
                     }
                 });
 
-                const transformedStream = response.body.pipeThrough(readable);
-
-                return new Response(transformedStream, {
+                return new Response(readable, {
                     headers: {
                         'X-Accel-Buffering': 'no',
                         'Cache-Control': 'no-cache, no-transform',
