@@ -1,4 +1,4 @@
-// js /modules /net-chat.js
+// js/modules/net-chat.js - ИСПРАВЛЕННАЯ ВЕРСИЯ (без заглушки)
 
 // 1. Проверка подписки в Telegram-канале через бэкенд Edge API
 window.checkSubscriptionAndLoad = async function(uid) {
@@ -41,9 +41,8 @@ window.checkSubscriptionAndLoad = async function(uid) {
                 await window.syncChatsMetadata();
             }
             
-            // 🆕 Подписываемся на push-уведомления после успешной авторизации
+            // Push-подписка
             if (typeof window.initPushSubscription === 'undefined') {
-                // Создаём глобальный флаг, чтобы не подписываться дважды
                 window.initPushSubscription = true;
                 
                 if (window.Telegram?.WebApp && window.Telegram.WebApp.onEvent) {
@@ -89,7 +88,7 @@ window.checkSubscriptionAndLoad = async function(uid) {
     }
 };
 
-// 2. Инкремент суточного счетчика использования лимита с записью в CloudStorage
+// 2. Инкремент суточного счетчика использования лимита
 window.incrementUsage = function() {
     window.usedToday++;
     const today = new Date().toLocaleDateString();
@@ -103,8 +102,7 @@ window.incrementUsage = function() {
     if (typeof window.updateLimitDisplay === 'function') window.updateLimitDisplay();
 };
 
-// 3. Главная асинхронная функция отправки сообщений ИИ (с анти-спам блокировкой)
-
+// 3. Главная асинхронная функция отправки сообщений ИИ
 window.sendMessage = async function() {
     if (window.isVoiceRecording) {
         window.isExpressVoiceTarget = true; 
@@ -136,7 +134,6 @@ window.sendMessage = async function() {
 
     const mediaToAttach = window.currentAttachedImageBase64 || null;
     
-    // Отладка
     console.log('📸 [sendMessage] mediaToAttach:', mediaToAttach ? `есть, длина ${mediaToAttach.length}` : 'нет');
     
     if (mediaToAttach) {
@@ -159,20 +156,26 @@ window.sendMessage = async function() {
     const contextMessages = activeChat ? activeChat.messages.slice(-maxContextLimit) : [];
     
     const cleanHistoryMessages = contextMessages.map(msg => ({ type: String(msg.type), text: String(msg.text) }));
+    
     console.log('🔍 ПРОВЕРКА: streamAiResponse тип:', typeof window.streamAiResponse);
-console.log('🔍 ПРОВЕРКА: streamAiResponse тело:', window.streamAiResponse);
 
     try {
         if (typeof window.streamAiResponse === 'function') {
             const userLang = activeChat?.language || window.tg?.initDataUnsafe?.user?.language_code || 'ru';
             
             await window.streamAiResponse(cleanHistoryMessages, window.currentTopic, userLang, mediaToAttach, activeChat);
+        } else {
+            console.error('❌ streamAiResponse не определена!');
+            if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
+            if (typeof window.renderMessageToDOM === 'function') {
+                window.renderMessageToDOM('⚠️ Ошибка: модуль AI не загружен. Обновите страницу.', 'ai-msg');
+            }
         }
     } catch (error) {
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
         console.error("Критический сбой отправки:", error);
         if (typeof window.renderMessageToDOM === 'function') {
-            window.renderMessageToDOM(`Сбой связи с приложением: ${error.message}`, 'ai-msg');
+            window.renderMessageToDOM(`⚠️ Сбой связи с приложением: ${error.message}`, 'ai-msg');
         }
     } finally {
         if (typeof window.clearImageAttachment === 'function') {
@@ -185,13 +188,15 @@ console.log('🔍 ПРОВЕРКА: streamAiResponse тело:', window.streamAi
     }
 };
 
-// ВСПОМОГАТЕЛЬНЫЙ ТУЛТИП ДЛЯ ИКОНОК
+// ==========================================
+// ОСТАЛЬНЫЕ ФУНКЦИИ БЕЗ ИЗМЕНЕНИЙ
+// ==========================================
+
 function triggerTooltip(btn) {
     btn.classList.add('show-tip');
     setTimeout(() => { btn.classList.remove('show-tip'); }, 1200);
 }
 
-// 4. ФУНКЦИЯ КОПИРОВАНИЯ ТЕКСТА ОТВЕТА AI
 window.copyMsgText = function(btn, msgId) {
     let foundMsg = null;
     Object.keys(window.chatHistories).forEach(tId => {
@@ -209,7 +214,6 @@ window.copyMsgText = function(btn, msgId) {
     });
 };
 
-// 5. ФУНКЦИЯ ГЕНЕРАЦИИ ССЫЛКИ ШЕРИНГА В ТЕЛЕГРАМ
 window.shareMsgText = function(btn, msgId) {
     let foundMsg = null;
     Object.keys(window.chatHistories).forEach(tId => {
@@ -220,7 +224,6 @@ window.shareMsgText = function(btn, msgId) {
     });
     if (!foundMsg) return;
 
-    // Ссылка оформлена с пробелами перед косой чертой
     const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(foundMsg.text)}`;
     
     triggerTooltip(btn);
@@ -231,13 +234,11 @@ window.shareMsgText = function(btn, msgId) {
     }, 300);
 };
 
-// 6. ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ИЗБРАННОГО (с синхронизацией)
 window.toggleFavoriteMsg = async function(btn, msgId) {
     let foundMsg = null;
     let foundChat = null;
     let foundTopic = null;
     
-    // Находим сообщение и чат, которому оно принадлежит
     for (const [topicId, chats] of Object.entries(window.chatHistories)) {
         for (const chat of chats) {
             const msg = (chat.messages || []).find(m => m.id === msgId);
@@ -253,7 +254,6 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
     
     if (!foundMsg) return;
 
-    // Переключаем статус избранного
     foundMsg.isFavorite = !foundMsg.isFavorite;
     const heartSpan = btn.querySelector('.icon-heart');
 
@@ -270,7 +270,6 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
     triggerTooltip(btn);
     window.saveHistoriesToLocal();
     
-    // СИНХРОНИЗАЦИЯ С ОБЛАКОМ (если включена)
     if (window.config.syncEnabled && foundChat && foundChat.id) {
         const initData = window.Telegram?.WebApp?.initData;
         if (initData) {
@@ -297,7 +296,6 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
                 }
             } catch (err) {
                 console.error("Сбой сети при синхронизации избранного:", err);
-                // Помечаем для повторной синхронизации позже
                 if (!window.unsyncedFavorites) window.unsyncedFavorites = [];
                 window.unsyncedFavorites.push({
                     messageId: msgId,
@@ -311,7 +309,6 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
     }
 };
 
-// Вспомогательная функция для повторной синхронизации избранного
 window.retryUnsyncedFavorites = async function() {
     if (!window.config.syncEnabled) return;
     if (!window.unsyncedFavorites || window.unsyncedFavorites.length === 0) return;
@@ -349,34 +346,9 @@ window.retryUnsyncedFavorites = async function() {
     window.unsyncedFavorites = failedAgain;
     window.saveHistoriesToLocal();
 };
+
 // ==========================================
-// ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА И ЗАГЛУШКА
+// УДАЛЕНА ЗАГЛУШКА streamAiResponse
 // ==========================================
 
-// Даем время на загрузку всех скриптов
-setTimeout(function() {
-    if (typeof window.streamAiResponse !== 'function') {
-        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: streamAiResponse не определена!');
-        console.log('🔍 Проверяем, загрузился ли marked:', typeof marked);
-        console.log('🔍 Проверяем, загрузился ли tg:', typeof window.Telegram);
-        
-        // СОЗДАЕМ ЗАГЛУШКУ, чтобы приложение не падало
-        window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang, attachedImage, activeChat) {
-            console.log('⚠️ ЗАГЛУШКА streamAiResponse вызвана с параметрами:', {
-                historyLength: cleanHistoryMessages?.length,
-                userKey: userKey,
-                hasImage: !!attachedImage
-            });
-            
-            if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
-            if (typeof window.renderMessageToDOM === 'function') {
-                window.renderMessageToDOM('⚠️ Ошибка: модуль stream не загрузился. Пожалуйста, обновите страницу.', 'ai-msg');
-            }
-            return false;
-        };
-        
-        console.log('✅ Создана временная заглушка streamAiResponse');
-    } else {
-        console.log('✅ streamAiResponse определена, тип:', typeof window.streamAiResponse);
-    }
-}, 1000); // Ждем 1 секунду
+console.log("✅ net-chat.js загружен (без заглушки streamAiResponse)");
