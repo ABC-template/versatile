@@ -15,8 +15,12 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
     let msgDiv = null;
     let accumulatedText = '';
 
+    // Увеличенный таймаут до 2 минут для обработки изображений
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // Увеличил таймаут до 30 секунд
+    const timeoutId = setTimeout(() => {
+        console.warn('⏰ Таймаут 120 секунд истек, отменяем запрос');
+        controller.abort();
+    }, 120000);
 
     try {
         const requestBody = {
@@ -112,6 +116,7 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
         console.error("❌ Критический сбой стрима:", err);
         if (typeof window.hideSkeleton === 'function') window.hideSkeleton();
         
+        // Не показываем ошибку, если уже есть частичный ответ
         if (msgDiv && accumulatedText.trim().length > 0) {
             const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано. Пожалуйста, повторите запрос]`;
             if (typeof marked !== 'undefined') {
@@ -122,7 +127,11 @@ window.streamAiResponse = async function(cleanHistoryMessages, userKey, userLang
             finalizeStreamMessage(msgDiv, disconnectNotice, activeChat);
         } else {
             if (typeof window.renderMessageToDOM === 'function') {
-                window.renderMessageToDOM(`⚠️ Сбой: ${err.message || 'Неизвестная ошибка'}`, 'ai-msg');
+                let errorMsg = '⚠️ Сбой соединения. Попробуйте еще раз.';
+                if (err.name === 'AbortError') {
+                    errorMsg = '⏰ Превышено время ожидания ответа от сервера. Изображение слишком большое или сервер перегружен.';
+                }
+                window.renderMessageToDOM(errorMsg, 'ai-msg');
             }
         }
         return false;
