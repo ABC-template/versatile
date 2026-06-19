@@ -67,4 +67,71 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 #clear-input-btn.hidden{display:none;}
 .hidden{display:none!important;}
 #voice-timer{font-size:13px;font-weight:600;color:var(--hint-color);margin-right:2px;font-variant-numeric:tabular-nums;}
+/* ========================================== */
+/* КОРЗИНА — МОДАЛКА                          */
+/* ========================================== */
 
+#trash-modal {
+    animation: fadeIn 0.25s ease;
+}
+
+#trash-modal > div {
+    animation: slideUp 0.3s cubic-bezier(0.1, 0.8, 0.25, 1);
+}
+
+#trash-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+#trash-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#trash-list::-webkit-scrollbar-thumb {
+    background: var(--hint-color);
+    border-radius: 4px;
+    opacity: 0.3;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { 
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Бейдж корзины */
+#trash-count {
+    font-size: 10px;
+    background: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    padding: 1px 6px;
+    min-width: 18px;
+    text-align: center;
+    display: none;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* Кнопка корзины в шапке */
+#trash-btn {
+    transition: all 0.2s ease;
+}
+
+#trash-btn:hover {
+    background: rgba(231, 76, 60, 0.2) !important;
+}
+
+#trash-btn:active {
+    transform: scale(0.95);
+}
