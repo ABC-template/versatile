@@ -111,7 +111,7 @@ window.toggleVoiceRecording = async function(btn) {
             try {
                 const response = await fetch('/api/chat/whisper', {
                     method: 'POST', body: audioBlob,
-                    headers: { 'Content-Type': 'application/octet-stream', 'X-Audio-Type': audioBlob.type }
+                    headers: { 'Content-Type': 'application/octet-stream', 'X-Audio-Type': audioBlob.type, 'X-Telegram-Init-Data': window.Telegram?.WebApp?.initData || '' }
                 });
                 const data = await response.json();
                 resetVoiceUI();
