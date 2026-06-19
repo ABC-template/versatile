@@ -176,6 +176,11 @@ async function performSyncIfNeeded() {
         
         // Синхронизация после проверки подписки
         await performSyncIfNeeded();
+        
+        if (typeof window.startOfflineQueueProcessor === 'function') {
+    window.startOfflineQueueProcessor();
+           }
+        
     }
 
     // ==========================================
