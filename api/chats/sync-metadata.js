@@ -1,5 +1,6 @@
 // api/chats/sync-metadata.js
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+import { getSupabaseConfig } from '../_lib/supabase-client.js';
 
 export const config = { runtime: 'edge' };
 
@@ -23,20 +24,28 @@ export default async function handler(request) {
     
     const user = await validateTelegramInitData(initData, botToken);
     if (!user) throw new Error('Invalid init data');
-    const userId = user.id;
-
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
     
-    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured');
+    const userId = user.id;
+    
+    // ==========================================
+    // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
+    // ==========================================
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
+        status: 401,
+        headers: corsHeaders
+      });
+    }
+
+    const config = getSupabaseConfig();
 
     // Устанавливаем контекст пользователя для RLS
     try {
-      await fetch(`${supabaseUrl}/rest/v1/rpc/set_app_user_id`, {
+      await fetch(`${config.url}/rest/v1/rpc/set_app_user_id`, {
         method: 'POST',
         headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': config.key,
+          'Authorization': `Bearer ${config.key}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ uid: userId })
@@ -45,14 +54,14 @@ export default async function handler(request) {
       console.error('RPC set_app_user_id error:', err);
     }
 
-    // Проверяем, может ли пользователь синхронизироваться (RPC функция)
+    // Проверяем, может ли пользователь синхронизироваться
     let canSyncData = false;
     try {
-      const canSyncRes = await fetch(`${supabaseUrl}/rest/v1/rpc/can_sync`, {
+      const canSyncRes = await fetch(`${config.url}/rest/v1/rpc/can_sync`, {
         method: 'POST',
         headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': config.key,
+          'Authorization': `Bearer ${config.key}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ uid: userId })
@@ -71,26 +80,26 @@ export default async function handler(request) {
       }), { status: 200, headers: corsHeaders });
     }
 
-    // Запрашиваем чаты с updated_at для конфликт-резолвинга
-    const chatsRes = await fetch(`${supabaseUrl}/rest/v1/chats?user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed,updated_at,created_at&order=updated_at.desc`, {
+    // Запрашиваем чаты с updated_at
+    const chatsRes = await fetch(`${config.url}/rest/v1/chats?user_id=eq.${userId}&select=id,topic_id,title,max_context,user_renamed,updated_at,created_at&order=updated_at.desc`, {
       method: 'GET',
       headers: { 
-        'apikey': supabaseKey, 
-        'Authorization': `Bearer ${supabaseKey}` 
+        'apikey': config.key, 
+        'Authorization': `Bearer ${config.key}` 
       }
     });
     
     const chats = chatsRes.ok ? await chatsRes.json() : [];
 
-    // Запрашиваем избранные сообщения с сортировкой
+    // Запрашиваем избранные сообщения
     let favorites = [];
     if (chats.length > 0) {
       const chatIdsQuery = chats.map(c => c.id).join(',');
-      const favRes = await fetch(`${supabaseUrl}/rest/v1/messages?is_favorite=eq.true&chat_id=in.(${chatIdsQuery})&select=id,chat_id,text,is_favorite,updated_at&order=updated_at.desc`, {
+      const favRes = await fetch(`${config.url}/rest/v1/messages?is_favorite=eq.true&chat_id=in.(${chatIdsQuery})&select=id,chat_id,text,is_favorite,updated_at&order=updated_at.desc`, {
         method: 'GET',
         headers: { 
-          'apikey': supabaseKey, 
-          'Authorization': `Bearer ${supabaseKey}` 
+          'apikey': config.key, 
+          'Authorization': `Bearer ${config.key}` 
         }
       });
       
@@ -105,7 +114,6 @@ export default async function handler(request) {
       }
     }
 
-    // Возвращаем данные с флагом syncEnabled = true
     return new Response(JSON.stringify({ 
       syncEnabled: true, 
       chats, 
@@ -116,7 +124,7 @@ export default async function handler(request) {
     });
     
   } catch (err) {
-    console.error('Sync metadata error:', err);
+    console.error('Sync metadata error:', err.message);
     return new Response(JSON.stringify({ 
       error: err.message,
       syncEnabled: false,
