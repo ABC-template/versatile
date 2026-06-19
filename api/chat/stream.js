@@ -1,5 +1,3 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { streamText } from 'ai';
 import { validateTelegramInitData } from '../_lib/telegram-auth.js';
 
 export const config = { runtime: 'edge' };
@@ -77,48 +75,74 @@ export default async function handler(request) {
             });
         }
 
-        let openRouterModelId = 'openai/gpt-5';
-        let rolePrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
-        let temperature = 0.4;
-
-        // Только если фото НЕТ, используем текстовые модели
-        if (!attachedImage || attachedImage.trim().length === 0) {
-            temperature = 0.5;
-            if (currentTopic === 'code') {
-                openRouterModelId = 'deepseek/deepseek-chat';
-                rolePrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
-                temperature = 0.3;
-            } else if (currentTopic === 'creative') {
-                openRouterModelId = 'openai/gpt-4o';
-                rolePrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений.';
-                temperature = 0.9;
-            } else if (currentTopic === 'fast') {
-                openRouterModelId = 'google/gemini-2.5-flash';
-                rolePrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий и вводных слов.';
-            } else if (currentTopic === 'kitchen') {
-                openRouterModelId = 'google/gemini-2.5-flash';
-                rolePrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
-                temperature = 0.6;
-            } else if (currentTopic === 'analytics') {
-                openRouterModelId = 'openai/gpt-5.4';
-                rolePrompt = 'Ты — Versatile AI, аналитик. Помогаешь анализировать данные, делать выводы и структурировать информацию.';
-                temperature = 0.4;
-            }
-        } else {
-            rolePrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
+        const keysPool = getRotatedKeysPool();
+        if (keysPool.length === 0) {
+            return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), {
+                status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
         }
 
+        // ==========================================
+        // ВЫБОР МОДЕЛИ И ПРОМПТА В ЗАВИСИМОСТИ ОТ ТЕМЫ
+        // ==========================================
+        let systemPrompt = '';
+        let temperature = 0.4;
+        let model = 'openai/gpt-5.4';
+
+        // Если есть фото — используем vision модель
+        if (attachedImage && attachedImage.trim().length > 0) {
+            systemPrompt = 'Ты — Versatile AI с поддержкой зрения. Ты видишь прикрепленное изображение и можешь его анализировать. Отвечай подробно о том, что видишь на фото.';
+            temperature = 0.4;
+            model = 'openai/gpt-5'; // vision модель
+        } else {
+            // Текстовые модели в зависимости от темы
+            temperature = 0.5;
+            
+            if (currentTopic === 'code') {
+                model = 'deepseek/deepseek-chat';
+                systemPrompt = 'Ты — Versatile AI, Senior Developer и системный архитектор. Твоя специализация — написание чистого, производительного и безопасного кода. Отвечай строго по делу, структурируй ответы, используй комментарии в коде только там, где это действительно необходимо.';
+                temperature = 0.3;
+            } else if (currentTopic === 'creative') {
+                model = 'openai/gpt-4o';
+                systemPrompt = 'Ты — Versatile AI, гениальный креативный копирайтер, маркетолог и писатель. Пиши живым, вовлекающим и эмоциональным языком. Категорически избегай канцеляризмов, штампов, сухих фраз и шаблонных вступлений.';
+                temperature = 0.9;
+            } else if (currentTopic === 'fast') {
+                model = 'google/gemini-2.5-flash';
+                systemPrompt = 'Ты — Versatile AI в режиме экспресс-ответов. Твоя цель — выдать максимально точную, короткую и сжатую суть. Отвечай емко, без лишних приветствий и вводных слов.';
+                temperature = 0.5;
+            } else if (currentTopic === 'kitchen') {
+                model = 'google/gemini-2.5-flash';
+                systemPrompt = 'Ты — Versatile AI, опытный шеф-повар со звездами Мишлен и эксперт по кулинарии. Помогаешь пользователям составлять меню, находить идеальные рецепты и объясняешь сложные кулинарные техники простым языком.';
+                temperature = 0.6;
+            } else if (currentTopic === 'analytics') {
+                model = 'openai/gpt-5.4';
+                systemPrompt = 'Ты — Versatile AI, аналитик. Помогаешь анализировать данные, делать выводы и структурировать информацию.';
+                temperature = 0.4;
+            } else {
+                // Дефолт
+                model = 'openai/gpt-5.4';
+                systemPrompt = 'Ты — Versatile AI, универсальный и полезный ассистент.';
+                temperature = 0.4;
+            }
+        }
+
+        // Добавляем языковую инструкцию
         const langInstruction = getLanguageInstruction(userLang || 'ru');
-        const finalSystemPrompt = `${rolePrompt}\n\n${langInstruction}`;
+        const finalSystemPrompt = `${systemPrompt}\n\n${langInstruction}`;
 
         // ==========================================
-        // ПРАВИЛЬНЫЙ VISION-ФОРМАТ ДЛЯ OPENROUTER
+        // СБОРКА СООБЩЕНИЙ ДЛЯ OPENROUTER
         // ==========================================
-        const formattedMessages = [
-            { role: 'system', content: finalSystemPrompt }
-        ];
+        const openRouterMessages = [];
+
+        // Добавляем системный промпт
+        openRouterMessages.push({
+            role: 'system',
+            content: finalSystemPrompt
+        });
 
         // Обрабатываем историю сообщений
+        let lastRole = null;
         for (let i = 0; i < historyMessages.length; i++) {
             const msg = historyMessages[i];
             const role = (msg.type === 'user-msg' || msg.role === 'user') ? 'user' : 'assistant';
@@ -130,14 +154,18 @@ export default async function handler(request) {
             const hasImage = attachedImage && attachedImage.trim().length > 0 && isLastUserMessage;
             const hasImageMarker = textContent.includes('📸 [Прикреплено изображение]');
 
+            // Пропускаем дубли
+            if (lastRole === role && !hasImageMarker) {
+                continue;
+            }
+
             if (hasImageMarker && hasImage) {
                 // Убираем маркер изображения
                 textContent = textContent.replace('📸 [Прикреплено изображение]\n', '').trim();
                 if (!textContent) textContent = 'Что изображено на фото?';
                 
                 // ПРАВИЛЬНЫЙ ФОРМАТ ДЛЯ OPENROUTER VISION
-                // Используем структуру content как массив с типами text и image_url
-                formattedMessages.push({
+                openRouterMessages.push({
                     role: 'user',
                     content: [
                         { type: 'text', text: textContent },
@@ -150,50 +178,69 @@ export default async function handler(request) {
                         }
                     ]
                 });
+                lastRole = 'user';
             } else {
-                // Проверяем, не было ли уже такого сообщения
-                const lastMsg = formattedMessages[formattedMessages.length - 1];
-                if (lastMsg && lastMsg.role === role && typeof lastMsg.content === 'string' && lastMsg.content === textContent) {
-                    continue;
-                }
-                formattedMessages.push({ role: role, content: textContent });
+                openRouterMessages.push({ role: role, content: textContent });
+                lastRole = role;
             }
         }
 
-        console.log('📨 [stream.js] formattedMessages length:', formattedMessages.length);
-        console.log('📨 [stream.js] Последнее сообщение type:', typeof formattedMessages[formattedMessages.length - 1].content);
-
-        const keysPool = getRotatedKeysPool();
-        if (keysPool.length === 0) {
-            return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), {
-                status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
+        // Если есть изображение, но нет сообщения пользователя — добавляем дефолтное
+        if (attachedImage && attachedImage.trim().length > 0) {
+            const lastMsg = openRouterMessages[openRouterMessages.length - 1];
+            if (!lastMsg || lastMsg.role !== 'user' || typeof lastMsg.content === 'string') {
+                openRouterMessages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: 'Что изображено на фото?' },
+                        { 
+                            type: 'image_url', 
+                            image_url: { 
+                                url: attachedImage,
+                                detail: 'high'
+                            } 
+                        }
+                    ]
+                });
+            }
         }
-           
+
+        console.log('📨 [stream.js] Модель:', model);
+        console.log('📨 [stream.js] Температура:', temperature);
+        console.log('📨 [stream.js] Количество сообщений:', openRouterMessages.length);
+
+        // Пробуем ключи по очереди
         let lastError = null;
         
         for (let k = 0; k < keysPool.length; k++) {
             const currentKey = keysPool[k];
             
             try {
-                const provider = createOpenAI({
-                    baseURL: 'https://openrouter.ai/api/v1',
-                    apiKey: currentKey,
-                });
-
-                console.log('🚀 [stream.js] Отправляем запрос к модели:', openRouterModelId);
-
-                const result = await streamText({
-                    model: provider(openRouterModelId),
-                    messages: formattedMessages,
+                // Прямой запрос к OpenRouter API
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
                     headers: {
+                        'Authorization': `Bearer ${currentKey}`,
+                        'Content-Type': 'application/json',
                         'HTTP-Referer': 'https://vercel.com',
-                        'X-Title': 'Telegram Mini App Versatile AI',
+                        'X-Title': 'Telegram Mini App Versatile AI'
                     },
-                    temperature: temperature,
+                    body: JSON.stringify({
+                        model: model,
+                        messages: openRouterMessages,
+                        temperature: temperature,
+                        stream: true,
+                        max_tokens: 4096
+                    })
                 });
 
-                return result.toTextStreamResponse({
+                if (!response.ok) {
+                    const errorData = await response.text();
+                    throw new Error(`OpenRouter API error ${response.status}: ${errorData.substring(0, 200)}`);
+                }
+
+                // Возвращаем стрим
+                return new Response(response.body, {
                     headers: {
                         'X-Accel-Buffering': 'no',
                         'Cache-Control': 'no-cache, no-transform',
@@ -204,7 +251,6 @@ export default async function handler(request) {
 
             } catch (err) {
                 console.error(`Сбой запроса с ключом ROUTER_KEY${k}:`, err.message);
-                console.error('Детали ошибки:', err);
                 lastError = err;
                 continue;
             }
