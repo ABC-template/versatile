@@ -349,5 +349,69 @@ document.addEventListener('DOMContentLoaded', () => {
 if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
 }
+// ==========================================
+// ПОКАЗЫВАЕМ ОБЛАКО ТЕГОВ ИЛИ ПОСЛЕДНИЙ ЧАТ
+// ==========================================
 
+// Скрываем капсулу ввода по умолчанию
+const inputArea = document.getElementById('input-area');
+const fabBtn = document.getElementById('fab-open-input');
+const chatContainer = document.getElementById('chat-container');
+const tagsCloud = document.getElementById('tags-cloud-container');
+
+// Функция показа облака тегов
+function showTagsCloud() {
+    if (tagsCloud) tagsCloud.style.display = 'flex';
+    if (chatContainer) {
+        chatContainer.style.display = 'none';
+        chatContainer.classList.remove('visible');
+    }
+    if (inputArea) inputArea.style.display = 'none';
+    if (fabBtn) fabBtn.style.display = 'none';
+}
+
+// Функция показа чата
+function showChatInterface() {
+    if (tagsCloud) tagsCloud.style.display = 'none';
+    if (chatContainer) {
+        chatContainer.style.display = 'flex';
+        chatContainer.classList.add('visible');
+    }
+    if (inputArea) inputArea.style.display = 'flex';
+    if (fabBtn) fabBtn.style.display = 'flex';
+}
+
+// Сохраняем функции глобально
+window.showTagsCloud = showTagsCloud;
+window.showChatInterface = showChatInterface;
+
+// Проверяем, есть ли сохранённый чат
+const lastTopic = localStorage.getItem('last_topic');
+const lastChatId = lastTopic ? localStorage.getItem(`last_chat_${lastTopic}`) : null;
+
+if (lastTopic && lastChatId) {
+    // Проверяем, существует ли чат
+    const chat = window.chatHistories[lastTopic]?.find(c => c.id === lastChatId && !c.deleted_at);
+    if (chat) {
+        window.currentTopic = lastTopic;
+        window.activeChatIds[lastTopic] = lastChatId;
+        showChatInterface();
+        window.refreshUiAfterChatSelection();
+    } else {
+        showTagsCloud();
+        if (typeof window.renderTagsCloud === 'function') {
+            window.renderTagsCloud();
+        }
+    }
+} else {
+    showTagsCloud();
+    if (typeof window.renderTagsCloud === 'function') {
+        window.renderTagsCloud();
+    }
+}
+
+// Рендерим облако тегов
+if (typeof window.renderTagsCloud === 'function') {
+    window.renderTagsCloud();
+}
 console.log('✅ app.js полностью загружен с исправлениями');
