@@ -1,6 +1,13 @@
+// ============================================
 // js/modules/sync/device-manager.js
+// Описание: Управление устройствами
+// ============================================
 
-// Генерация уникального fingerprint устройства
+console.log('✅ DeviceManager загружен');
+
+/**
+ * Генерация уникального fingerprint устройства
+ */
 window.generateDeviceFingerprint = function() {
     const saved = localStorage.getItem('device_fingerprint');
     if (saved) return saved;
@@ -8,7 +15,6 @@ window.generateDeviceFingerprint = function() {
     const tg = window.Telegram?.WebApp;
     const user = tg?.initDataUnsafe?.user;
     
-    // Включаем user_id в fingerprint для уникальности пары (устройство + аккаунт)
     const components = [
         user?.id || 'unknown',
         navigator.userAgent || 'unknown',
@@ -26,14 +32,16 @@ window.generateDeviceFingerprint = function() {
     
     const fingerprint = `device_${user?.id}_${Math.abs(hash)}`;
     localStorage.setItem('device_fingerprint', fingerprint);
-    console.log(`🔑 Сгенерирован fingerprint устройства: ${fingerprint}`);
+    console.log(`🔑 Сгенерирован fingerprint: ${fingerprint}`);
     return fingerprint;
 };
 
-// Регистрация устройства
+/**
+ * Регистрация устройства
+ */
 window.registerDevice = async function() {
-    if (!window.config?.syncEnabled) {
-        console.log("Синхронизация отключена, устройство не регистрируется");
+    if (!window.userStore?.canSync()) {
+        console.log('Синхронизация отключена, устройство не регистрируется');
         return false;
     }
     
@@ -41,13 +49,13 @@ window.registerDevice = async function() {
     const initData = window.Telegram?.WebApp?.initData;
     
     if (!initData) {
-        console.error("Нет initData для регистрации устройства");
+        console.error('Нет initData для регистрации устройства');
         return false;
     }
     
     try {
-        console.log("📤 Отправляем запрос на регистрацию устройства...");
-        const response = await fetch('/api/user/register-device', {
+        console.log('📤 Отправляем запрос на регистрацию устройства...');
+        const response = await fetch('/api/users/register-device', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -63,30 +71,43 @@ window.registerDevice = async function() {
         if (data.success) {
             if (data.signedFingerprint) {
                 localStorage.setItem('device_fingerprint_signed', data.signedFingerprint);
-                window.deviceFingerprintSigned = data.signedFingerprint;
+                if (window.userStore) {
+                    window.userStore.setDeviceFingerprint(fingerprint, data.signedFingerprint);
+                }
             }
-            window.deviceFingerprint = fingerprint;
-            console.log(data.isNew ? "🆕 Новое устройство зарегистрировано" : "🔄 Устройство уже зарегистрировано");
+            console.log(data.isNew ? '🆕 Новое устройство зарегистрировано' : '🔄 Устройство уже зарегистрировано');
             return true;
         }
-        console.error("Ошибка регистрации устройства:", data.error);
+        console.error('Ошибка регистрации устройства:', data.error);
         return false;
     } catch (err) {
-        console.error("Ошибка регистрации устройства:", err);
+        console.error('Ошибка регистрации устройства:', err);
         return false;
     }
 };
 
-// Получение подписанного fingerprint для сервера
+/**
+ * Получение подписанного fingerprint для сервера
+ */
 window.getDeviceFingerprint = function() {
-    const signed = localStorage.getItem('device_fingerprint_signed') || window.deviceFingerprintSigned;
+    if (window.userStore) {
+        return window.userStore.getDeviceFingerprint();
+    }
+    const signed = localStorage.getItem('device_fingerprint_signed');
     if (signed) return signed;
-    return window.deviceFingerprint || localStorage.getItem('device_fingerprint');
+    return localStorage.getItem('device_fingerprint');
 };
 
-// Инициализация менеджера устройств
+/**
+ * Инициализация менеджера устройств
+ */
 window.initDeviceManager = async function() {
-    if (!window.config?.syncEnabled) return;
-    console.log("🔧 Инициализация менеджера устройств...");
+    if (!window.userStore?.canSync()) {
+        console.log('Синхронизация отключена');
+        return;
+    }
+    console.log('🔧 Инициализация менеджера устройств...');
     await window.registerDevice();
 };
+
+console.log('✅ DeviceManager загружен');
