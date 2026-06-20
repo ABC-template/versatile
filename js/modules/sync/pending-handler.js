@@ -1,8 +1,15 @@
+// ============================================
 // js/modules/sync/pending-handler.js
+// Описание: Обработка отложенных удалений
+// ============================================
 
-// Получение списка ID для удаления на этом устройстве
+console.log('✅ PendingHandler загружен');
+
+/**
+ * Получение списка ID для удаления на этом устройстве
+ */
 window.fetchPendingDeletions = async function() {
-    if (!window.config?.syncEnabled) return [];
+    if (!window.userStore?.canSync()) return [];
     
     const deviceFingerprint = window.getDeviceFingerprint();
     if (!deviceFingerprint) return [];
@@ -23,14 +30,16 @@ window.fetchPendingDeletions = async function() {
         }
         return [];
     } catch (err) {
-        console.error("Ошибка получения pending списка:", err);
+        console.error('Ошибка получения pending списка:', err);
         return [];
     }
 };
 
-// Подтверждение удаления на сервере
+/**
+ * Подтверждение удаления на сервере
+ */
 window.confirmPendingDeletion = async function(id, deviceFingerprint) {
-    if (!window.config?.syncEnabled) return false;
+    if (!window.userStore?.canSync()) return false;
     
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) return false;
@@ -48,12 +57,14 @@ window.confirmPendingDeletion = async function(id, deviceFingerprint) {
         const data = await response.json();
         return data.success === true;
     } catch (err) {
-        console.error("Ошибка подтверждения удаления:", err);
+        console.error('Ошибка подтверждения удаления:', err);
         return false;
     }
 };
 
-// Удаление локальных чатов/сообщений по списку pending
+/**
+ * Удаление локальных чатов/сообщений по списку pending
+ */
 window.processPendingDeletions = async function() {
     const pending = await window.fetchPendingDeletions();
     
@@ -62,33 +73,19 @@ window.processPendingDeletions = async function() {
     console.log(`🗑️ Обработка ${pending.length} удаленных элементов...`);
     
     const deviceFingerprint = window.getDeviceFingerprint();
+    const chatStore = window.chatStore;
     
     for (const item of pending) {
         // Удаляем локальную копию
         if (item.entity_type === 'chat') {
-            // Удаляем чат из всех тем
-            for (const topic of ['code', 'creative', 'fast', 'kitchen']) {
-                if (window.chatHistories[topic]) {
-                    const index = window.chatHistories[topic].findIndex(c => c.id === item.id);
-                    if (index !== -1) {
-                        window.chatHistories[topic].splice(index, 1);
-                        console.log(`🗑️ Удален локальный чат ${item.id}`);
-                    }
-                }
-            }
+            chatStore.deleteChat(item.id);
+            console.log(`🗑️ Удален локальный чат ${item.id}`);
         } else if (item.entity_type === 'message') {
-            // Удаляем сообщение из чата
-            for (const topic of ['code', 'creative', 'fast', 'kitchen']) {
-                if (window.chatHistories[topic]) {
-                    for (const chat of window.chatHistories[topic]) {
-                        const msgIndex = chat.messages.findIndex(m => m.id === item.id);
-                        if (msgIndex !== -1) {
-                            chat.messages.splice(msgIndex, 1);
-                            console.log(`🗑️ Удалено локальное сообщение ${item.id}`);
-                            break;
-                        }
-                    }
-                }
+            // Находим чат по parent_id
+            const found = chatStore.findChat(item.parent_id);
+            if (found) {
+                chatStore.deleteMessage(item.parent_id, item.id);
+                console.log(`🗑️ Удалено локальное сообщение ${item.id}`);
             }
         }
         
@@ -97,19 +94,14 @@ window.processPendingDeletions = async function() {
     }
     
     // Сохраняем изменения
-    window.saveHistoriesToLocal();
+    chatStore.saveToStorage();
     
-    // Обновляем UI если нужно
-    if (typeof window.loadActiveChatMessages === 'function') {
-        window.loadActiveChatMessages();
-    }
-    if (typeof window.renderHistoryChatsList === 'function') {
-        window.renderHistoryChatsList();
+    // Обновляем UI
+    if (window.chatUI) {
+        window.chatUI.refreshUI();
     }
     
-    console.log("✅ Обработка pending удалений завершена");
+    console.log('✅ Обработка pending удалений завершена');
 };
 
-// Интеграция в полную синхронизацию
-// Добавить в конец fullSyncAllChats:
-// await window.processPendingDeletions();
+console.log('✅ PendingHandler загружен');
