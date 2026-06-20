@@ -892,5 +892,248 @@ window.executeClearAllTrash = async function() {
         }
     }
 };
+// ==========================================
+// ОБЛАКО ТЕГОВ — РЕНДЕРИНГ
+// ==========================================
 
+window.renderTagsCloud = function() {
+    const container = document.getElementById('tags-cloud-container');
+    if (!container) return;
+    
+    // Проверяем, есть ли сохранённый чат
+    const lastTopic = localStorage.getItem('last_topic');
+    const hasLastChat = lastTopic && window.chatHistories[lastTopic]?.some(c => c.synced && !c.deleted_at);
+    
+    // Если есть последний чат — показываем кнопку "Вернуться в чат"
+    let returnButton = '';
+    if (hasLastChat) {
+        returnButton = `
+            <button class="btn" style="width:100%; padding:14px; border-radius:14px; margin-bottom:16px; background: var(--button-color); color: var(--button-text);" onclick="window.restoreLastChat()">
+                ↩️ Вернуться в чат
+            </button>
+        `;
+    }
+    
+    container.innerHTML = `
+        <div class="tags-cloud-wrapper">
+            <div class="tags-cloud-header">
+                <h2>🌤️ Добро пожаловать!</h2>
+                <p style="color: var(--hint-color); font-size: 14px; margin: 4px 0 16px 0;">Выбери направление для общения с ИИ:</p>
+            </div>
+            
+            ${returnButton}
+            
+            <div class="tags-cloud-grid">
+                <div class="tag-chip active" data-topic="code" onclick="window.switchTopic('code')">
+                    <span class="tag-icon">💻</span>
+                    <span class="tag-name">#кодинг</span>
+                </div>
+                <div class="tag-chip" data-topic="creative" onclick="window.switchTopic('creative')">
+                    <span class="tag-icon">✍️</span>
+                    <span class="tag-name">#креатив</span>
+                </div>
+                <div class="tag-chip" data-topic="fast" onclick="window.switchTopic('fast')">
+                    <span class="tag-icon">⚡</span>
+                    <span class="tag-name">#флуд</span>
+                </div>
+                <div class="tag-chip" data-topic="kitchen" onclick="window.switchTopic('kitchen')">
+                    <span class="tag-icon">🍳</span>
+                    <span class="tag-name">#кухня</span>
+                </div>
+                <div class="tag-chip" data-topic="analytics" onclick="window.switchTopic('analytics')">
+                    <span class="tag-icon">📊</span>
+                    <span class="tag-name">#аналитика <span style="font-size:9px; opacity:0.6;">(Beta)</span></span>
+                </div>
+            </div>
+            
+            <div class="tags-cloud-footer">
+                <button class="tag-action-btn" onclick="window.openModalTab('chats')">
+                    💬 История чатов
+                </button>
+                <button class="tag-action-btn" onclick="window.openModalTab('favorites')">
+                    ⭐ Избранное
+                </button>
+                <button class="tag-action-btn" onclick="window.openModalTab('organizer')">
+                    📅 Органайзер
+                </button>
+                <button class="tag-action-btn" onclick="window.openModalTab('profile')">
+                    👤 Профиль
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+// ==========================================
+// ИСТОРИЯ ЧАТОВ С ФИЛЬТРАЦИЕЙ
+// ==========================================
+
+window.currentFilter = 'all';
+
+window.renderHistoryChatsList = function(filterTopic) {
+    const listContainer = document.getElementById('history-chats-list');
+    if (!listContainer) return;
+    
+    const activeFilter = filterTopic || window.currentFilter || 'all';
+    listContainer.innerHTML = '';
+    
+    // Собираем ВСЕ чаты из всех тем
+    let allChats = [];
+    for (const [topic, chats] of Object.entries(window.chatHistories)) {
+        if (!chats) continue;
+        for (const chat of chats) {
+            // Пропускаем чаты в корзине (с deleted_at)
+            if (chat.deleted_at) continue;
+            // Пропускаем временные чаты без сообщений пользователя
+            if (!chat.synced && chat.messages && chat.messages.length <= 1) continue;
+            
+            allChats.push({
+                ...chat,
+                topic: topic,
+                topicDisplay: window.topicShortNames[topic] || topic
+            });
+        }
+    }
+    
+    // Фильтрация по теме
+    if (activeFilter !== 'all') {
+        allChats = allChats.filter(chat => chat.topic === activeFilter);
+    }
+    
+    // Сортировка по дате последнего сообщения
+    allChats.sort((a, b) => {
+        const aTime = a.messages && a.messages.length > 0 
+            ? a.messages[a.messages.length - 1]?.created_at || a.created_at 
+            : a.created_at;
+        const bTime = b.messages && b.messages.length > 0 
+            ? b.messages[b.messages.length - 1]?.created_at || b.created_at 
+            : b.created_at;
+        return new Date(bTime) - new Date(aTime);
+    });
+    
+    if (allChats.length === 0) {
+        listContainer.innerHTML = `<p style="color:var(--hint-color); text-align:center; padding:20px; font-size:13px;">Нет чатов в этом разделе</p>`;
+        return;
+    }
+    
+    for (const chat of allChats) {
+        const activeMessages = (chat.messages || []).filter(m => !m.deleted_at);
+        const count = activeMessages.length;
+        
+        const lastMsg = chat.messages && chat.messages.length > 0 
+            ? chat.messages[chat.messages.length - 1] 
+            : null;
+        const lastTime = lastMsg?.created_at || chat.created_at;
+        const timeStr = window.formatDate(lastTime);
+        
+        const chatItem = document.createElement('div');
+        chatItem.className = `chat-history-item ${chat.id === window.activeChatIds[chat.topic] ? 'active' : ''}`;
+        chatItem.setAttribute('onclick', `window.switchToChat('${chat.id}', '${chat.topic}')`);
+        
+        chatItem.innerHTML = `
+            <div style="flex:1; overflow:hidden; min-width:0;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:10px; font-weight:600; color:var(--button-color); flex-shrink:0; background:rgba(var(--tg-theme-button-color,0,136,204),0.08); padding:2px 8px; border-radius:4px;">
+                        ${chat.topicDisplay}
+                    </span>
+                    <span class="chat-title-text" style="font-weight:500; font-size:13px;">${chat.title || 'Без названия'}</span>
+                </div>
+                <div style="font-size:11px; color:var(--hint-color); margin-top:2px;">
+                    ${count} ${window.pluralize(count, 'сообщение', 'сообщения', 'сообщений')} • ${timeStr}
+                </div>
+            </div>
+            <div style="display:flex; gap:4px; flex-shrink:0; margin-left:8px;">
+                <button class="delete-chat-btn" style="opacity:0.6; font-size:13px;" onclick="event.stopPropagation(); window.renameChat(event, '${chat.id}')">✏️</button>
+                <button class="delete-chat-btn" style="font-size:13px;" onclick="event.stopPropagation(); window.deleteChat(event, '${chat.id}')">🗑️</button>
+            </div>
+        `;
+        listContainer.appendChild(chatItem);
+    }
+};
+
+// ==========================================
+// ПРИМЕНЕНИЕ ФИЛЬТРА В ИСТОРИИ
+// ==========================================
+
+window.applyChatFilter = function(topic) {
+    window.currentFilter = topic;
+    
+    // Обновляем активный фильтр
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.topic === topic);
+    });
+    
+    window.renderHistoryChatsList(topic === 'all' ? null : topic);
+};
+
+// ==========================================
+// ПЕРЕКЛЮЧЕНИЕ НА ЧАТ ИЗ ИСТОРИИ
+// ==========================================
+
+window.switchToChat = function(chatId, topic) {
+    // Закрываем модалку
+    const card = document.getElementById('profile-card');
+    if (card) card.classList.add('hidden');
+    if (window.tg?.BackButton) window.tg.BackButton.hide();
+    
+    // Переключаем тему и чат
+    if (window.currentTopic !== topic) {
+        window.currentTopic = topic;
+        // Обновляем активный чип в облаке тегов
+        document.querySelectorAll('.tag-chip').forEach(chip => {
+            chip.classList.toggle('active', chip.dataset.topic === topic);
+        });
+    }
+    
+    window.activeChatIds[topic] = chatId;
+    window.saveHistoriesToLocal();
+    window.refreshUiAfterChatSelection();
+    
+    // Сохраняем последний чат
+    localStorage.setItem('last_topic', topic);
+    localStorage.setItem(`last_chat_${topic}`, chatId);
+};
+
+// ==========================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ==========================================
+
+window.formatDate = function(dateStr) {
+    if (!dateStr) return 'неизвестно';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    
+    if (diff === 0) {
+        return 'сегодня ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diff === 1) {
+        return 'вчера ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diff < 7) {
+        return diff + ' дня назад';
+    } else {
+        return date.toLocaleDateString([], { day: '2-digit', month: 'short' });
+    }
+};
+
+window.pluralize = function(count, one, two, five) {
+    const n = Math.abs(count) % 100;
+    const n1 = n % 10;
+    if (n > 10 && n < 20) return five;
+    if (n1 > 1 && n1 < 5) return two;
+    if (n1 === 1) return one;
+    return five;
+};
+
+// ==========================================
+// ОБНОВЛЕНИЕ СТАТУСА ОБЛАКА ТЕГОВ
+// ==========================================
+
+window.updateTagsCloud = function() {
+    const container = document.getElementById('tags-cloud-container');
+    if (container && !document.getElementById('app-screen')?.style.display === 'none') {
+        window.renderTagsCloud();
+    }
+};
+
+console.log('✅ UI: функции облака тегов и истории загружены');
 console.log('✅ UI: функции корзины загружены');
