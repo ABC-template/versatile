@@ -126,24 +126,53 @@
             </div>
         </div>
     </div>
-    <script src="js/core/locale.js"></script>
-    <script src="js/config.js"></script>
-    <script src="js/core/storage.js"></script>
-    <script src="js/modules/net-todo.js"></script>
-    <script src="js/modules/net-scheduler.js"></script>
-    <script src="js/modules/net-tracker.js"></script>
-    <script src="js/modules/net-media.js"></script>
-    <script src="js/modules/ui.js"></script>
-    <script src="js/modules/ui-footer.js"></script>
-    <script src="js/modules/net-sync.js"></script>
-    <script src="js/modules/net-voice.js"></script>
-    <script src="js/modules/net-stream.js"></script>
-    <script src="js/modules/net-chat.js"></script>
-    <script src="js/modules/sync/offline-handler.js"></script>
-    <script src="js/modules/sync/device-manager.js"></script>
-    <script src="js/modules/sync/pending-handler.js"></script>
-    <script src="js/modules/trash/trash-manager.js"></script>
-    <script src="js/core/app.js"></script>
-    <script src="js/modules/export-local.js"></script>
+<!-- Core -->
+<script src="js/core/locale.js"></script>
+<script src="js/core/config.js"></script>
+
+<!-- Store -->
+<script src="js/store/ChatStore.js"></script>
+<script src="js/store/UserStore.js"></script>
+<script src="js/store/SyncStore.js"></script>
+<script src="js/store/OrganizerStore.js"></script>
+
+<!-- Services -->
+<script src="js/services/api.js"></script>
+<script src="js/services/auth.js"></script>
+<script src="js/services/chats.js"></script>
+<script src="js/services/messages.js"></script>
+<script src="js/services/organizer.js"></script>
+<script src="js/services/sync.js"></script>
+
+<!-- UI -->
+<script src="js/modules/ui/renderer.js"></script>
+<script src="js/modules/ui/chat-ui.js"></script>
+<script src="js/modules/ui/organizer-ui.js"></script>
+<script src="js/modules/ui/profile-ui.js"></script>
+<script src="js/modules/ui-footer.js"></script>
+
+<!-- Chat -->
+<script src="js/modules/chat/send.js"></script>
+<script src="js/modules/chat/stream.js"></script>
+<script src="js/modules/chat/voice.js"></script>
+<script src="js/modules/chat/media.js"></script>  <!-- после переименования -->
+
+<!-- Sync -->
+<script src="js/modules/sync/device-manager.js"></script>
+<script src="js/modules/sync/offline-handler.js"></script>
+<script src="js/modules/sync/pending-handler.js"></script>
+<script src="js/modules/sync/queue-manager.js"></script>
+
+<!-- Trash & Export -->
+<script src="js/modules/trash/trash-manager.js"></script>
+<script src="js/modules/export-local.js"></script>
+
+<!-- Utils -->
+<script src="js/utils/helpers.js"></script>
+<script src="js/utils/validators.js"></script>
+<script src="js/utils/dom.js"></script>
+
+<!-- Core App -->
+<script src="js/core/app.js"></script>
 </body>
 </html>
