@@ -1,4 +1,4 @@
-// js/modules/ui.js - ПОЛНОСТЬЮ
+// js/modules/ui.js - С ИНЛАЙН-СТИЛЯМИ (ВОЗВРАЩАЕМ)
 // ==========================================
 // НАВИГАЦИЯ: Управление вкладками
 // ==========================================
@@ -238,10 +238,10 @@ window.renderHistoryChatsList = function(filterTopic) {
         chatItem.innerHTML = `
             <div style="flex:1; overflow:hidden; min-width:0;">
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="topic-badge">${chat.topicDisplay}</span>
-                    <span class="chat-title-text">${chat.title || 'Без названия'}</span>
+                    <span style="font-size:10px; font-weight:600; color:var(--button-color); flex-shrink:0; background:rgba(var(--tg-theme-button-color,0,136,204),0.08); padding:2px 8px; border-radius:4px;">${chat.topicDisplay}</span>
+                    <span class="chat-title-text" style="font-weight:500; font-size:13px;">${chat.title || 'Без названия'}</span>
                 </div>
-                <div class="chat-meta">${count} ${window.pluralize(count, 'сообщение', 'сообщения', 'сообщений')} • ${timeStr}</div>
+                <div style="font-size:11px; color:var(--hint-color); margin-top:2px;">${count} ${window.pluralize(count, 'сообщение', 'сообщения', 'сообщений')} • ${timeStr}</div>
             </div>
             <div style="display:flex; gap:4px; flex-shrink:0; margin-left:8px;">
                 <button class="delete-chat-btn" style="opacity:0.6; font-size:13px;" onclick="event.stopPropagation(); window.renameChat(event, '${chat.id}')">✏️</button>
