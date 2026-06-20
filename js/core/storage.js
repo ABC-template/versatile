@@ -1,6 +1,4 @@
-// js/core/storage.js - НОВАЯ ВЕРСИЯ
-
-// Глобальный генератор UUID
+// js/core/storage.js
 window.generateUUID = function() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -16,10 +14,6 @@ function getCurrentUserId() {
   const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
   return user?.id || 'anonymous';
 }
-
-// ==========================================
-// ЗАГРУЗКА / СОХРАНЕНИЕ
-// ==========================================
 
 window.loadLocalHistories = function() {
     const userId = getCurrentUserId();
@@ -90,10 +84,6 @@ window.saveHistoriesToLocal = function() {
     }
 };
 
-// ==========================================
-// ПОИСК ЧАТА ВО ВСЕХ ТЕМАХ
-// ==========================================
-
 window.findChatInAllTopics = function(chatId) {
     for (const [topic, chats] of Object.entries(window.chatHistories || {})) {
         if (!chats) continue;
@@ -105,25 +95,21 @@ window.findChatInAllTopics = function(chatId) {
     return null;
 };
 
-// ==========================================
-// ПОЛУЧЕНИЕ ТЕКУЩЕГО АКТИВНОГО ЧАТА
-// ==========================================
-
 window.getCurrentActiveChat = function() {
     const modelsChats = window.chatHistories[window.currentTopic] || [];
     const currentActiveId = window.activeChatIds[window.currentTopic];
     return modelsChats.find(c => c.id === currentActiveId) || null;
 };
 
-// ==========================================
-// СОЗДАНИЕ ВРЕМЕННОГО ЧАТА (ПУСТОГО)
-// ==========================================
+window.hasRealMessages = function(chat) {
+    if (!chat || !chat.messages) return false;
+    return chat.messages.some(m => (m.type === 'user-msg' || m.type === 'ai-msg') && !m.deleted_at);
+};
 
 window.createTempChat = function() {
     const topic = window.currentTopic;
     const sectionName = window.topicNames[topic] || topic;
     
-    // Проверяем, есть ли уже пустой временный чат
     const existingTemp = window.chatHistories[topic]?.find(c => !c.synced && !c.deleted_at && (!c.messages || c.messages.length === 0));
     if (existingTemp) {
         window.activeChatIds[topic] = existingTemp.id;
@@ -143,7 +129,7 @@ window.createTempChat = function() {
         deleted_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        messages: []  // ← ПУСТОЙ! Приветствие не хранится
+        messages: []
     };
     
     if (!window.chatHistories[topic]) {
@@ -157,23 +143,8 @@ window.createTempChat = function() {
     return tempChat;
 };
 
-// ==========================================
-// ПРОВЕРКА: ЕСТЬ ЛИ СООБЩЕНИЯ В ЧАТЕ
-// ==========================================
-
-window.hasRealMessages = function(chat) {
-    if (!chat || !chat.messages) return false;
-    return chat.messages.some(m => m.type === 'user-msg' || m.type === 'ai-msg');
-};
-
-// ==========================================
-// СОЗДАНИЕ ЧАТА В БД (ТОЛЬКО ПРИ НАЛИЧИИ СООБЩЕНИЙ)
-// ==========================================
-
 window.createChatInCloud = async function(chat) {
     if (!chat || chat.synced) return true;
-    
-    // ✅ ЕДИНСТВЕННОЕ УСЛОВИЕ: есть ли сообщения?
     if (!window.hasRealMessages(chat)) {
         console.log(`⏸️ Чат ${chat.id} пустой, синхронизация не требуется`);
         return false;
@@ -185,7 +156,6 @@ window.createChatInCloud = async function(chat) {
         return false;
     }
     
-    // Находим первое сообщение пользователя
     const firstUserMessage = chat.messages.find(m => m.type === 'user-msg' && !m.deleted_at);
     if (!firstUserMessage) {
         console.warn('Нет сообщений пользователя для создания чата');
@@ -225,7 +195,6 @@ window.createChatInCloud = async function(chat) {
         
         if (data.success) {
             const newId = data.chatId || chat.id;
-            
             if (newId !== oldId) {
                 chat.id = newId;
                 if (window.activeChatIds[topic] === oldId) {
@@ -238,16 +207,12 @@ window.createChatInCloud = async function(chat) {
                 }
                 window.saveHistoriesToLocal();
             }
-            
             chat.synced = true;
-            
-            // Синхронизируем все сообщения
             for (const msg of chat.messages) {
                 if (!msg.synced && !msg.deleted_at) {
                     await window.syncMessageToCloud(chat.id, msg);
                 }
             }
-            
             return true;
         } else {
             console.error('Ошибка создания чата в облаке:', data.error);
@@ -259,17 +224,12 @@ window.createChatInCloud = async function(chat) {
     }
 };
 
-// ==========================================
-// ДОБАВЛЕНИЕ СООБЩЕНИЯ
-// ==========================================
-
 window.addMessageToStorage = async function(text, className) {
     if (!window.chatHistories[window.currentTopic]) {
         window.chatHistories[window.currentTopic] = [];
     }
     
     let activeChat = window.getCurrentActiveChat();
-    
     if (!activeChat) {
         activeChat = window.createTempChat();
     }
@@ -287,7 +247,6 @@ window.addMessageToStorage = async function(text, className) {
     activeChat.messages.push(newMsg);
     activeChat.updated_at = new Date().toISOString();
     
-    // Обновляем название чата (если пользователь не переименовал)
     const sectionName = window.topicNames[window.currentTopic] || window.currentTopic;
     const startTitle = `Новый чат в ${sectionName}`;
     if (className === 'user-msg' && (!activeChat.userRenamed || activeChat.title === startTitle)) {
@@ -297,24 +256,17 @@ window.addMessageToStorage = async function(text, className) {
     
     window.saveHistoriesToLocal();
     
-    // Рендерим сообщение
     if (typeof window.renderMessageToDOM === 'function') {
         window.renderMessageToDOM(text, className, newMsg.id);
     }
     
-    // ==========================================
-    // СИНХРОНИЗАЦИЯ: ТОЛЬКО ЕСЛИ ЕСТЬ СООБЩЕНИЯ
-    // ==========================================
     if (window.config.syncEnabled && window.hasRealMessages(activeChat)) {
         if (!activeChat.synced) {
-            // Создаём чат в БД
             const created = await window.createChatInCloud(activeChat);
             if (created) {
-                // Сообщение уже синхронизировано внутри createChatInCloud
                 console.log(`✅ Чат ${activeChat.id} создан в облаке, сообщения синхронизированы`);
             }
         } else {
-            // Синхронизируем только новое сообщение
             try {
                 await window.syncMessageToCloud(activeChat.id, newMsg);
             } catch (err) {
@@ -324,15 +276,10 @@ window.addMessageToStorage = async function(text, className) {
         }
     }
     
-    // Обновляем историю
     if (typeof window.renderHistoryChatsList === 'function') {
         window.renderHistoryChatsList(window.currentFilter || 'all');
     }
 };
-
-// ==========================================
-// ОЧИСТКА ПУСТЫХ ВРЕМЕННЫХ ЧАТОВ
-// ==========================================
 
 window.cleanupTempChats = function() {
     let cleaned = 0;
@@ -342,15 +289,9 @@ window.cleanupTempChats = function() {
     
     for (const [topic, chats] of Object.entries(window.chatHistories || {})) {
         if (!chats || !Array.isArray(chats)) continue;
-        
         const filtered = chats.filter(chat => {
-            // НЕ УДАЛЯЕМ: синхронизированные
             if (chat.synced) return true;
-            
-            // НЕ УДАЛЯЕМ: чаты с сообщениями
             if (window.hasRealMessages(chat)) return true;
-            
-            // УДАЛЯЕМ: пустые чаты старше 5 минут
             const createdAt = new Date(chat.created_at);
             const age = now - createdAt;
             if (age > maxAgeMs) {
@@ -358,27 +299,19 @@ window.cleanupTempChats = function() {
                 console.log(`🗑️ Удалён пустой временный чат (${Math.round(age/60000)} мин): ${chat.title}`);
                 return false;
             }
-            
             return true;
         });
-        
         if (filtered.length !== chats.length) {
             window.chatHistories[topic] = filtered;
         }
     }
-    
     if (cleaned > 0) {
         window.saveHistoriesToLocal();
     }
     return cleaned;
 };
 
-// ==========================================
-// ПЕРЕКЛЮЧЕНИЕ МЕЖДУ ТЕГАМИ
-// ==========================================
-
 window.switchTopic = function(topic) {
-    // Очищаем пустые временные чаты в текущей теме
     const currentChat = window.getCurrentActiveChat();
     if (currentChat && !currentChat.synced && !window.hasRealMessages(currentChat)) {
         const topicChats = window.chatHistories[window.currentTopic] || [];
@@ -386,28 +319,17 @@ window.switchTopic = function(topic) {
         window.activeChatIds[window.currentTopic] = null;
         console.log(`🗑️ Удалён пустой временный чат при переключении`);
     }
-    
-    // Переключаемся
     window.currentTopic = topic;
-    
-    // Обновляем активный чип
     document.querySelectorAll('.tag-chip').forEach(chip => {
         chip.classList.toggle('active', chip.dataset.topic === topic);
     });
-    
-    // Создаём новый пустой чат
     window.createTempChat();
     window.saveHistoriesToLocal();
     window.refreshUiAfterChatSelection();
-    
     if (typeof window.showChatInterface === 'function') {
         window.showChatInterface();
     }
 };
-
-// ==========================================
-// ОБНОВЛЕНИЕ UI
-// ==========================================
 
 window.refreshUiAfterChatSelection = function() {
     window.applyUiLocalization(); 
@@ -425,14 +347,9 @@ window.refreshUiAfterChatSelection = function() {
     }
 };
 
-// ==========================================
-// ПЕРЕКЛЮЧЕНИЕ НА ЧАТ ПО ID
-// ==========================================
-
 window.switchActiveChat = async function(chatId) {
     window.activeChatIds[window.currentTopic] = chatId;
     window.saveHistoriesToLocal();
-    
     if (window.config && window.config.syncEnabled && typeof window.loadFullChat === 'function') {
         const activeChat = window.getCurrentActiveChat();
         if (!activeChat || !activeChat.messages || activeChat.messages.length === 0) {
@@ -440,19 +357,13 @@ window.switchActiveChat = async function(chatId) {
         }
     }
     window.refreshUiAfterChatSelection();
-    
     if (typeof window.showChatInterface === 'function') {
         window.showChatInterface();
     }
 };
 
-// ==========================================
-// УДАЛЕНИЕ ЧАТА (В КОРЗИНУ)
-// ==========================================
-
 window.deleteChat = function(event, chatId) {
     if (event && event.stopPropagation) event.stopPropagation(); 
-    
     const action = () => {
         const found = window.findChatInAllTopics(chatId);
         if (!found) {
@@ -462,11 +373,8 @@ window.deleteChat = function(event, chatId) {
             }
             return;
         }
-        
         const { chat: chatToDelete, topic } = found;
         const chatTitle = chatToDelete.title || 'Чат';
-        
-        // Если чат временный (пустой) — просто удаляем
         if (!chatToDelete.synced && !window.hasRealMessages(chatToDelete)) {
             const topicChats = window.chatHistories[topic] || [];
             window.chatHistories[topic] = topicChats.filter(c => c.id !== chatId);
@@ -480,21 +388,15 @@ window.deleteChat = function(event, chatId) {
             }
             return;
         }
-        
-        // Помечаем как удалённый
         chatToDelete.deleted_at = new Date().toISOString();
         const topicChats = window.chatHistories[topic] || [];
         window.chatHistories[topic] = topicChats.filter(c => c.id !== chatId);
-
         if (window.activeChatIds[topic] === chatId) {
             const remainingChats = window.chatHistories[topic];
             window.activeChatIds[topic] = remainingChats[0]?.id || null;
         }
-
         window.saveHistoriesToLocal();
         window.refreshUiAfterChatSelection();
-        
-        // Отправляем на сервер
         if (window.config.syncEnabled && chatId && chatToDelete.synced) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -511,14 +413,11 @@ window.deleteChat = function(event, chatId) {
                 }).catch(err => console.error("Ошибка удаления чата:", err));
             }
         }
-        
         if (window.tg?.showAlert) {
             window.tg.showAlert(`🗑️ "${chatTitle}" перемещён в корзину`);
         }
     };
-
     const confirmMsg = window.getLangString ? window.getLangString('confirm_del_chat') : 'Переместить чат в корзину?';
-    
     if (window.tg?.showConfirm) {
         window.tg.showConfirm(confirmMsg, (ok) => { if (ok) action(); });
     } else if (confirm(confirmMsg)) {
@@ -526,21 +425,14 @@ window.deleteChat = function(event, chatId) {
     }
 };
 
-// ==========================================
-// ПЕРЕИМЕНОВАНИЕ ЧАТА
-// ==========================================
-
 window.renameChat = function(event, chatId) {
     if (event && event.stopPropagation) event.stopPropagation();
-    
     const found = window.findChatInAllTopics(chatId);
     if (!found) {
         console.warn('❌ Чат не найден для переименования:', chatId);
         return;
     }
-    
     const { chat, topic } = found;
-
     const newTitle = prompt(window.getLangString('prompt_rename'), chat.title);
     if (newTitle && newTitle.trim().length > 0) {
         chat.title = newTitle.trim();
@@ -549,7 +441,6 @@ window.renameChat = function(event, chatId) {
         if (typeof window.renderHistoryChatsList === 'function') {
             window.renderHistoryChatsList(window.currentFilter || 'all');
         }
-        
         if (window.config.syncEnabled && chatId && chat.synced) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -570,23 +461,16 @@ window.renameChat = function(event, chatId) {
     }
 };
 
-// ==========================================
-// УДАЛЕНИЕ СООБЩЕНИЯ
-// ==========================================
-
 window.deleteMessage = function(msgId) {
     const action = () => {
         const activeChat = window.getCurrentActiveChat();
         if (!activeChat) return;
-
         const msg = activeChat.messages.find(m => m.id === msgId);
         if (msg) {
             msg.deleted_at = new Date().toISOString();
         }
-        
         activeChat.messages = activeChat.messages.filter(m => m.id !== msgId);
         window.saveHistoriesToLocal();
-        
         const domBlock = document.getElementById(`msg-block-${msgId}`);
         if (domBlock) {
             domBlock.style.transition = 'all 0.25s ease';
@@ -594,7 +478,6 @@ window.deleteMessage = function(msgId) {
             domBlock.style.transform = 'scale(0.95)';
             setTimeout(() => { domBlock.remove(); }, 250);
         }
-        
         if (window.config.syncEnabled && activeChat.id && activeChat.synced) {
             const initData = window.Telegram?.WebApp?.initData;
             if (initData) {
@@ -613,17 +496,12 @@ window.deleteMessage = function(msgId) {
             }
         }
     };
-
     if (window.tg?.showConfirm) {
         window.tg.showConfirm(window.getLangString('confirm_del_msg'), (ok) => { if (ok) action(); });
     } else if (confirm(window.getLangString('confirm_del_msg'))) {
         action();
     }
 };
-
-// ==========================================
-// ОЧЕРЕДЬ НЕСИНХРОНИЗИРОВАННЫХ
-// ==========================================
 
 window.addToUnsyncedQueue = function(chatId, message) {
     window.unsyncedMessages = window.unsyncedMessages || [];
@@ -642,16 +520,12 @@ window.addToUnsyncedQueue = function(chatId, message) {
 window.retryUnsyncedMessages = async function() {
     if (!window.config.syncEnabled) return;
     if (!window.unsyncedMessages || window.unsyncedMessages.length === 0) return;
-    
     console.log(`🔄 Повторная отправка ${window.unsyncedMessages.length} несинхронизированных сообщений...`);
-    
     const failedAgain = [];
-    
     for (const item of window.unsyncedMessages) {
         try {
             const initData = window.Telegram?.WebApp?.initData;
             if (!initData) continue;
-            
             const response = await fetch('/api/chats/action', {
                 method: 'POST',
                 headers: { 
@@ -668,9 +542,7 @@ window.retryUnsyncedMessages = async function() {
                     message: item.message
                 })
             });
-            
             const data = await response.json();
-            
             if (data.synced === true) {
                 window.markMessagesSynced(item.chatId, [item.message.id]);
             } else {
@@ -681,10 +553,8 @@ window.retryUnsyncedMessages = async function() {
             failedAgain.push(item);
         }
     }
-    
     window.unsyncedMessages = failedAgain;
     window.saveHistoriesToLocal();
-    
     if (failedAgain.length === 0) {
         console.log("✅ Все сообщения успешно синхронизированы!");
     } else {
@@ -695,7 +565,6 @@ window.retryUnsyncedMessages = async function() {
 window.markMessagesSynced = function(chatId, messageIds) {
     const activeChat = window.getCurrentActiveChat();
     if (!activeChat || activeChat.id !== chatId) return;
-    
     let updated = false;
     activeChat.messages.forEach(msg => {
         if (messageIds.includes(msg.id) && !msg.synced) {
@@ -703,37 +572,24 @@ window.markMessagesSynced = function(chatId, messageIds) {
             updated = true;
         }
     });
-    
     if (updated) {
         window.saveHistoriesToLocal();
     }
 };
 
-// ==========================================
-// СОЗДАНИЕ НОВОГО ЧАТА (ДЛЯ КНОПКИ)
-// ==========================================
-
 window.createNewChat = function() {
-    // Закрываем модалку
     const card = document.getElementById('profile-card');
     if (card) {
         card.classList.add('hidden');
         if (window.tg?.BackButton) window.tg.BackButton.hide();
     }
-    
     const newChat = window.createTempChat();
-    
     if (typeof window.showChatInterface === 'function') {
         window.showChatInterface();
     }
-    
     window.refreshUiAfterChatSelection();
     return newChat;
 };
-
-// ==========================================
-// СОХРАНЕНИЕ ПОСЛЕДНЕГО СОСТОЯНИЯ
-// ==========================================
 
 window.saveLastChat = function() {
     const activeChat = window.getCurrentActiveChat();
