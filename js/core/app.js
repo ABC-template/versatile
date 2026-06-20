@@ -1,66 +1,5 @@
-// js/core/app.js - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ВЕРСИЯ
-
-// ==========================================
-// ДОБАВЛЕНО: ОБРАБОТКА ОФЛАЙН-РЕЖИМА
-// ==========================================
-window.addEventListener('online', () => {
-    console.log('📶 Интернет восстановлен');
-    if (window.config?.syncEnabled) {
-        console.log('🔄 Запускаем синхронизацию после восстановления сети...');
-        if (typeof window.syncChatsMetadata === 'function') {
-            window.syncChatsMetadata();
-        }
-        if (typeof window.retryUnsyncedMessages === 'function') {
-            window.retryUnsyncedMessages();
-        }
-        if (typeof window.retryUnsyncedFavorites === 'function') {
-            window.retryUnsyncedFavorites();
-        }
-        if (typeof window.processPendingDeletions === 'function') {
-            window.processPendingDeletions();
-        }
-        if (typeof window.processOfflineQueue === 'function') {
-            window.processOfflineQueue();
-        }
-    }
-});
-
-window.addEventListener('offline', () => {
-    console.warn('📶 Интернет потерян — сообщения сохраняются локально');
-    if (typeof window.showSyncStatus === 'function') {
-        window.showSyncStatus('error', true);
-    }
-});
-
-// ==========================================
-// ДОБАВЛЕНО: ОЧИСТКА СТАРЫХ ЧАТОВ (ТОЛЬКО ЛОКАЛЬНО)
-// ==========================================
-window.cleanOldChats = function(maxChatsPerTopic = 20) {
-    let cleaned = 0;
-    let totalRemoved = 0;
-    
-    for (const topic of Object.keys(window.chatHistories || {})) {
-        if (window.chatHistories[topic] && window.chatHistories[topic].length > maxChatsPerTopic) {
-            const removed = window.chatHistories[topic].length - maxChatsPerTopic;
-            window.chatHistories[topic] = window.chatHistories[topic].slice(0, maxChatsPerTopic);
-            cleaned++;
-            totalRemoved += removed;
-        }
-    }
-    
-    if (cleaned > 0) {
-        console.log(`🧹 Очищено ${cleaned} тем, удалено ${totalRemoved} старых чатов (оставлено максимум ${maxChatsPerTopic} на тему)`);
-        window.saveHistoriesToLocal();
-    }
-    
-    return { cleaned, totalRemoved };
-};
-
-// ==========================================
-// ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ
-// ==========================================
+// js/core/app.js
 async function initApp() {
-    // 1. Инициализация Eruda строго для Администратора
     const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     const MY_TELEGRAM_ID = 1541531808; 
     const isLocalDebug = localStorage.getItem('debug_mode') === 'true';
@@ -91,7 +30,6 @@ async function initApp() {
         }
     }
 
-    // 2. Функция расчета безопасных зон (челки и подбородка на iOS/Android)
     function setTelegramInsets() {
         try {
             if (!tg) { 
@@ -102,7 +40,6 @@ async function initApp() {
             const initDataStr = tg?.initData || "";
             const isMiniApp = !!(initDataStr && initDataStr.length > 0);
             const isMobilePlatform = tg?.platform === 'ios' || tg?.platform === 'android';
-            
             let topInset = 0;
             if (isMiniApp && isMobilePlatform) {
                 topInset = tg?.contentSafeAreaInset?.top || tg?.safeAreaInset?.top || 0;
@@ -111,7 +48,6 @@ async function initApp() {
                 topInset = 0; 
             }
             const bottomInset = isMiniApp ? (tg?.safeAreaInset?.bottom || 0) : 0;
-            
             root.style.setProperty('--tg-content-safe-area-top', `${topInset}px`);
             root.style.setProperty('--tg-safe-bottom', `${bottomInset}px`);
         } catch (err) {
@@ -125,7 +61,6 @@ async function initApp() {
     setTimeout(() => { setTelegramInsets(); }, 150);
     setTimeout(() => { setTelegramInsets(); }, 450);
 
-    // Слушатель системной кнопки "Назад" в шапке Telegram
     if (tg) {
         try {
             tg.onEvent('backButtonClicked', () => { 
@@ -136,30 +71,25 @@ async function initApp() {
         }
     }
 
-    // 3. Загрузка данных пользователя (Имя, Аватарка)
     const user = tg?.initDataUnsafe?.user;
     if (user) {
         const avatarUrl = user.photo_url || 'https://gravatar.com/avatar/00000000000000000000000000000000?d=mp'; 
         const userAvatarEl = document.getElementById('user-avatar');
         const cardAvatarEl = document.getElementById('card-avatar');
         const userNameEl = document.getElementById('user-name');
-        
         if (userAvatarEl) userAvatarEl.src = avatarUrl;
         if (cardAvatarEl) cardAvatarEl.src = avatarUrl;
         if (userNameEl) userNameEl.innerText = user.first_name + (user.last_name ? ' ' + user.last_name : '');
     }
 
-    // 4. Загрузка локальных данных чата
     if (typeof window.loadLocalHistories === 'function') {
         window.loadLocalHistories();
     }
 
-    // 5. САМОЕ ВАЖНОЕ: Проверка подписки, лимитов и синхронизации
     const uid = user?.id;
     if (!uid) { 
         const limitInfoEl = document.getElementById('limit-info');
         if (limitInfoEl) limitInfoEl.innerText = "Ошибка: ID не найден"; 
-        
         const appScreen = document.getElementById('app-screen');
         if (appScreen) {
             appScreen.classList.remove('hidden');
@@ -168,7 +98,6 @@ async function initApp() {
         return; 
     }
 
-    // Динамическая установка флага синхронизации
     window.config = window.config || {};
     if (uid === MY_TELEGRAM_ID || localStorage.getItem('is_pro_user') === 'true') {
         window.config.syncEnabled = true;
@@ -176,45 +105,33 @@ async function initApp() {
         window.config.syncEnabled = false;
     }
 
-    // Функция для выполнения синхронизации после проверки подписки
     async function performSyncIfNeeded() {
         if (window.config && window.config.syncEnabled) {
             console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
-            
-            // 🆕 РЕГИСТРИРУЕМ УСТРОЙСТВО
             if (typeof window.initDeviceManager === 'function') {
                 await window.initDeviceManager();
             }
-            
             if (typeof window.syncChatsMetadata === 'function') {
                 await window.syncChatsMetadata();
             }
-            
             if (typeof window.fullSyncAllChats === 'function') {
                 await window.fullSyncAllChats();
             }
-            
             if (typeof window.startUnsyncedRetryTimer === 'function') {
                 window.startUnsyncedRetryTimer();
             }
-            
             if (typeof window.initExportButtons === 'function') {
                 window.initExportButtons();
             }
-            
-            // Очищаем старые чаты (только локально, безопасно для всех ролей)
-            if (typeof window.cleanOldChats === 'function') {
-                window.cleanOldChats(20);
+            if (typeof window.cleanupTempChats === 'function') {
+                window.cleanupTempChats();
             }
         } else {
             console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
-            
-            // Даже для офлайн-режима очищаем старые чаты
-            if (typeof window.cleanOldChats === 'function') {
-                window.cleanOldChats(20);
+            if (typeof window.cleanupTempChats === 'function') {
+                window.cleanupTempChats();
             }
         }
-        
         const appScreen = document.getElementById('app-screen');
         if (appScreen) {
             appScreen.classList.remove('hidden');
@@ -222,25 +139,16 @@ async function initApp() {
         }
     }
 
-    // Восстанавливаем счетчики лимитов из CloudStorage (или LocalStorage) и дергаем бэкенд
     if (tg?.CloudStorage) {
         tg.CloudStorage.getItems(['ai_user_keys', 'usage_data'], async (err, values) => {
             try { window.allUserKeys = JSON.parse(values?.ai_user_keys || '{}'); } catch(e) { window.allUserKeys = {}; }
-            
             const today = new Date().toLocaleDateString();
             const usage = JSON.parse(values?.usage_data || '{}');
             window.usedToday = (usage.date === today) ? (usage.count || 0) : 0;
-            
             if (typeof window.checkSubscriptionAndLoad === 'function') {
                 await window.checkSubscriptionAndLoad(uid);
             }
-            
-            // Синхронизация после проверки подписки
             await performSyncIfNeeded();
-            
-            // ==========================================
-            // ДОБАВЛЕНО: ЗАПУСК ОФЛАЙН-ОЧЕРЕДИ
-            // ==========================================
             if (typeof window.startOfflineQueueProcessor === 'function') {
                 window.startOfflineQueueProcessor();
             }
@@ -249,40 +157,27 @@ async function initApp() {
         if (typeof window.checkSubscriptionAndLoad === 'function') {
             await window.checkSubscriptionAndLoad(uid);
         }
-        
-        // Синхронизация после проверки подписки
         await performSyncIfNeeded();
-        
-        // ==========================================
-        // ДОБАВЛЕНО: ЗАПУСК ОФЛАЙН-ОЧЕРЕДИ
-        // ==========================================
         if (typeof window.startOfflineQueueProcessor === 'function') {
             window.startOfflineQueueProcessor();
         }
     }
 
-    // ==========================================
-    // ПОДПИСКА НА ТИХИЕ PUSH-УВЕДОМЛЕНИЯ
-    // ==========================================
     if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.onEvent('message', async (message) => {
             console.log("📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:", message);
             console.log("ТЕКСТ СООБЩЕНИЯ:", message.text);
             console.log("ДЛИНА ТЕКСТА:", message.text?.length);
             console.log("КОДЫ СИМВОЛОВ:", message.text?.split('').map(c => c.charCodeAt(0)));
-            
             if (message.text === "🔄") {
                 console.log("✅ СИГНАЛ РАСПОЗНАН!");
-                
                 if (window.config?.syncEnabled) {
                     if (typeof window.showSyncStatus === 'function') {
                         window.showSyncStatus('syncing');
                     }
-                    
                     if (typeof window.syncChatsMetadata === 'function') {
                         await window.syncChatsMetadata();
                     }
-                    
                     const activeChat = window.getCurrentActiveChat();
                     if (activeChat && typeof window.loadFullChat === 'function') {
                         await window.loadFullChat(activeChat.id);
@@ -290,7 +185,6 @@ async function initApp() {
                             window.loadActiveChatMessages();
                         }
                     }
-                    
                     if (typeof window.showSyncStatus === 'function') {
                         window.showSyncStatus('success');
                     }
@@ -300,118 +194,104 @@ async function initApp() {
             }
         });
     }
+
+    // ==========================================
+    // ПОКАЗЫВАЕМ ОБЛАКО ТЕГОВ ИЛИ ЧАТ
+    // ==========================================
+    
+    const inputArea = document.getElementById('input-area');
+    const fabBtn = document.getElementById('fab-open-input');
+    const chatContainer = document.getElementById('chat-container');
+    const tagsCloud = document.getElementById('tags-cloud-container');
+    
+    window.showTagsCloud = function() {
+        if (tagsCloud) tagsCloud.style.display = 'flex';
+        if (chatContainer) {
+            chatContainer.style.display = 'none';
+            chatContainer.classList.remove('visible');
+        }
+        if (inputArea) inputArea.style.display = 'none';
+        if (fabBtn) fabBtn.style.display = 'none';
+    };
+    
+    window.showChatInterface = function() {
+        if (tagsCloud) tagsCloud.style.display = 'none';
+        if (chatContainer) {
+            chatContainer.style.display = 'flex';
+            chatContainer.classList.add('visible');
+        }
+        if (inputArea) inputArea.style.display = 'flex';
+        if (fabBtn) fabBtn.style.display = 'flex';
+    };
+    
+    const lastTopic = localStorage.getItem('last_topic');
+    const lastChatId = lastTopic ? localStorage.getItem(`last_chat_${lastTopic}`) : null;
+    let hasSavedChat = false;
+    
+    if (lastTopic && lastChatId) {
+        const chat = window.chatHistories[lastTopic]?.find(c => c.id === lastChatId && !c.deleted_at);
+        if (chat && window.hasRealMessages(chat)) {
+            window.currentTopic = lastTopic;
+            window.activeChatIds[lastTopic] = lastChatId;
+            hasSavedChat = true;
+        }
+    }
+    
+    if (hasSavedChat) {
+        window.showChatInterface();
+        window.refreshUiAfterChatSelection();
+    } else {
+        if (typeof window.cleanupTempChats === 'function') {
+            window.cleanupTempChats();
+        }
+        window.showTagsCloud();
+        if (typeof window.renderTagsCloud === 'function') {
+            window.renderTagsCloud();
+        }
+    }
+    
+    setInterval(() => {
+        if (typeof window.cleanupTempChats === 'function') {
+            window.cleanupTempChats();
+        }
+    }, 5 * 60 * 1000);
 }
 
 // ==========================================
-// ФУНКЦИЯ ДЛЯ ОТСЛЕЖИВАНИЯ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
+// ОТСЛЕЖИВАНИЕ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
 // ==========================================
+
 let lastUserId = null;
 
 function checkUserChanged() {
     const currentUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
     const currentUserId = currentUser?.id;
-    
     if (lastUserId && lastUserId !== currentUserId) {
         console.log(`🔄 Пользователь сменился с ${lastUserId} на ${currentUserId}, очищаем данные`);
         if (typeof window.clearLocalHistories === 'function') {
             window.clearLocalHistories();
         }
-        // Перезагружаем данные для нового пользователя
         if (typeof window.loadLocalHistories === 'function') {
             window.loadLocalHistories();
         }
-        
-        // Очищаем офлайн-очередь для старого пользователя
         if (typeof window.loadOfflineQueue === 'function') {
             window.loadOfflineQueue();
         }
     }
-    
     lastUserId = currentUserId;
 }
 
-// Вызывать checkUserChanged() периодически или при фокусе окна
-setInterval(checkUserChanged, 1000); // каждую секунду
+setInterval(checkUserChanged, 1000);
 window.addEventListener('focus', checkUserChanged);
 
-// ==========================================
-// ЗАПУСК ВСЕГО ПОСЛЕ РЕНДЕРИНГА СТРАНИЦЫ
-// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(err => {
         console.error('Критический сбой инициализации:', err);
     });
 });
 
-// ==========================================
-// ПОЛНОЭКРАННЫЙ РЕЖИМ (если поддерживается)
-// ==========================================
 if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
 }
-// ==========================================
-// ПОКАЗЫВАЕМ ОБЛАКО ТЕГОВ ИЛИ ПОСЛЕДНИЙ ЧАТ
-// ==========================================
 
-// Скрываем капсулу ввода по умолчанию
-const inputArea = document.getElementById('input-area');
-const fabBtn = document.getElementById('fab-open-input');
-const chatContainer = document.getElementById('chat-container');
-const tagsCloud = document.getElementById('tags-cloud-container');
-
-// Функция показа облака тегов
-function showTagsCloud() {
-    if (tagsCloud) tagsCloud.style.display = 'flex';
-    if (chatContainer) {
-        chatContainer.style.display = 'none';
-        chatContainer.classList.remove('visible');
-    }
-    if (inputArea) inputArea.style.display = 'none';
-    if (fabBtn) fabBtn.style.display = 'none';
-}
-
-// Функция показа чата
-function showChatInterface() {
-    if (tagsCloud) tagsCloud.style.display = 'none';
-    if (chatContainer) {
-        chatContainer.style.display = 'flex';
-        chatContainer.classList.add('visible');
-    }
-    if (inputArea) inputArea.style.display = 'flex';
-    if (fabBtn) fabBtn.style.display = 'flex';
-}
-
-// Сохраняем функции глобально
-window.showTagsCloud = showTagsCloud;
-window.showChatInterface = showChatInterface;
-
-// Проверяем, есть ли сохранённый чат
-const lastTopic = localStorage.getItem('last_topic');
-const lastChatId = lastTopic ? localStorage.getItem(`last_chat_${lastTopic}`) : null;
-
-if (lastTopic && lastChatId) {
-    // Проверяем, существует ли чат
-    const chat = window.chatHistories[lastTopic]?.find(c => c.id === lastChatId && !c.deleted_at);
-    if (chat) {
-        window.currentTopic = lastTopic;
-        window.activeChatIds[lastTopic] = lastChatId;
-        showChatInterface();
-        window.refreshUiAfterChatSelection();
-    } else {
-        showTagsCloud();
-        if (typeof window.renderTagsCloud === 'function') {
-            window.renderTagsCloud();
-        }
-    }
-} else {
-    showTagsCloud();
-    if (typeof window.renderTagsCloud === 'function') {
-        window.renderTagsCloud();
-    }
-}
-
-// Рендерим облако тегов
-if (typeof window.renderTagsCloud === 'function') {
-    window.renderTagsCloud();
-}
 console.log('✅ app.js полностью загружен с исправлениями');
