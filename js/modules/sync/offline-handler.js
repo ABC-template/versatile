@@ -1,21 +1,35 @@
+// ============================================
 // js/modules/sync/offline-handler.js
-// Обработка офлайн-режима и очередь сообщений
+// Описание: Обработка офлайн-режима
+// ============================================
 
+console.log('✅ OfflineHandler загружен');
+
+// Используем queueManager вместо глобальной очереди
 window.offlineQueue = [];
 
-// Сохраняем сообщение в офлайн-очередь
+/**
+ * Сохраняем сообщение в офлайн-очередь
+ */
 window.addToOfflineQueue = function(chatId, message, topicId) {
-    window.offlineQueue.push({
-        chatId,
-        message,
-        topicId,
-        timestamp: new Date().toISOString(),
-        attempts: 0
-    });
-    window.saveOfflineQueue();
+    if (window.queueManager) {
+        window.queueManager.addOffline(chatId, message, topicId);
+    } else {
+        // Fallback
+        window.offlineQueue.push({
+            chatId,
+            message,
+            topicId,
+            timestamp: new Date().toISOString(),
+            attempts: 0
+        });
+        window.saveOfflineQueue();
+    }
 };
 
-// Сохраняем очередь в localStorage
+/**
+ * Сохраняем очередь в localStorage
+ */
 window.saveOfflineQueue = function() {
     const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 'anonymous';
     try {
@@ -25,7 +39,9 @@ window.saveOfflineQueue = function() {
     }
 };
 
-// Загружаем очередь из localStorage
+/**
+ * Загружаем очередь из localStorage
+ */
 window.loadOfflineQueue = function() {
     const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 'anonymous';
     try {
@@ -36,16 +52,22 @@ window.loadOfflineQueue = function() {
     }
 };
 
-// Обработка офлайн-очереди при восстановлении сети
+/**
+ * Обработка офлайн-очереди при восстановлении сети
+ */
 window.processOfflineQueue = async function() {
     if (!navigator.onLine) {
         console.log('📶 Нет интернета, очередь не обрабатывается');
         return;
     }
     
-    if (!window.offlineQueue || window.offlineQueue.length === 0) {
+    if (window.queueManager) {
+        await window.queueManager.processOffline();
         return;
     }
+    
+    // Fallback
+    if (window.offlineQueue.length === 0) return;
     
     console.log(`📤 Обработка ${window.offlineQueue.length} сообщений из офлайн-очереди...`);
     
@@ -77,7 +99,7 @@ window.processOfflineQueue = async function() {
             
             const data = await response.json();
             
-            if (data.synced === true || data.success === true) {
+            if (data.synced || data.success) {
                 console.log(`✅ Сообщение из офлайн-очереди отправлено: ${item.message.id}`);
             } else {
                 if (item.attempts < 5) {
@@ -104,14 +126,19 @@ window.processOfflineQueue = async function() {
     }
 };
 
-// Запуск периодической проверки офлайн-очереди
+/**
+ * Запуск периодической проверки офлайн-очереди
+ */
 window.startOfflineQueueProcessor = function() {
     window.loadOfflineQueue();
     
     // Проверка каждые 30 секунд
     setInterval(() => {
-        if (navigator.onLine && window.offlineQueue.length > 0) {
+        if (navigator.onLine && (window.offlineQueue.length > 0 || window.queueManager?.getQueueSize() > 0)) {
             window.processOfflineQueue();
+            if (window.queueManager) {
+                window.queueManager.process();
+            }
         }
     }, 30000);
     
@@ -119,8 +146,11 @@ window.startOfflineQueueProcessor = function() {
     window.addEventListener('online', () => {
         setTimeout(() => {
             window.processOfflineQueue();
+            if (window.queueManager) {
+                window.queueManager.process();
+            }
         }, 2000);
     });
 };
 
-console.log('✅ offline-handler.js загружен');
+console.log('✅ OfflineHandler загружен');
