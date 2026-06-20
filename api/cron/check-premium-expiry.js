@@ -216,6 +216,40 @@ export default async function handler(request) {
     console.error('Ошибка в фазе очистки:', cleanErr.message);
   }
 
+  // ==========================================
+  // ФАЗА 4: Автоматическая очистка корзины (30 дней)
+  // ==========================================
+  let trashCleanedCount = 0;
+  
+  try {
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    
+    const expiredTrash = await supabaseFetch(
+      `chats?deleted_at=lt.${encodeURIComponent(thirtyDaysAgo)}&select=id,user_id`
+    );
+    
+    if (Array.isArray(expiredTrash) && expiredTrash.length > 0) {
+      console.log(`🗑️ Автоочистка: ${expiredTrash.length} чатов в корзине старше 30 дней`);
+      
+      for (const chat of expiredTrash) {
+        try {
+          await supabaseFetch(`messages?chat_id=eq.${chat.id}`, { method: 'DELETE' });
+          await supabaseFetch(`chats?id=eq.${chat.id}`, { method: 'DELETE' });
+          trashCleanedCount++;
+          console.log(`🗑️ Удалён чат ${chat.id} (в корзине > 30 дней)`);
+        } catch (err) {
+          console.error(`Ошибка удаления чата ${chat.id}:`, err.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Ошибка автоочистки корзины:', err.message);
+  }
+
+  // ==========================================
+  // ФОРМИРОВАНИЕ ОТВЕТА
+  // ==========================================
+  
   const report = {
     success: true,
     timestamp: now.toISOString(),
@@ -223,60 +257,14 @@ export default async function handler(request) {
     delete_warnings_sent: deleteWarnings,
     users_deleted: deletedUsersCount,
     chats_deleted: deletedChatsCount,
-    messages_deleted: deletedMessagesCount
+    messages_deleted: deletedMessagesCount,
+    trash_cleaned: trashCleanedCount
   };
   
-  // ==========================================
-// ФАЗА 4: Автоматическая очистка корзины (30 дней)
-// ==========================================
-let trashCleanedCount = 0;
-
-try {
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  console.log('✅ Cron выполнен:', JSON.stringify(report));
   
-  // Находим чаты в корзине старше 30 дней
-  const expiredTrash = await supabaseFetch(
-    `chats?deleted_at=lt.${encodeURIComponent(thirtyDaysAgo)}&select=id,user_id`
-  );
-  
-  if (Array.isArray(expiredTrash) && expiredTrash.length > 0) {
-    console.log(`🗑️ Автоочистка: ${expiredTrash.length} чатов в корзине старше 30 дней`);
-    
-    for (const chat of expiredTrash) {
-      try {
-        // Удаляем сообщения чата
-        await supabaseFetch(`messages?chat_id=eq.${chat.id}`, { method: 'DELETE' });
-        // Удаляем сам чат
-        await supabaseFetch(`chats?id=eq.${chat.id}`, { method: 'DELETE' });
-        trashCleanedCount++;
-        console.log(`🗑️ Удалён чат ${chat.id} (в корзине > 30 дней)`);
-      } catch (err) {
-        console.error(`Ошибка удаления чата ${chat.id}:`, err.message);
-      }
-    }
-  }
-} catch (err) {
-  console.error('Ошибка автоочистки корзины:', err.message);
+  return new Response(JSON.stringify(report), { 
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
-
-// ==========================================
-// ОТВЕТ
-// ==========================================
-
-const report = {
-  success: true,
-  timestamp: now.toISOString(),
-  notifications_sent: sent,
-  delete_warnings_sent: deleteWarnings,
-  users_deleted: deletedUsersCount,
-  chats_deleted: deletedChatsCount,
-  messages_deleted: deletedMessagesCount,
-  trash_cleaned: trashCleanedCount  // ← ДОБАВЛЕНО
-};
-
-console.log('✅ Cron выполнен:', JSON.stringify(report));
-
-return new Response(JSON.stringify(report), { 
-  status: 200,
-  headers: { 'Content-Type': 'application/json' }
-});
