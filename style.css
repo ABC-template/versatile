@@ -135,3 +135,220 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 #trash-btn:active {
     transform: scale(0.95);
 }
+/* ========================================== */
+/* ОБЛАКО ТЕГОВ                               */
+/* ========================================== */
+
+#tags-cloud-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.tags-cloud-wrapper {
+    width: 100%;
+    max-width: 400px;
+    padding: 10px 0;
+}
+
+.tags-cloud-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.tags-cloud-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-color);
+    margin: 0 0 4px 0;
+}
+
+.tags-cloud-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.tag-chip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--secondary-bg);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.tag-chip:active {
+    transform: scale(0.97);
+}
+
+.tag-chip.active {
+    border-color: var(--button-color);
+    background: rgba(var(--tg-theme-button-color,0,136,204),0.08);
+    box-shadow: 0 4px 16px rgba(var(--tg-theme-button-color,0,136,204),0.15);
+}
+
+.tag-chip .tag-icon {
+    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-color);
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.tag-chip .tag-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.tags-cloud-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+.tag-action-btn {
+    padding: 12px 16px;
+    border: none;
+    background: var(--secondary-bg);
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+}
+
+.tag-action-btn:active {
+    transform: scale(0.97);
+    background: rgba(0,0,0,0.06);
+}
+
+/* ========================================== */
+/* ФИЛЬТРЫ В ИСТОРИИ                          */
+/* ========================================== */
+
+.filter-chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(0,0,0,0.08);
+    background: var(--secondary-bg);
+    color: var(--hint-color);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.filter-chip:active {
+    transform: scale(0.95);
+}
+
+.filter-chip.active {
+    background: var(--button-color);
+    color: var(--button-text);
+    border-color: var(--button-color);
+}
+
+/* ========================================== */
+/* ЧАТ (СКРЫТ ПО УМОЛЧАНИЮ)                   */
+/* ========================================== */
+
+#chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+    padding-bottom: 120px;
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+#chat-container.visible {
+    display: flex;
+}
+
+/* ========================================== */
+/* КОРЗИНА — МОДАЛКА                          */
+/* ========================================== */
+
+#trash-modal {
+    animation: fadeIn 0.25s ease;
+}
+
+#trash-modal > div {
+    animation: slideUp 0.3s cubic-bezier(0.1, 0.8, 0.25, 1);
+}
+
+#trash-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+#trash-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#trash-list::-webkit-scrollbar-thumb {
+    background: var(--hint-color);
+    border-radius: 4px;
+    opacity: 0.3;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { 
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+#trash-count {
+    font-size: 10px;
+    background: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    padding: 1px 6px;
+    min-width: 18px;
+    text-align: center;
+    display: none;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+#trash-btn {
+    transition: all 0.2s ease;
+}
+
+#trash-btn:hover {
+    background: rgba(231, 76, 60, 0.2) !important;
+}
+
+#trash-btn:active {
+    transform: scale(0.95);
+}
