@@ -44,9 +44,6 @@ export default async function handler(request) {
 
         const userId = user.id;
         
-        // ==========================================
-        // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
-        // ==========================================
         if (!Number.isInteger(userId) || userId <= 0) {
             return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
                 status: 401,
@@ -78,13 +75,14 @@ export default async function handler(request) {
         // GET — получить содержимое корзины
         // ==========================================
         if (request.method === 'GET') {
-            const deletedChats = await supabaseFetch(`
-                chats?user_id=eq.${userId}&deleted_at=not.is.null&select=id,title,topic_id,deleted_at,created_at&order=deleted_at.desc
-            `);
+            // ✅ ИСПРАВЛЕНО: убраны лишние пробелы и переносы строк
+            const deletedChats = await supabaseFetch(
+                `chats?user_id=eq.${userId}&deleted_at=not.is.null&select=id,title,topic_id,deleted_at,created_at&order=deleted_at.desc`
+            );
 
-            const deletedMessages = await supabaseFetch(`
-                messages?user_id=eq.${userId}&deleted_at=not.is.null&select=id,text,chat_id,deleted_at,created_at&order=deleted_at.desc
-            `);
+            const deletedMessages = await supabaseFetch(
+                `messages?user_id=eq.${userId}&deleted_at=not.is.null&select=id,text,chat_id,deleted_at,created_at&order=deleted_at.desc`
+            );
 
             const messagesWithChats = await Promise.all((deletedMessages || []).map(async (msg) => {
                 const chat = await supabaseFetch(`chats?id=eq.${msg.chat_id}&select=title`);
@@ -184,13 +182,31 @@ export default async function handler(request) {
                 });
             }
 
-            const devices = await supabaseFetch(`user_devices?user_id=eq.${userId}&is_active=eq.true&select=device_fingerprint`);
+            // Проверяем, что чат принадлежит пользователю и уже в корзине
+            const chatCheck = await supabaseFetch(
+                `chats?id=eq.${id}&user_id=eq.${userId}&deleted_at=not.is.null&select=id`
+            );
+            
+            if (!chatCheck || chatCheck.length === 0) {
+                return new Response(JSON.stringify({ error: 'Chat not found or not in trash' }), {
+                    status: 404,
+                    headers: corsHeaders
+                });
+            }
+
+            const devices = await supabaseFetch(
+                `user_devices?user_id=eq.${userId}&is_active=eq.true&select=device_fingerprint`
+            );
             const deviceFingerprints = (devices || []).map(d => d.device_fingerprint).filter(fp => fp !== deviceFingerprint);
 
             let entityCreatedAt = null;
             if (type === 'chat') {
                 const chat = await supabaseFetch(`chats?id=eq.${id}&select=created_at`);
                 entityCreatedAt = chat[0]?.created_at;
+                
+                // Удаляем все сообщения чата
+                await supabaseFetch(`messages?chat_id=eq.${id}`, { method: 'DELETE' });
+                // Удаляем сам чат
                 await supabaseFetch(`chats?id=eq.${id}`, { method: 'DELETE' });
             } else {
                 const msg = await supabaseFetch(`messages?id=eq.${id}&select=created_at`);
