@@ -1,288 +1,337 @@
+// ============================================
 // js/core/app.js
-async function initApp() {
-    const currentUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-    const MY_TELEGRAM_ID = 1541531808; 
-    const isLocalDebug = localStorage.getItem('debug_mode') === 'true';
+// Описание: Инициализация приложения
+// ============================================
 
-    if (currentUserId === MY_TELEGRAM_ID || isLocalDebug) {
-        if (window.eruda) {
-            window.eruda.init();
-        } else {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/eruda';
-            script.onload = () => { window.eruda.init(); };
-            document.head.appendChild(script);
-        }
-    }
-    
-    const root = document.documentElement;
+console.log('✅ App начал загрузку');
+
+/**
+ * Инициализация приложения
+ */
+async function initApp() {
     const tg = window.Telegram?.WebApp;
     
+    // ==========================================
+    // 1. НАСТРОЙКА TELEGRAM
+    // ==========================================
+    
     if (tg) {
-        try { 
-            tg.ready(); 
-            tg.expand(); 
+        try {
+            tg.ready();
+            tg.expand();
             if (tg.themeParams && tg.themeParams.bg_color) {
-                tg.setHeaderColor(tg.themeParams.bg_color); 
+                tg.setHeaderColor(tg.themeParams.bg_color);
             }
-        } catch (e) { 
-            console.error("Ошибка активации Telegram SDK:", e); 
+        } catch (e) {
+            console.error('Ошибка активации Telegram SDK:', e);
         }
     }
-
+    
+    // ==========================================
+    // 2. INSETS
+    // ==========================================
+    
     function setTelegramInsets() {
+        const root = document.documentElement;
         try {
-            if (!tg) { 
-                root.style.setProperty('--tg-content-safe-area-top', '0px'); 
-                root.style.setProperty('--tg-safe-bottom', '0px'); 
-                return; 
+            if (!tg) {
+                root.style.setProperty('--tg-content-safe-area-top', '0px');
+                root.style.setProperty('--tg-safe-bottom', '0px');
+                return;
             }
-            const initDataStr = tg?.initData || "";
+            const initDataStr = tg?.initData || '';
             const isMiniApp = !!(initDataStr && initDataStr.length > 0);
             const isMobilePlatform = tg?.platform === 'ios' || tg?.platform === 'android';
+            
             let topInset = 0;
             if (isMiniApp && isMobilePlatform) {
                 topInset = tg?.contentSafeAreaInset?.top || tg?.safeAreaInset?.top || 0;
-                if (topInset < 50) topInset = 60; 
-            } else { 
-                topInset = 0; 
+                if (topInset < 50) topInset = 60;
+            } else {
+                topInset = 0;
             }
+            
             const bottomInset = isMiniApp ? (tg?.safeAreaInset?.bottom || 0) : 0;
             root.style.setProperty('--tg-content-safe-area-top', `${topInset}px`);
             root.style.setProperty('--tg-safe-bottom', `${bottomInset}px`);
         } catch (err) {
-            console.error("Сбой расчета безопасных зон:", err);
-            root.style.setProperty('--tg-content-safe-area-top', '0px'); 
+            console.error('Сбой расчета безопасных зон:', err);
+            root.style.setProperty('--tg-content-safe-area-top', '0px');
             root.style.setProperty('--tg-safe-bottom', '0px');
         }
     }
-
+    
     setTelegramInsets();
-    setTimeout(() => { setTelegramInsets(); }, 150);
-    setTimeout(() => { setTelegramInsets(); }, 450);
-
+    setTimeout(setTelegramInsets, 150);
+    setTimeout(setTelegramInsets, 450);
+    
     if (tg) {
         try {
-            tg.onEvent('backButtonClicked', () => { 
-                if (typeof setTelegramInsets === 'function') setTelegramInsets(); 
-            });
-        } catch (e) { 
-            console.error("Ошибка привязки кнопки Назад:", e); 
+            tg.onEvent('backButtonClicked', setTelegramInsets);
+        } catch (e) {
+            console.error('Ошибка привязки кнопки Назад:', e);
         }
     }
-
+    
+    // ==========================================
+    // 3. ПОЛЬЗОВАТЕЛЬ
+    // ==========================================
+    
     const user = tg?.initDataUnsafe?.user;
+    const userStore = window.userStore;
+    const chatStore = window.chatStore;
+    
     if (user) {
-        const avatarUrl = user.photo_url || 'https://gravatar.com/avatar/00000000000000000000000000000000?d=mp'; 
+        const avatarUrl = user.photo_url || 'https://gravatar.com/avatar/00000000000000000000000000000000?d=mp';
         const userAvatarEl = document.getElementById('user-avatar');
         const cardAvatarEl = document.getElementById('card-avatar');
         const userNameEl = document.getElementById('user-name');
+        
         if (userAvatarEl) userAvatarEl.src = avatarUrl;
         if (cardAvatarEl) cardAvatarEl.src = avatarUrl;
         if (userNameEl) userNameEl.innerText = user.first_name + (user.last_name ? ' ' + user.last_name : '');
     }
-
-    if (typeof window.loadLocalHistories === 'function') {
-        window.loadLocalHistories();
+    
+    // ==========================================
+    // 4. ЗАГРУЗКА ДАННЫХ
+    // ==========================================
+    
+    chatStore.loadFromStorage();
+    userStore.loadFromStorage();
+    
+    if (window.syncStore) {
+        window.syncStore.loadFromStorage();
     }
-
+    
+    if (window.organizerStore) {
+        window.organizerStore.loadFromStorage();
+    }
+    
+    // ==========================================
+    // 5. АВТОРИЗАЦИЯ И СИНХРОНИЗАЦИЯ
+    // ==========================================
+    
     const uid = user?.id;
-    if (!uid) { 
+    if (!uid) {
         const limitInfoEl = document.getElementById('limit-info');
-        if (limitInfoEl) limitInfoEl.innerText = "Ошибка: ID не найден"; 
+        if (limitInfoEl) limitInfoEl.textContent = 'Ошибка: ID не найден';
         const appScreen = document.getElementById('app-screen');
         if (appScreen) {
             appScreen.classList.remove('hidden');
             if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
         }
-        return; 
+        return;
     }
-
-    window.config = window.config || {};
-    if (uid === MY_TELEGRAM_ID || localStorage.getItem('is_pro_user') === 'true') {
-        window.config.syncEnabled = true;
-    } else {
-        window.config.syncEnabled = false;
-    }
-
-    async function performSyncIfNeeded() {
-        if (window.config && window.config.syncEnabled) {
-            console.log("🔄 Синхронизация включена, загружаем актуальные чаты...");
-            if (typeof window.initDeviceManager === 'function') {
-                await window.initDeviceManager();
+    
+    // Проверяем подписку
+    if (window.authService) {
+        const result = await window.authService.checkSubscription();
+        
+        if (result.isMember || result.role === 'admin' || result.role === 'creator') {
+            // Пользователь авторизован
+            console.log(`👤 Пользователь авторизован: ${result.role}`);
+            
+            if (window.chatUI) {
+                window.chatUI.showChatInterface();
+                if (window.uiRenderer) window.uiRenderer.renderTagsCloud();
             }
-            if (typeof window.syncChatsMetadata === 'function') {
-                await window.syncChatsMetadata();
-            }
-            if (typeof window.fullSyncAllChats === 'function') {
-                await window.fullSyncAllChats();
-            }
-            if (typeof window.startUnsyncedRetryTimer === 'function') {
-                window.startUnsyncedRetryTimer();
-            }
-            if (typeof window.initExportButtons === 'function') {
-                window.initExportButtons();
-            }
-            if (typeof window.cleanupTempChats === 'function') {
-                window.cleanupTempChats();
-            }
-        } else {
-            console.log("📱 Синхронизация отключена, работаем только с локальным хранилищем");
-            if (typeof window.cleanupTempChats === 'function') {
-                window.cleanupTempChats();
-            }
-        }
-        const appScreen = document.getElementById('app-screen');
-        if (appScreen) {
-            appScreen.classList.remove('hidden');
-            if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
-        }
-    }
-
-    if (tg?.CloudStorage) {
-        tg.CloudStorage.getItems(['ai_user_keys', 'usage_data'], async (err, values) => {
-            try { window.allUserKeys = JSON.parse(values?.ai_user_keys || '{}'); } catch(e) { window.allUserKeys = {}; }
-            const today = new Date().toLocaleDateString();
-            const usage = JSON.parse(values?.usage_data || '{}');
-            window.usedToday = (usage.date === today) ? (usage.count || 0) : 0;
-            if (typeof window.checkSubscriptionAndLoad === 'function') {
-                await window.checkSubscriptionAndLoad(uid);
-            }
-            await performSyncIfNeeded();
-            if (typeof window.startOfflineQueueProcessor === 'function') {
-                window.startOfflineQueueProcessor();
-            }
-        });
-    } else {
-        if (typeof window.checkSubscriptionAndLoad === 'function') {
-            await window.checkSubscriptionAndLoad(uid);
-        }
-        await performSyncIfNeeded();
-        if (typeof window.startOfflineQueueProcessor === 'function') {
-            window.startOfflineQueueProcessor();
-        }
-    }
-
-    if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.onEvent('message', async (message) => {
-            console.log("📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:", message);
-            console.log("ТЕКСТ СООБЩЕНИЯ:", message.text);
-            console.log("ДЛИНА ТЕКСТА:", message.text?.length);
-            console.log("КОДЫ СИМВОЛОВ:", message.text?.split('').map(c => c.charCodeAt(0)));
-            if (message.text === "🔄") {
-                console.log("✅ СИГНАЛ РАСПОЗНАН!");
-                if (window.config?.syncEnabled) {
-                    if (typeof window.showSyncStatus === 'function') {
-                        window.showSyncStatus('syncing');
-                    }
-                    if (typeof window.syncChatsMetadata === 'function') {
-                        await window.syncChatsMetadata();
-                    }
-                    const activeChat = window.getCurrentActiveChat();
-                    if (activeChat && typeof window.loadFullChat === 'function') {
-                        await window.loadFullChat(activeChat.id);
-                        if (typeof window.loadActiveChatMessages === 'function') {
-                            window.loadActiveChatMessages();
-                        }
-                    }
-                    if (typeof window.showSyncStatus === 'function') {
-                        window.showSyncStatus('success');
-                    }
+            
+            // Синхронизация
+            if (result.syncEnabled) {
+                console.log('🔄 Синхронизация включена');
+                
+                if (window.initDeviceManager) {
+                    await window.initDeviceManager();
                 }
-            } else {
-                console.log("❌ Неизвестный текст, синхронизация не запущена");
+                
+                if (window.syncService) {
+                    await window.syncService.fullSync();
+                    window.syncService.startPeriodicSync();
+                }
+                
+                if (window.queueManager) {
+                    window.queueManager.start();
+                }
+                
+                if (window.initExportButtons) {
+                    window.initExportButtons();
+                }
+            }
+            
+            // Отложенная очистка
+            if (window.chatUI) {
+                setTimeout(() => window.chatUI.cleanupTempChats(), 5000);
+            }
+            
+        } else {
+            // Гостевой режим
+            if (window.showGuest) {
+                window.showGuest({
+                    msg: '403',
+                    joke: 'Для доступа к ИИ необходимо подписаться на канал!'
+                });
+            }
+        }
+    } else {
+        // Fallback
+        console.warn('AuthService не найден, работа в офлайн-режиме');
+        if (window.chatUI) {
+            window.chatUI.showChatInterface();
+            if (window.uiRenderer) window.uiRenderer.renderTagsCloud();
+        }
+    }
+    
+    // ==========================================
+    // 6. PUSH-УВЕДОМЛЕНИЯ
+    // ==========================================
+    
+    if (tg) {
+        tg.onEvent('message', async (message) => {
+            console.log('📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:', message);
+            
+            if (message.text === '🔄' && window.userStore?.canSync()) {
+                console.log('✅ СИГНАЛ СИНХРОНИЗАЦИИ РАСПОЗНАН!');
+                
+                if (window.uiRenderer) {
+                    window.uiRenderer.showSyncStatus('syncing');
+                }
+                
+                if (window.syncService) {
+                    await window.syncService.fullSync();
+                }
+                
+                const activeChat = chatStore.getActiveChat();
+                if (activeChat && window.chatUI) {
+                    window.chatUI.refreshUI();
+                }
+                
+                if (window.uiRenderer) {
+                    window.uiRenderer.showSyncStatus('success');
+                }
             }
         });
+        console.log('📨 Push-подписка активирована');
     }
-
+    
     // ==========================================
-    // ПОКАЗЫВАЕМ ОБЛАКО ТЕГОВ ИЛИ ЧАТ
+    // 7. ВОССТАНОВЛЕНИЕ ПОСЛЕДНЕГО ЧАТА
     // ==========================================
     
-    const inputArea = document.getElementById('input-area');
-    const fabBtn = document.getElementById('fab-open-input');
-    const chatContainer = document.getElementById('chat-container');
-    const tagsCloud = document.getElementById('tags-cloud-container');
-    
-    window.showTagsCloud = function() {
-        if (tagsCloud) tagsCloud.style.display = 'flex';
-        if (chatContainer) {
-            chatContainer.style.display = 'none';
-            chatContainer.classList.remove('visible');
-        }
-        if (inputArea) inputArea.style.display = 'none';
-        if (fabBtn) fabBtn.style.display = 'none';
-    };
-    
-    window.showChatInterface = function() {
-        if (tagsCloud) tagsCloud.style.display = 'none';
-        if (chatContainer) {
-            chatContainer.style.display = 'flex';
-            chatContainer.classList.add('visible');
-        }
-        if (inputArea) inputArea.style.display = 'flex';
-        if (fabBtn) fabBtn.style.display = 'flex';
-    };
-    
-    const lastTopic = localStorage.getItem('last_topic');
-    const lastChatId = lastTopic ? localStorage.getItem(`last_chat_${lastTopic}`) : null;
-    let hasSavedChat = false;
-    
-    if (lastTopic && lastChatId) {
-        const chat = window.chatHistories[lastTopic]?.find(c => c.id === lastChatId && !c.deleted_at);
-        if (chat && window.hasRealMessages(chat)) {
-            window.currentTopic = lastTopic;
-            window.activeChatIds[lastTopic] = lastChatId;
-            hasSavedChat = true;
+    if (window.chatUI) {
+        const hasRestored = window.chatUI.restoreLastChat();
+        
+        if (hasRestored) {
+            window.chatUI.showChatInterface();
+            window.chatUI.refreshUI();
+        } else {
+            window.chatUI.cleanupTempChats();
+            if (window.uiRenderer) {
+                window.uiRenderer.renderTagsCloud();
+            }
+            window.chatUI.showTagsCloud();
         }
     }
     
-    if (hasSavedChat) {
-        window.showChatInterface();
-        window.refreshUiAfterChatSelection();
-    } else {
-        if (typeof window.cleanupTempChats === 'function') {
-            window.cleanupTempChats();
-        }
-        window.showTagsCloud();
-        if (typeof window.renderTagsCloud === 'function') {
-            window.renderTagsCloud();
-        }
-    }
+    // ==========================================
+    // 8. ПЕРИОДИЧЕСКАЯ ОЧИСТКА
+    // ==========================================
     
     setInterval(() => {
-        if (typeof window.cleanupTempChats === 'function') {
-            window.cleanupTempChats();
+        if (window.chatUI) {
+            window.chatUI.cleanupTempChats();
+        }
+        if (window.updateTrashCount) {
+            window.updateTrashCount();
         }
     }, 5 * 60 * 1000);
-}
-
-// ==========================================
-// ОТСЛЕЖИВАНИЕ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
-// ==========================================
-
-let lastUserId = null;
-
-function checkUserChanged() {
-    const currentUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    const currentUserId = currentUser?.id;
-    if (lastUserId && lastUserId !== currentUserId) {
-        console.log(`🔄 Пользователь сменился с ${lastUserId} на ${currentUserId}, очищаем данные`);
-        if (typeof window.clearLocalHistories === 'function') {
-            window.clearLocalHistories();
+    
+    // ==========================================
+    // 9. ОТСЛЕЖИВАНИЕ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
+    // ==========================================
+    
+    let lastUserId = null;
+    
+    function checkUserChanged() {
+        const currentUser = tg?.initDataUnsafe?.user;
+        const currentUserId = currentUser?.id;
+        if (lastUserId && lastUserId !== currentUserId) {
+            console.log(`🔄 Пользователь сменился с ${lastUserId} на ${currentUserId}`);
+            if (chatStore) chatStore.loadFromStorage();
+            if (userStore) userStore.loadFromStorage();
+            if (window.syncStore) window.syncStore.loadFromStorage();
+            if (window.organizerStore) window.organizerStore.loadFromStorage();
+            if (window.chatUI) window.chatUI.refreshUI();
         }
-        if (typeof window.loadLocalHistories === 'function') {
-            window.loadLocalHistories();
-        }
-        if (typeof window.loadOfflineQueue === 'function') {
-            window.loadOfflineQueue();
-        }
+        lastUserId = currentUserId;
     }
-    lastUserId = currentUserId;
+    
+    setInterval(checkUserChanged, 1000);
+    window.addEventListener('focus', checkUserChanged);
+    
+    // ==========================================
+    // 10. КНОПКА "НОВЫЙ ЧАТ"
+    // ==========================================
+    
+    window.handleNewChatClick = function() {
+        const activeFilter = window.profileUI?.currentFilter || 'all';
+        
+        if (activeFilter === 'all') {
+            const card = document.getElementById('profile-card');
+            if (card) card.classList.add('hidden');
+            if (window.tg?.BackButton) window.tg.BackButton.hide();
+            
+            if (window.chatUI) {
+                window.chatUI.showTagsCloud();
+                if (window.uiRenderer) window.uiRenderer.renderTagsCloud();
+            }
+            return;
+        }
+        
+        const topicMap = {
+            'code': 'code',
+            'creative': 'creative',
+            'fast': 'fast',
+            'kitchen': 'kitchen',
+            'analytics': 'analytics'
+        };
+        const topic = topicMap[activeFilter] || 'code';
+        
+        const card = document.getElementById('profile-card');
+        if (card) card.classList.add('hidden');
+        if (window.tg?.BackButton) window.tg.BackButton.hide();
+        
+        if (chatStore) {
+            chatStore.currentTopic = topic;
+            chatStore.createTempChat(topic);
+        }
+        
+        if (window.chatUI) {
+            window.chatUI.showChatInterface();
+            window.chatUI.refreshUI();
+        }
+    };
+    
+    // ==========================================
+    // 11. ФИНАЛЬНАЯ ОТРИСОВКА
+    // ==========================================
+    
+    const appScreen = document.getElementById('app-screen');
+    if (appScreen) {
+        appScreen.classList.remove('hidden');
+        if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
+    }
+    
+    // Обновляем счетчик корзины
+    if (window.updateTrashCount) {
+        setTimeout(window.updateTrashCount, 1000);
+    }
+    
+    console.log('✅ Приложение успешно загружено');
 }
 
-setInterval(checkUserChanged, 1000);
-window.addEventListener('focus', checkUserChanged);
+// ==========================================
+// ЗАПУСК
+// ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(err => {
@@ -290,8 +339,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// Запрос полноэкранного режима
 if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
 }
 
-console.log('✅ app.js полностью загружен с исправлениями');
+console.log('✅ app.js полностью загружен');
