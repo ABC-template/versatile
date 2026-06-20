@@ -30,6 +30,7 @@
             </div>
         </div>
     </div>
+    
     <div id="profile-card" class="hidden">
         <div class="profile-content">
             <div class="profile-scrollable-zone">
@@ -40,31 +41,45 @@
                     </div>
                     <p style="font-size: 12px; font-weight: 600; color: var(--hint-color); margin: 0 0 8px 0;">Выберите направление:</p>
                     <div class="model-switcher">
-                        <div class="model-chip active" data-topic="code">💻 Программирование и код</div>
-                        <div class="model-chip" data-topic="creative">✍️ Творчество и тексты</div>
-                        <div class="model-chip" data-topic="fast">⚡ Быстрый флуд</div>
-                        <div class="model-chip" data-topic="kitchen">🍳 Рецепты и Кулинария</div>
-                        <div class="model-chip" data-topic="analytics">📊 Аналитика и Фото (Beta)</div>
+                        <div class="model-chip active" data-topic="code">💻 #кодинг</div>
+                        <div class="model-chip" data-topic="creative">✍️ #креатив</div>
+                        <div class="model-chip" data-topic="fast">⚡ #флуд</div>
+                        <div class="model-chip" data-topic="kitchen">🍳 #кухня</div>
+                        <div class="model-chip" data-topic="analytics">📊 #аналитика (Beta)</div>
                     </div>
                 </div>
+                
                 <div id="tab-chats" class="modal-tab hidden">
                     <div class="modal-sticky-header">
-                        <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">Ваши диалоги:</p>
+                        <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">💬 Ваши диалоги:</p>
                         <div style="display: flex; gap: 6px;">
-                            <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.createNewChat()">+ Новый чат</button>
-                            <button id="trash-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px; background: rgba(231,76,60,0.1); color: #e74c3c; display: flex; align-items: center; gap: 4px;" onclick="window.openTrashModal()">
+                            <button class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.createNewChat()">+ Новый чат</button>
+                            <button class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px; background: rgba(231,76,60,0.1); color: #e74c3c; display: flex; align-items: center; gap: 4px;" onclick="window.openTrashModal()">
                                 🗑️ <span id="trash-count" style="font-size: 10px; background: #e74c3c; color: white; border-radius: 50%; padding: 1px 6px; min-width: 18px; text-align: center; display: none;">0</span>
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- Фильтры -->
+                    <div id="chat-filters" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(0,0,0,0.04);">
+                        <button class="filter-chip active" data-topic="all" onclick="window.applyChatFilter('all')">Все</button>
+                        <button class="filter-chip" data-topic="code" onclick="window.applyChatFilter('code')">#кодинг</button>
+                        <button class="filter-chip" data-topic="creative" onclick="window.applyChatFilter('creative')">#креатив</button>
+                        <button class="filter-chip" data-topic="fast" onclick="window.applyChatFilter('fast')">#флуд</button>
+                        <button class="filter-chip" data-topic="kitchen" onclick="window.applyChatFilter('kitchen')">#кухня</button>
+                        <button class="filter-chip" data-topic="analytics" onclick="window.applyChatFilter('analytics')">#аналитика</button>
+                    </div>
+                    
                     <div id="history-chats-list"></div>
                 </div>
+                
                 <div id="tab-favorites" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="fav-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
                     </div>
                     <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
                 </div>
+                
                 <div id="tab-organizer" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="organizer-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">📅 Органайзер Прогресса</p>
@@ -85,7 +100,7 @@
                         <span id="memory-label" style="color: var(--text-color); display: flex; align-items: center; gap: 6px;">🧠 Память чата <span onclick="window.toggleContextHelp(event)" style="cursor: pointer; background: rgba(0,0,0,0.05); width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--hint-color);">❓</span></span>
                         <span id="context-range-value" style="color: var(--button-color);">15</span>
                     </div>
-                    <div id="context-help-text" class="hidden" style="font-size: 11px; color: var(--hint-color); line-height: 1.4; text-align: left; background: var(--bg-color); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 3px solid var(--button-color);" id="memory-hint-content"></div>
+                    <div id="context-help-text" class="hidden" style="font-size: 11px; color: var(--hint-color); line-height: 1.4; text-align: left; background: var(--bg-color); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 3px solid var(--button-color);"></div>
                     <input type="range" id="context-slider" min="1" max="40" value="15" style="width: 100%; cursor: pointer; display: block;" oninput="window.onContextSliderChange(this.value)" onchange="window.saveContextSettings()">
                     <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--hint-color); margin-top: 2px;"><span id="memory-off-label">1 (Выкл)</span><span id="memory-max-label">40 сообщений</span></div>
                 </div>
@@ -103,9 +118,7 @@
                 <button onclick="window.closeTrashModal()" style="background:transparent; border:none; font-size:22px; cursor:pointer; color:var(--hint-color); padding:0 4px;">✕</button>
             </div>
             
-            <div id="trash-list" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; min-height:100px;">
-                <!-- Сюда рендерятся удалённые чаты -->
-            </div>
+            <div id="trash-list" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; min-height:100px;"></div>
             
             <p id="trash-empty" style="text-align:center; color:var(--hint-color); font-size:13px; margin:20px 0; display:none;">Корзина пуста</p>
             
@@ -123,11 +136,17 @@
         <p id="joke-text">Проверка статуса подписки...</p>
         <a href="https://t.me" class="btn" style="text-decoration:none; display:inline-block;">Подписаться на канал!</a>
     </div>
+    
     <div id="app-screen" style="display:none;">
-        <div id="chat-container"></div>
-        <button id="fab-open-input" onclick="window.expandInputArea()">➤</button>
+        <!-- ОБЛАКО ТЕГОВ -->
+        <div id="tags-cloud-container"></div>
+        
+        <!-- ЧАТ -->
+        <div id="chat-container" style="display:none;"></div>
+        
+        <button id="fab-open-input" onclick="window.expandInputArea()" style="display:none;">➤</button>
         <div id="input-overlay" class="hidden"></div>
-        <div id="input-area">
+        <div id="input-area" style="display:none;">
             <div style="position: relative; width: 100%; display: flex; align-items: flex-start;">
                 <textarea id="user-input" placeholder="Ваш вопрос..." rows="1"></textarea>
                 <button id="clear-input-btn" class="hidden" onclick="window.clearUserText(event)">✕</button>
@@ -165,4 +184,4 @@
     <script src="js/core/app.js"></script>
     <script src="js/modules/export-local.js"></script>
 </body>
-</html>
+</html>          
