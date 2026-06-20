@@ -1,18 +1,26 @@
-import { validateTelegramInitData } from '../_lib/telegram-auth.js';
+// ============================================
+// api/chat/whisper.js
+// Описание: Распознавание голоса через Whisper
+// ============================================
+
+import { authenticate } from '../_lib/auth.js';
+import { corsHeaders, handleCORS, jsonResponse, errorResponse } from '../_lib/cors.js';
+import { validateAudioSize } from '../_lib/validators.js';
+import { getRotatedKeysPool, hasAvailableKeys } from './models.js';
 
 export const config = { runtime: 'edge' };
 
-// ==========================================
-// ДОБАВЛЕНО: ОГРАНИЧЕНИЕ РАЗМЕРА АУДИО
-// ==========================================
 const MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+/**
+ * Конвертировать ArrayBuffer в Base64
+ */
 function bufferToBase64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     let binary = '';
     const len = bytes.byteLength;
-    
     const chunk = 65535;
+    
     for (let i = 0; i < len; i += chunk) {
         binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
     }
@@ -20,112 +28,58 @@ function bufferToBase64(arrayBuffer) {
     return btoa(binary);
 }
 
-function getRotatedKeysPool() {
-    const keys = [];
-    let i = 0;
-    while (true) {
-        const key = process.env[`ROUTER_KEY${i}`];
-        if (!key || key.trim().length === 0) break;
-        keys.push(key.trim());
-        i++;
-    }
-    return keys;
-}
-
 export default async function handler(request) {
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data, X-Audio-Type',
-    };
-
-    if (request.method === 'OPTIONS') {
-        return new Response('OK', { status: 200, headers: corsHeaders });
-    }
-
+    const corsResponse = handleCORS(request);
+    if (corsResponse) return corsResponse;
+    
     if (request.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { 
-            status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-        });
+        return errorResponse('Method Not Allowed', 405);
     }
-
+    
     try {
-        const initData = request.headers.get('x-telegram-init-data');
-        if (!initData) {
-            return new Response(JSON.stringify({ error: 'Missing init data' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
+        const auth = await authenticate(request);
+        if (auth.error) {
+            return errorResponse(auth.error, auth.status || 401);
         }
-
-        const botToken = process.env.BOT_TOKEN?.trim();
-        if (!botToken) {
-            return new Response(JSON.stringify({ error: 'Серверный токен BOT_TOKEN не настроен в Vercel.' }), {
-                status: 500,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-        }
-
-        const user = await validateTelegramInitData(initData, botToken);
-        if (!user) {
-            return new Response(JSON.stringify({ error: 'Invalid init data' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-        }
-
-        // ==========================================
-        // ДОБАВЛЕНО: ПРОВЕРКА USER_ID
-        // ==========================================
-        const userId = user.id;
-        if (!Number.isInteger(userId) || userId <= 0) {
-            return new Response(JSON.stringify({ error: 'Invalid user ID' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-        }
-
+        
+        const userId = auth.userId;
+        
+        // Получаем аудиоданные
         const arrayBuffer = await request.arrayBuffer();
         if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-            return new Response(JSON.stringify({ error: 'Аудиоданные пустые.' }), { 
-                status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-            });
+            return errorResponse('Аудиоданные пустые.', 400);
         }
-
-        // ==========================================
-        // ДОБАВЛЕНО: ПРОВЕРКА РАЗМЕРА АУДИО
-        // ==========================================
-        if (arrayBuffer.byteLength > MAX_AUDIO_SIZE_BYTES) {
-            const sizeMB = (arrayBuffer.byteLength / (1024 * 1024)).toFixed(1);
-            return new Response(JSON.stringify({ 
-                error: `Аудиофайл слишком большой (${sizeMB}MB). Максимум 5MB.` 
-            }), { 
-                status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-            });
+        
+        // Проверяем размер
+        const audioValidation = validateAudioSize(arrayBuffer, 5);
+        if (!audioValidation.valid) {
+            return errorResponse(
+                `Аудиофайл слишком большой (${audioValidation.sizeInMB}MB). Максимум 5MB.`,
+                413
+            );
         }
-
+        
+        // Проверяем ключи
+        const keysPool = getRotatedKeysPool();
+        if (keysPool.length === 0) {
+            return errorResponse('Серверные API ключи ROUTER_KEY не настроены в Vercel.', 500);
+        }
+        
         const base64Audio = bufferToBase64(arrayBuffer);
-
+        
         const requestBody = {
-            model: 'openai/whisper-large-v3-turbo', 
+            model: 'openai/whisper-large-v3-turbo',
             input_audio: {
                 data: base64Audio,
                 format: 'wav'
             }
         };
-
-        const keysPool = getRotatedKeysPool();
-        if (keysPool.length === 0) {
-            return new Response(JSON.stringify({ error: 'Серверные API ключи ROUTER_KEY не настроены в Vercel.' }), { 
-                status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-            });
-        }
-
+        
         let lastError = null;
-
+        
         for (let k = 0; k < keysPool.length; k++) {
             const currentKey = keysPool[k];
-
+            
             try {
                 const response = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
                     method: 'POST',
@@ -137,45 +91,39 @@ export default async function handler(request) {
                     },
                     body: JSON.stringify(requestBody)
                 });
-
+                
                 const contentType = response.headers.get('content-type') || '';
                 if (!contentType.includes('application/json')) {
                     const htmlErrorText = await response.text();
                     throw new Error(`Сервер OpenRouter вернул HTML ошибку: ${htmlErrorText.substring(0, 80)}`);
                 }
-
+                
                 const data = await response.json();
-
+                
                 if (!response.ok) {
                     throw new Error(data.error?.message || JSON.stringify(data.error) || response.statusText);
                 }
-
-                return new Response(JSON.stringify({ text: data.text || "" }), { 
-                    status: 200, 
-                    headers: { 
-                        'Content-Type': 'application/json; charset=utf-8',
-                        'Cache-Control': 'no-store',
-                        ...corsHeaders
-                    } 
+                
+                return jsonResponse({
+                    text: data.text || ""
+                }, 200, {
+                    'Cache-Control': 'no-store'
                 });
-
+                
             } catch (err) {
                 console.error(`Сбой расшифровки Whisper с ключом ROUTER_KEY${k}:`, err.message);
                 lastError = err;
                 continue;
             }
         }
-
-        return new Response(JSON.stringify({ 
-            error: `Модуль аудио перегружен. Детали: ${lastError?.message || 'Все ключи пула отклонены'}` 
-        }), { 
-            status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-        });
-
+        
+        return errorResponse(
+            `Модуль аудио перегружен. Детали: ${lastError?.message || 'Все ключи пула отклонены'}`,
+            500
+        );
+        
     } catch (err) {
-        console.error("Edge Runtime Audio Exception:", err.message);
-        return new Response(JSON.stringify({ error: `Edge Runtime Audio Exception: ${err.message}` }), { 
-            status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-        });
+        console.error('Whisper handler error:', err.message);
+        return errorResponse(`Edge Runtime Audio Exception: ${err.message}`, 500);
     }
 }
