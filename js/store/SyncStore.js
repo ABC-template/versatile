@@ -61,6 +61,16 @@ class SyncStore {
     // ==========================================
     
     addUnsyncedMessage(chatId, message, topicId, chatTitle, maxContext, userRenamed) {
+        // ✅ Проверяем, нет ли уже такого сообщения в очереди
+        const exists = this.unsyncedMessages.some(
+            item => item.chatId === chatId && item.message.id === message.id
+        );
+        
+        if (exists) {
+            console.log(`⏳ Сообщение ${message.id} уже в очереди, пропускаем`);
+            return;
+        }
+        
         this.unsyncedMessages.push({
             chatId,
             message,
@@ -72,9 +82,20 @@ class SyncStore {
             attempts: 0
         });
         this.saveToStorage();
+        console.log(`📤 Сообщение ${message.id} добавлено в очередь синхронизации`);
     }
     
     addUnsyncedFavorite(messageId, chatId, isFavorite) {
+        // ✅ Проверяем дубликаты
+        const exists = this.unsyncedFavorites.some(
+            item => item.messageId === messageId && item.chatId === chatId
+        );
+        
+        if (exists) {
+            console.log(`⏳ Избранное ${messageId} уже в очереди, пропускаем`);
+            return;
+        }
+        
         this.unsyncedFavorites.push({
             messageId,
             chatId,
@@ -86,6 +107,16 @@ class SyncStore {
     }
     
     addUnsyncedChat(chat) {
+        // ✅ Проверяем дубликаты
+        const exists = this.unsyncedChats.some(
+            item => item.chat.id === chat.id
+        );
+        
+        if (exists) {
+            console.log(`⏳ Чат ${chat.id} уже в очереди, пропускаем`);
+            return;
+        }
+        
         this.unsyncedChats.push({
             chat,
             timestamp: new Date().toISOString(),
@@ -94,11 +125,23 @@ class SyncStore {
         this.saveToStorage();
     }
     
+    /**
+     * ✅ ИСПРАВЛЕНО: удаление сообщений из очереди после синхронизации
+     */
     markMessagesSynced(chatId, messageIds) {
-        this.unsyncedMessages = this.unsyncedMessages.filter(item => 
-            item.chatId !== chatId || !messageIds.includes(item.message.id)
-        );
-        this.saveToStorage();
+        const removed = [];
+        this.unsyncedMessages = this.unsyncedMessages.filter(item => {
+            if (item.chatId === chatId && messageIds.includes(item.message.id)) {
+                removed.push(item.message.id);
+                return false;
+            }
+            return true;
+        });
+        
+        if (removed.length > 0) {
+            this.saveToStorage();
+            console.log(`✅ Сообщения ${removed.join(', ')} удалены из очереди синхронизации`);
+        }
     }
     
     markChatSynced(chatId) {
@@ -119,6 +162,16 @@ class SyncStore {
     // ==========================================
     
     addOfflineItem(chatId, message, topicId) {
+        // ✅ Проверяем дубликаты
+        const exists = this.offlineQueue.some(
+            item => item.chatId === chatId && item.message.id === message.id
+        );
+        
+        if (exists) {
+            console.log(`⏳ Офлайн-сообщение ${message.id} уже в очереди, пропускаем`);
+            return;
+        }
+        
         this.offlineQueue.push({
             chatId,
             message,
@@ -143,6 +196,16 @@ class SyncStore {
     // ==========================================
     
     addPendingDeletion(id, entityType, parentId) {
+        // ✅ Проверяем дубликаты
+        const exists = this.pendingDeletions.some(
+            item => item.id === id
+        );
+        
+        if (exists) {
+            console.log(`⏳ Удаление ${id} уже в очереди, пропускаем`);
+            return;
+        }
+        
         this.pendingDeletions.push({
             id,
             entity_type: entityType,
@@ -191,7 +254,6 @@ class SyncStore {
     }
 }
 
-// Экспортируем как глобальный объект
 window.SyncStore = SyncStore;
 window.syncStore = new SyncStore();
 
