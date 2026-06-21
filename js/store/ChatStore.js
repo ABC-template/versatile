@@ -206,13 +206,16 @@ class ChatStore {
     }
     
     /**
-     * Удалить чат (soft delete)
+     * ✅ ИСПРАВЛЕНО: Удалить чат (soft delete) с очисткой сообщений из памяти
      */
     deleteChat(chatId) {
         const found = this.findChat(chatId);
         if (!found) return false;
         
         const { chat, topic } = found;
+        
+        // ✅ ИСПРАВЛЕНО: Очищаем сообщения из памяти, чтобы избежать утечек
+        chat.messages = [];
         chat.deleted_at = new Date().toISOString();
         
         // Удаляем из списка
@@ -225,7 +228,7 @@ class ChatStore {
         }
         
         this.saveToStorage();
-        console.log(`🗑️ Чат ${chatId} удалён`);
+        console.log(`🗑️ Чат ${chatId} удалён, сообщения очищены из памяти`);
         return true;
     }
     
@@ -332,23 +335,22 @@ class ChatStore {
     }
     
     /**
-     * Удалить сообщение (soft delete)
+     * ✅ ИСПРАВЛЕНО: Удалить сообщение (soft delete) с очисткой из памяти
      */
     deleteMessage(chatId, messageId) {
         const found = this.findChat(chatId);
         if (!found) return false;
         
         const { chat } = found;
-        const msg = chat.messages.find(m => m.id === messageId);
-        if (!msg) return false;
+        const msgIndex = chat.messages.findIndex(m => m.id === messageId);
+        if (msgIndex === -1) return false;
         
-        msg.deleted_at = new Date().toISOString();
+        // ✅ ИСПРАВЛЕНО: Полностью удаляем из массива, а не помечаем deleted_at
+        chat.messages.splice(msgIndex, 1);
         chat.updated_at = new Date().toISOString();
         
-        // Удаляем из массива
-        chat.messages = chat.messages.filter(m => m.id !== messageId);
         this.saveToStorage();
-        
+        console.log(`🗑️ Сообщение ${messageId} удалено из памяти`);
         return true;
     }
     
@@ -383,7 +385,7 @@ class ChatStore {
                 if (!chat.messages) continue;
                 
                 for (const msg of chat.messages) {
-                    if (msg.isFavorite && !msg.deleted_at) {
+                    if (msg.isFavorite) {
                         favorites.push({
                             ...msg,
                             chat_id: chat.id,
@@ -406,7 +408,7 @@ class ChatStore {
         if (!found) return [];
         
         const { chat } = found;
-        return chat.messages.filter(m => !m.deleted_at);
+        return chat.messages || [];
     }
     
     /**
@@ -471,7 +473,6 @@ class ChatStore {
                 type: msg.msg_type || msg.type,
                 isFavorite: msg.is_favorite || false,
                 synced: true,
-                deleted_at: null,
                 created_at: msg.created_at || new Date().toISOString()
             }))
         };
@@ -483,7 +484,7 @@ class ChatStore {
             // Сохраняем локальные сообщения, которых нет на сервере
             const serverMsgIds = new Set(syncedChat.messages.map(m => m.id));
             for (const localMsg of (localChat.messages || [])) {
-                if (!serverMsgIds.has(localMsg.id) && !localMsg.deleted_at) {
+                if (!serverMsgIds.has(localMsg.id)) {
                     syncedChat.messages.push({
                         ...localMsg,
                         synced: localMsg.synced || false
