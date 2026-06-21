@@ -5,16 +5,9 @@
 
 class ChatStore {
     constructor() {
-        // Структура: { topicId: [chats] }
         this.histories = {};
-        
-        // Структура: { topicId: chatId }
         this.activeIds = {};
-        
-        // Текущий топик
         this.currentTopic = 'code';
-        
-        // Загружаем из localStorage
         this.loadFromStorage();
     }
     
@@ -39,7 +32,6 @@ class ChatStore {
             this.activeIds = { code: null, creative: null, fast: null, kitchen: null, analytics: null };
         }
         
-        // Проверяем валидность activeIds
         for (const topic of ['code', 'creative', 'fast', 'kitchen', 'analytics']) {
             if (!this.activeIds[topic]) {
                 this.activeIds[topic] = null;
@@ -67,10 +59,6 @@ class ChatStore {
         return user?.id || 'anonymous';
     }
     
-    // ==========================================
-    // ГЕНЕРАЦИЯ ID
-    // ==========================================
-    
     generateUUID() {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) {
             return crypto.randomUUID();
@@ -86,17 +74,11 @@ class ChatStore {
     // РАБОТА С ЧАТАМИ
     // ==========================================
     
-    /**
-     * Получить все чаты в топике
-     */
     getChats(topicId) {
         if (!topicId) topicId = this.currentTopic;
         return this.histories[topicId] || [];
     }
     
-    /**
-     * Получить активный чат
-     */
     getActiveChat(topicId) {
         if (!topicId) topicId = this.currentTopic;
         const chats = this.getChats(topicId);
@@ -104,18 +86,12 @@ class ChatStore {
         return chats.find(c => c.id === activeId) || null;
     }
     
-    /**
-     * Установить активный чат
-     */
     setActiveChat(topicId, chatId) {
         if (!topicId) topicId = this.currentTopic;
         this.activeIds[topicId] = chatId;
         this.saveToStorage();
     }
     
-    /**
-     * Получить чат по ID (во всех топиках)
-     */
     findChat(chatId) {
         for (const [topic, chats] of Object.entries(this.histories || {})) {
             if (!chats) continue;
@@ -127,9 +103,6 @@ class ChatStore {
         return null;
     }
     
-    /**
-     * Создать новый чат
-     */
     createChat(topicId, title, options = {}) {
         if (!topicId) topicId = this.currentTopic;
         
@@ -162,13 +135,9 @@ class ChatStore {
         return newChat;
     }
     
-    /**
-     * Создать временный чат (без синхронизации)
-     */
     createTempChat(topicId) {
         if (!topicId) topicId = this.currentTopic;
         
-        // Проверяем, есть ли уже пустой временный чат
         const existing = this.histories[topicId]?.find(c => 
             !c.synced && !c.deleted_at && (!c.messages || c.messages.length === 0)
         );
@@ -179,29 +148,21 @@ class ChatStore {
             return existing;
         }
         
-        // ✅ Создаём чат с synced = false (никогда не синхронизируется автоматически)
         const newChat = this.createChat(topicId, null, { 
             synced: false,
             messages: []
         });
-        
-        // ✅ Явно помечаем как несинхронизированный
         newChat.synced = false;
         this.saveToStorage();
-        
         return newChat;
     }
     
-    /**
-     * Обновить чат
-     */
     updateChat(chatId, data) {
         const found = this.findChat(chatId);
         if (!found) return null;
         
         const { chat, topic } = found;
         
-        // Обновляем поля
         if (data.title !== undefined) chat.title = data.title;
         if (data.maxContext !== undefined) chat.maxContext = data.maxContext;
         if (data.userRenamed !== undefined) chat.userRenamed = data.userRenamed;
@@ -211,27 +172,20 @@ class ChatStore {
         
         chat.updated_at = new Date().toISOString();
         this.saveToStorage();
-        
         return chat;
     }
     
-    /**
-     * ✅ ИСПРАВЛЕНО: Удалить чат (soft delete) с очисткой сообщений из памяти
-     */
     deleteChat(chatId) {
         const found = this.findChat(chatId);
         if (!found) return false;
         
         const { chat, topic } = found;
         
-        // ✅ ИСПРАВЛЕНО: Очищаем сообщения из памяти, чтобы избежать утечек
         chat.messages = [];
         chat.deleted_at = new Date().toISOString();
         
-        // Удаляем из списка
         this.histories[topic] = this.histories[topic].filter(c => c.id !== chatId);
         
-        // Если это был активный чат, сбрасываем
         if (this.activeIds[topic] === chatId) {
             const remaining = this.histories[topic];
             this.activeIds[topic] = remaining[0]?.id || null;
@@ -242,9 +196,6 @@ class ChatStore {
         return true;
     }
     
-    /**
-     * Переименовать чат
-     */
     renameChat(chatId, newTitle) {
         const found = this.findChat(chatId);
         if (!found) return false;
@@ -254,29 +205,22 @@ class ChatStore {
         chat.userRenamed = true;
         chat.updated_at = new Date().toISOString();
         this.saveToStorage();
-        
         return chat;
     }
     
-    /**
-     * Проверить, есть ли реальные сообщения в чате
-     */
-     hasRealMessages(chat) {
+    hasRealMessages(chat) {
         if (!chat || !chat.messages) return false;
         return chat.messages.some(m => 
             (m.type === 'user-msg' || m.type === 'ai-msg') && 
             !m.deleted_at && 
             m.text && m.text.trim().length > 0
         );
-     }
+    }
     
-    /**
-     * Очистить пустые временные чаты (старше 5 минут)
-     */
     cleanupTempChats() {
         let cleaned = 0;
         const now = new Date();
-        const maxAgeMs = 5 * 60 * 1000; // 5 минут
+        const maxAgeMs = 5 * 60 * 1000;
         
         for (const [topic, chats] of Object.entries(this.histories || {})) {
             if (!chats || !Array.isArray(chats)) continue;
@@ -310,9 +254,6 @@ class ChatStore {
     // РАБОТА С СООБЩЕНИЯМИ
     // ==========================================
     
-    /**
-     * Добавить сообщение в чат
-     */
     addMessage(chatId, text, type, options = {}) {
         const found = this.findChat(chatId);
         if (!found) return null;
@@ -322,7 +263,7 @@ class ChatStore {
         const newMsg = {
             id: options.id || this.generateUUID(),
             text: text,
-            type: type, // 'user-msg' или 'ai-msg'
+            type: type,
             isFavorite: options.isFavorite || false,
             synced: options.synced || false,
             deleted_at: null,
@@ -332,7 +273,6 @@ class ChatStore {
         chat.messages.push(newMsg);
         chat.updated_at = new Date().toISOString();
         
-        // Если это первое сообщение пользователя, обновляем заголовок
         if (type === 'user-msg' && !chat.userRenamed) {
             const sectionName = window.topicNames?.[chat.topic] || chat.topic;
             const startTitle = `Новый чат в ${sectionName}`;
@@ -346,9 +286,6 @@ class ChatStore {
         return newMsg;
     }
     
-    /**
-     * ✅ ИСПРАВЛЕНО: Удалить сообщение (soft delete) с очисткой из памяти
-     */
     deleteMessage(chatId, messageId) {
         const found = this.findChat(chatId);
         if (!found) return false;
@@ -357,7 +294,6 @@ class ChatStore {
         const msgIndex = chat.messages.findIndex(m => m.id === messageId);
         if (msgIndex === -1) return false;
         
-        // ✅ ИСПРАВЛЕНО: Полностью удаляем из массива, а не помечаем deleted_at
         chat.messages.splice(msgIndex, 1);
         chat.updated_at = new Date().toISOString();
         
@@ -366,9 +302,6 @@ class ChatStore {
         return true;
     }
     
-    /**
-     * Переключить избранное
-     */
     toggleFavorite(chatId, messageId) {
         const found = this.findChat(chatId);
         if (!found) return null;
@@ -380,13 +313,9 @@ class ChatStore {
         msg.isFavorite = !msg.isFavorite;
         chat.updated_at = new Date().toISOString();
         this.saveToStorage();
-        
         return msg;
     }
     
-    /**
-     * Получить все избранные сообщения
-     */
     getFavorites() {
         const favorites = [];
         
@@ -412,9 +341,6 @@ class ChatStore {
         return favorites;
     }
     
-    /**
-     * Получить сообщения чата (без удаленных)
-     */
     getMessages(chatId) {
         const found = this.findChat(chatId);
         if (!found) return [];
@@ -423,17 +349,11 @@ class ChatStore {
         return chat.messages || [];
     }
     
-    /**
-     * Получить сообщения для контекста ИИ
-     */
     getContextMessages(chatId, maxContext = 15) {
         const messages = this.getMessages(chatId);
         return messages.slice(-maxContext);
     }
     
-    /**
-     * Отметить сообщения как синхронизированные
-     */
     markMessagesSynced(chatId, messageIds) {
         const found = this.findChat(chatId);
         if (!found) return;
@@ -453,21 +373,12 @@ class ChatStore {
         }
     }
     
-    // ==========================================
-    // СИНХРОНИЗАЦИЯ С ОБЛАКОМ
-    // ==========================================
-    
-    /**
-     * Обновить чат данными из облака
-     */
     syncFromCloud(cloudChat, topicId) {
         if (!topicId) topicId = cloudChat.topic_id || this.currentTopic;
         
-        // Находим локальный чат
         const localChats = this.histories[topicId] || [];
         let existingIndex = localChats.findIndex(c => c.id === cloudChat.id);
         
-        // Формируем объект чата
         const syncedChat = {
             id: cloudChat.id,
             title: cloudChat.title,
@@ -489,11 +400,9 @@ class ChatStore {
             }))
         };
         
-        // Если чат уже существует, объединяем
         if (existingIndex !== -1) {
             const localChat = localChats[existingIndex];
             
-            // Сохраняем локальные сообщения, которых нет на сервере
             const serverMsgIds = new Set(syncedChat.messages.map(m => m.id));
             for (const localMsg of (localChat.messages || [])) {
                 if (!serverMsgIds.has(localMsg.id)) {
@@ -504,14 +413,12 @@ class ChatStore {
                 }
             }
             
-            // Сортируем сообщения по дате
             syncedChat.messages.sort((a, b) => {
                 return new Date(a.created_at) - new Date(b.created_at);
             });
             
             this.histories[topicId][existingIndex] = syncedChat;
         } else {
-            // Новый чат
             if (!this.histories[topicId]) {
                 this.histories[topicId] = [];
             }
@@ -523,7 +430,6 @@ class ChatStore {
     }
 }
 
-// Экспортируем как глобальный объект для совместимости
 window.ChatStore = ChatStore;
 window.chatStore = new ChatStore();
 
