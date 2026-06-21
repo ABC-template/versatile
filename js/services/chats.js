@@ -130,12 +130,13 @@ class ChatService {
     }
     
     // ==========================================
-    // УДАЛЕНИЕ ЧАТА (SOFT DELETE)
+    // УДАЛЕНИЕ ЧАТА (SOFT DELETE) — ИСПРАВЛЕНО!
     // ==========================================
     
     async deleteChat(chatId) {
         try {
-            const data = await this.apiClient.post('/chats/actions/message', {
+            // ✅ Теперь правильный эндпоинт — /chats/actions/update
+            const data = await this.apiClient.post('/chats/actions/update', {
                 action: 'delete_chat',
                 chatId: chatId
             });
