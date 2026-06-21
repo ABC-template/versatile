@@ -1,6 +1,7 @@
 // ============================================
 // js/store/ChatStore.js
 // Описание: Управление чатами и сообщениями
+// ✅ ИСПРАВЛЕНО: добавлена функция restoreMessage
 // ============================================
 
 class ChatStore {
@@ -324,6 +325,31 @@ class ChatStore {
         return true;
     }
     
+    // ✅ НОВАЯ ФУНКЦИЯ: Восстановление сообщения
+    restoreMessage(chatId, msgCopy) {
+        const found = this.findChat(chatId);
+        if (!found) return false;
+        
+        const { chat } = found;
+        
+        // Проверяем, не существует ли уже такое сообщение
+        const exists = chat.messages.some(m => m.id === msgCopy.id);
+        if (exists) return false;
+        
+        // Восстанавливаем
+        chat.messages.push(msgCopy);
+        chat.updated_at = new Date().toISOString();
+        
+        // Сортируем по дате
+        chat.messages.sort((a, b) => {
+            return new Date(a.created_at) - new Date(b.created_at);
+        });
+        
+        this.saveToStorage();
+        console.log(`♻️ Сообщение ${msgCopy.id} восстановлено в чате ${chatId}`);
+        return true;
+    }
+    
     toggleFavorite(chatId, messageId) {
         const found = this.findChat(chatId);
         if (!found) return null;
@@ -376,9 +402,6 @@ class ChatStore {
         return messages.slice(-maxContext);
     }
     
-    /**
-     * ✅ ИСПРАВЛЕНО: отмечаем сообщения как синхронизированные и УДАЛЯЕМ из очереди
-     */
     markMessagesSynced(chatId, messageIds) {
         const found = this.findChat(chatId);
         if (!found) return;
@@ -399,27 +422,25 @@ class ChatStore {
         }
     }
     
-    /**
-     * ✅ ИСПРАВЛЕНО: синхронизация из облака — ЗАМЕНА, а не добавление
-     */
     syncFromCloud(cloudChat, topicId) {
         if (!topicId) topicId = cloudChat.topic_id || this.currentTopic;
         
         const localChats = this.histories[topicId] || [];
         let existingIndex = localChats.findIndex(c => c.id === cloudChat.id);
         
-        // Формируем облачные сообщения
-        const cloudMessages = (cloudChat.messages || []).map(msg => ({
-            id: msg.id,
-            text: msg.text,
-            type: msg.msg_type || msg.type,
-            isFavorite: msg.is_favorite || false,
-            synced: true,
-            deleted_at: null,
-            created_at: msg.created_at || new Date().toISOString()
-        }));
+        // Формируем облачные сообщения (только не удалённые)
+        const cloudMessages = (cloudChat.messages || [])
+            .filter(msg => !msg.deleted_at)
+            .map(msg => ({
+                id: msg.id,
+                text: msg.text,
+                type: msg.msg_type || msg.type,
+                isFavorite: msg.is_favorite || false,
+                synced: true,
+                deleted_at: null,
+                created_at: msg.created_at || new Date().toISOString()
+            }));
         
-        // Создаём Set ID облачных сообщений для быстрой проверки
         const cloudMsgIds = new Set(cloudMessages.map(m => m.id));
         
         let finalMessages = [...cloudMessages];
@@ -427,8 +448,7 @@ class ChatStore {
         if (existingIndex !== -1) {
             const localChat = localChats[existingIndex];
             
-            // ✅ Добавляем только НЕСИНХРОНИЗИРОВАННЫЕ локальные сообщения (synced: false)
-            // и только те, которых нет в облаке
+            // Добавляем несинхронизированные локальные сообщения
             for (const localMsg of (localChat.messages || [])) {
                 if (!localMsg.synced && !cloudMsgIds.has(localMsg.id)) {
                     finalMessages.push({
@@ -438,12 +458,11 @@ class ChatStore {
                 }
             }
             
-            // ✅ Сортируем по дате создания
+            // Сортируем по дате
             finalMessages.sort((a, b) => {
                 return new Date(a.created_at) - new Date(b.created_at);
             });
             
-            // ✅ Формируем обновлённый чат
             const syncedChat = {
                 id: cloudChat.id,
                 title: cloudChat.title,
@@ -458,12 +477,10 @@ class ChatStore {
                 messages: finalMessages
             };
             
-            // ✅ Заменяем локальный чат облачным
             this.histories[topicId][existingIndex] = syncedChat;
             console.log(`🔄 Чат ${cloudChat.id} обновлён из облака (${finalMessages.length} сообщений)`);
             
         } else {
-            // Новый чат — просто добавляем
             if (!this.histories[topicId]) {
                 this.histories[topicId] = [];
             }
