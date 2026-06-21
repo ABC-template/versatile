@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Versatile TMA</title>
+    <title>Versatile AI</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -16,14 +16,15 @@
         <span id="limit-info">Синхронизация...</span>
         <span id="chat-model-indicator">Versatile AI</span>
         <div id="header-navigation" style="display: flex; align-items: center; gap: 8px;">
-            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('chats')" title="Диалоги">💬</button>
-            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('favorites')" title="Избранное">⭐</button>
-            <button id="organizer-trigger-btn" class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.openModalTab('organizer')" title="Органайзер">📅</button>
-            <div id="user-profile-trigger" onclick="window.openModalTab('profile')" style="cursor:pointer; margin-left: 4px;">
+            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('chats')" title="Диалоги">💬</button>
+            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('favorites')" title="Избранное">⭐</button>
+            <button id="organizer-trigger-btn" class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('organizer')" title="Органайзер">📅</button>
+            <div id="user-profile-trigger" onclick="window.profileUI.openModalTab('profile')" style="cursor:pointer; margin-left: 4px;">
                 <img id="user-avatar" src="" alt="Avatar" style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--button-color); background: #eee;">
             </div>
         </div>
     </div>
+
     <div id="profile-card" class="hidden">
         <div class="profile-content">
             <div class="profile-scrollable-zone">
@@ -37,19 +38,19 @@
                     <div class="modal-sticky-header">
                         <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">💬 Ваши диалоги:</p>
                         <div style="display: flex; gap: 6px;">
-                            <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.handleNewChatClick()">+ Новый чат</button>
+                            <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.chatUI.createNewChat()">+ Новый чат</button>
                             <button class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px; background: rgba(231,76,60,0.1); color: #e74c3c; display: flex; align-items: center; gap: 4px;" onclick="window.openTrashModal()">
                                 🗑️ <span id="trash-count" style="font-size: 10px; background: #e74c3c; color: white; border-radius: 50%; padding: 1px 6px; min-width: 18px; text-align: center; display: none;">0</span>
                             </button>
                         </div>
                     </div>
                     <div id="chat-filters" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(0,0,0,0.04);">
-                        <button class="filter-chip active" data-topic="all" onclick="window.applyChatFilter('all')">Все</button>
-                        <button class="filter-chip" data-topic="code" onclick="window.applyChatFilter('code')">#кодинг</button>
-                        <button class="filter-chip" data-topic="creative" onclick="window.applyChatFilter('creative')">#креатив</button>
-                        <button class="filter-chip" data-topic="fast" onclick="window.applyChatFilter('fast')">#флуд</button>
-                        <button class="filter-chip" data-topic="kitchen" onclick="window.applyChatFilter('kitchen')">#кухня</button>
-                        <button class="filter-chip" data-topic="analytics" onclick="window.applyChatFilter('analytics')">#аналитика</button>
+                        <button class="filter-chip active" data-topic="all" onclick="window.profileUI.applyChatFilter('all')">Все</button>
+                        <button class="filter-chip" data-topic="code" onclick="window.profileUI.applyChatFilter('code')">#кодинг</button>
+                        <button class="filter-chip" data-topic="creative" onclick="window.profileUI.applyChatFilter('creative')">#креатив</button>
+                        <button class="filter-chip" data-topic="fast" onclick="window.profileUI.applyChatFilter('fast')">#флуд</button>
+                        <button class="filter-chip" data-topic="kitchen" onclick="window.profileUI.applyChatFilter('kitchen')">#кухня</button>
+                        <button class="filter-chip" data-topic="analytics" onclick="window.profileUI.applyChatFilter('analytics')">#аналитика</button>
                     </div>
                     <div id="history-chats-list"></div>
                 </div>
@@ -76,16 +77,17 @@
                 </div>
                 <div id="sub-footer-context" class="hidden">
                     <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; margin-bottom: 6px;">
-                        <span id="memory-label" style="color: var(--text-color); display: flex; align-items: center; gap: 6px;">🧠 Память чата <span onclick="window.toggleContextHelp(event)" style="cursor: pointer; background: rgba(0,0,0,0.05); width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--hint-color);">❓</span></span>
+                        <span id="memory-label" style="color: var(--text-color); display: flex; align-items: center; gap: 6px;">🧠 Память чата <span onclick="window.profileUI.toggleContextHelp(event)" style="cursor: pointer; background: rgba(0,0,0,0.05); width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--hint-color);">❓</span></span>
                         <span id="context-range-value" style="color: var(--button-color);">15</span>
                     </div>
                     <div id="context-help-text" class="hidden" style="font-size: 11px; color: var(--hint-color); line-height: 1.4; text-align: left; background: var(--bg-color); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 3px solid var(--button-color);"></div>
-                    <input type="range" id="context-slider" min="1" max="40" value="15" style="width: 100%; cursor: pointer; display: block;" oninput="window.onContextSliderChange(this.value)" onchange="window.saveContextSettings()">
+                    <input type="range" id="context-slider" min="1" max="40" value="15" style="width: 100%; cursor: pointer; display: block;" oninput="window.profileUI.onContextSliderChange(this.value)" onchange="window.profileUI.saveContextSettings()">
                     <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--hint-color); margin-top: 2px;"><span id="memory-off-label">1 (Выкл)</span><span id="memory-max-label">40 сообщений</span></div>
                 </div>
             </div>
         </div>
     </div>
+
     <div id="trash-modal" class="hidden" style="position:fixed; top:0; left:0; width:100vw; height:100dvh; background:rgba(0,0,0,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:2000; display:none; align-items:center; justify-content:center; box-sizing:border-box; padding:20px;">
         <div style="background:var(--bg-color); border-radius:24px; padding:20px; width:100%; max-width:420px; max-height:80dvh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-shrink:0;">
@@ -101,11 +103,13 @@
             </div>
         </div>
     </div>
+
     <div id="guest-screen" class="hidden">
         <h1 id="error-title">Доступ ограничен</h1>
         <p id="joke-text">Проверка статуса подписки...</p>
         <a href="https://t.me" class="btn" style="text-decoration:none; display:inline-block;">Подписаться на канал!</a>
     </div>
+
     <div id="app-screen" style="display:none;">
         <div id="tags-cloud-container"></div>
         <div id="chat-container" style="display:none;"></div>
@@ -114,67 +118,68 @@
         <div id="input-area" style="display:none;">
             <div style="position: relative; width: 100%; display: flex; align-items: flex-start;">
                 <textarea id="user-input" placeholder="Ваш вопрос..." rows="1"></textarea>
-                <button id="clear-input-btn" class="hidden" onclick="window.clearUserText(event)">✕</button>
+                <button id="clear-input-btn" class="hidden" onclick="window.chatSend.clearUserText(event)">✕</button>
             </div>
             <div class="input-footer-bar">
                 <div class="footer-btn-group left-group">
-                    <button class="footer-action-btn media-btn" onclick="window.handleAttachmentClick()">📎</button>
+                    <button class="footer-action-btn media-btn" onclick="window.triggerMediaSelector()">📎</button>
                 </div>
                 <div class="footer-btn-group right-group">
                     <span id="voice-timer" class="hidden">15s</span>
                     <button class="footer-action-btn voice-btn" onclick="window.toggleVoiceRecording(this)">🎙️</button>
-                    <button class="footer-action-btn send-btn" onclick="window.sendMessage()">➤</button>
+                    <button class="footer-action-btn send-btn" onclick="window.chatSend.sendMessage()">➤</button>
                 </div>
             </div>
         </div>
     </div>
-<!-- Core -->
-<script src="js/core/locale.js"></script>
-<script src="js/core/config.js"></script>
 
-<!-- Store -->
-<script src="js/store/ChatStore.js"></script>
-<script src="js/store/UserStore.js"></script>
-<script src="js/store/SyncStore.js"></script>
-<script src="js/store/OrganizerStore.js"></script>
+    <!-- Core -->
+    <script src="js/core/locale.js"></script>
+    <script src="js/core/config.js"></script>
 
-<!-- Services -->
-<script src="js/services/api.js"></script>
-<script src="js/services/auth.js"></script>
-<script src="js/services/chats.js"></script>
-<script src="js/services/messages.js"></script>
-<script src="js/services/organizer.js"></script>
-<script src="js/services/sync.js"></script>
+    <!-- Store -->
+    <script src="js/store/ChatStore.js"></script>
+    <script src="js/store/UserStore.js"></script>
+    <script src="js/store/SyncStore.js"></script>
+    <script src="js/store/OrganizerStore.js"></script>
 
-<!-- UI -->
-<script src="js/modules/ui/renderer.js"></script>
-<script src="js/modules/ui/chat-ui.js"></script>
-<script src="js/modules/ui/organizer-ui.js"></script>
-<script src="js/modules/ui/profile-ui.js"></script>
-<script src="js/modules/ui-footer.js"></script>
+    <!-- Services -->
+    <script src="js/services/api.js"></script>
+    <script src="js/services/auth.js"></script>
+    <script src="js/services/chats.js"></script>
+    <script src="js/services/messages.js"></script>
+    <script src="js/services/organizer.js"></script>
+    <script src="js/services/sync.js"></script>
 
-<!-- Chat -->
-<script src="js/modules/chat/send.js"></script>
-<script src="js/modules/chat/stream.js"></script>
-<script src="js/modules/chat/voice.js"></script>
-<script src="js/modules/chat/media.js"></script>  <!-- после переименования -->
+    <!-- UI -->
+    <script src="js/modules/ui/renderer.js"></script>
+    <script src="js/modules/ui/chat-ui.js"></script>
+    <script src="js/modules/ui/organizer-ui.js"></script>
+    <script src="js/modules/ui/profile-ui.js"></script>
+    <script src="js/modules/ui-footer.js"></script>
 
-<!-- Sync -->
-<script src="js/modules/sync/device-manager.js"></script>
-<script src="js/modules/sync/offline-handler.js"></script>
-<script src="js/modules/sync/pending-handler.js"></script>
-<script src="js/modules/sync/queue-manager.js"></script>
+    <!-- Chat -->
+    <script src="js/modules/chat/send.js"></script>
+    <script src="js/modules/chat/stream.js"></script>
+    <script src="js/modules/chat/voice.js"></script>
+    <script src="js/modules/chat/media.js"></script>
 
-<!-- Trash & Export -->
-<script src="js/modules/trash/trash-manager.js"></script>
-<script src="js/modules/export-local.js"></script>
+    <!-- Sync -->
+    <script src="js/modules/sync/device-manager.js"></script>
+    <script src="js/modules/sync/offline-handler.js"></script>
+    <script src="js/modules/sync/pending-handler.js"></script>
+    <script src="js/modules/sync/queue-manager.js"></script>
 
-<!-- Utils -->
-<script src="js/utils/helpers.js"></script>
-<script src="js/utils/validators.js"></script>
-<script src="js/utils/dom.js"></script>
+    <!-- Trash & Export -->
+    <script src="js/modules/trash/trash-manager.js"></script>
+    <script src="js/modules/export-local.js"></script>
 
-<!-- Core App -->
-<script src="js/core/app.js"></script>
+    <!-- Utils -->
+    <script src="js/utils/helpers.js"></script>
+    <script src="js/utils/validators.js"></script>
+    <script src="js/utils/dom.js"></script>
+
+    <!-- Core App -->
+    <script src="js/core/app.js"></script>
 </body>
 </html>
