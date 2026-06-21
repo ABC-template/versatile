@@ -10,6 +10,7 @@ class SyncService {
         this.syncStore = window.syncStore;
         this.userStore = window.userStore;
         this.chatService = window.chatService;
+        this.messageService = window.messageService;
         
         this.isProcessing = false;
         this.retryTimer = null;
@@ -150,7 +151,7 @@ class SyncService {
     }
     
     // ==========================================
-    // ПОВТОРНАЯ ОТПРАВКА НЕСИНХРОНИЗИРОВАННЫХ
+    // ✅ ИСПРАВЛЕНО: ПОВТОРНАЯ ОТПРАВКА НЕСИНХРОНИЗИРОВАННЫХ
     // ==========================================
     
     async retryUnsyncedItems() {
@@ -166,75 +167,120 @@ class SyncService {
         await this.retryUnsyncedChats();
     }
     
-async retryUnsyncedMessages() {
-    const items = this.syncStore.unsyncedMessages;
-    if (items.length === 0) return;
-    
-    console.log(`🔄 Повторная отправка ${items.length} несинхронизированных сообщений...`);
-    
-    const failedAgain = [];
-    
-    for (const item of items) {
-        try {
-            // Проверяем, существует ли чат
-            const found = this.chatStore.findChat(item.chatId);
+    /**
+     * ✅ ИСПРАВЛЕНО: Повторная отправка сообщений с группировкой
+     */
+    async retryUnsyncedMessages() {
+        const items = this.syncStore.unsyncedMessages;
+        if (items.length === 0) return;
+        
+        console.log(`🔄 Повторная отправка ${items.length} несинхронизированных сообщений...`);
+        
+        // ✅ ИСПРАВЛЕНО: Группируем по chatId
+        const grouped = {};
+        for (const item of items) {
+            if (!grouped[item.chatId]) {
+                grouped[item.chatId] = [];
+            }
+            grouped[item.chatId].push(item);
+        }
+        
+        const failedAgain = [];
+        
+        for (const [chatId, chatItems] of Object.entries(grouped)) {
+            const found = this.chatStore.findChat(chatId);
             if (!found || !found.chat) {
-                console.warn(`⚠️ Чат ${item.chatId} не найден локально, пропускаем`);
+                console.warn(`⚠️ Чат ${chatId} не найден локально, пропускаем`);
                 continue;
             }
             
-            // Если чат не синхронизирован — создаем его
-            if (!found.chat.synced) {
-                console.log(`📤 Создаем чат ${item.chatId} перед отправкой сообщения...`);
+            const chat = found.chat;
+            
+            // ✅ ИСПРАВЛЕНО: Если чат не синхронизирован — создаём его ОДИН РАЗ
+            if (!chat.synced) {
+                console.log(`📤 Создаем чат ${chatId} с первым сообщением...`);
+                const firstMessage = chatItems[0].message;
                 const created = await this.chatService.createChat(
-                    found.chat.topic,
-                    found.chat.title,
+                    chat.topic,
+                    chat.title,
                     {
-                        maxContext: found.chat.maxContext,
-                        userRenamed: found.chat.userRenamed,
-                        firstMessage: item.message
+                        maxContext: chat.maxContext,
+                        userRenamed: chat.userRenamed,
+                        firstMessage: firstMessage
                     }
                 );
+                
                 if (created) {
-                    this.chatStore.markMessagesSynced(item.chatId, [item.message.id]);
-                    console.log(`✅ Сообщение ${item.message.id} синхронизировано через создание чата`);
+                    // ✅ ИСПРАВЛЕНО: Отмечаем ВСЕ сообщения как синхронизированные
+                    const ids = chatItems.map(item => item.message.id);
+                    this.chatStore.markMessagesSynced(chatId, ids);
+                    console.log(`✅ Чат ${chatId} и ${ids.length} сообщений синхронизированы`);
+                    continue;
+                } else {
+                    // Если не удалось создать чат, пробуем позже
+                    for (const item of chatItems) {
+                        item.attempts = (item.attempts || 0) + 1;
+                        if (item.attempts < 5) {
+                            failedAgain.push(item);
+                        }
+                    }
                     continue;
                 }
             }
             
-            const data = await this.apiClient.post('/chats/actions/message', {
-                action: 'new_message',
-                chatId: item.chatId,
-                message: item.message
-            });
-            
-            if (data.synced || data.success) {
-                this.chatStore.markMessagesSynced(item.chatId, [item.message.id]);
-            } else if (data.error && data.error.includes('Chat not found')) {
-                // Если чат не найден в облаке — помечаем как unsynced и попробуем позже
-                console.warn(`⚠️ Чат ${item.chatId} не найден в облаке, будет попытка позже`);
-                item.attempts = (item.attempts || 0) + 1;
-                if (item.attempts < 5) {
-                    failedAgain.push(item);
-                }
-            } else {
-                item.attempts = (item.attempts || 0) + 1;
-                if (item.attempts < 5) {
-                    failedAgain.push(item);
+            // ✅ ИСПРАВЛЕНО: Отправляем сообщения пачкой, если чат синхронизирован
+            if (chatItems.length > 1) {
+                try {
+                    const messages = chatItems.map(item => item.message);
+                    const result = await this.messageService.sendBatch(chatId, messages, {
+                        topicId: chat.topic,
+                        chatTitle: chat.title,
+                        maxContext: chat.maxContext,
+                        userRenamed: chat.userRenamed
+                    });
+                    
+                    if (result && result.success) {
+                        const ids = messages.map(m => m.id);
+                        this.chatStore.markMessagesSynced(chatId, ids);
+                        console.log(`✅ Пакет ${messages.length} сообщений синхронизирован`);
+                        continue;
+                    }
+                } catch (err) {
+                    console.error('Batch send error:', err);
                 }
             }
-        } catch (err) {
-            console.error('Retry message error:', err);
-            item.attempts = (item.attempts || 0) + 1;
-            if (item.attempts < 5) {
-                failedAgain.push(item);
+            
+            // Отправляем по одному, если пачка не сработала
+            for (const item of chatItems) {
+                try {
+                    const data = await this.apiClient.post('/chats/actions/message', {
+                        action: 'new_message',
+                        chatId: chatId,
+                        message: item.message
+                    });
+                    
+                    if (data.synced || data.success) {
+                        this.chatStore.markMessagesSynced(chatId, [item.message.id]);
+                        console.log(`✅ Сообщение ${item.message.id} синхронизировано`);
+                    } else {
+                        item.attempts = (item.attempts || 0) + 1;
+                        if (item.attempts < 5) {
+                            failedAgain.push(item);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Retry message error:', err);
+                    item.attempts = (item.attempts || 0) + 1;
+                    if (item.attempts < 5) {
+                        failedAgain.push(item);
+                    }
+                }
             }
         }
+        
+        this.syncStore.unsyncedMessages = failedAgain;
+        this.syncStore.saveToStorage();
     }
-    
-    this.syncStore.unsyncedMessages = failedAgain;
-    this.syncStore.saveToStorage();
-}
     
     async retryUnsyncedFavorites() {
         const items = this.syncStore.unsyncedFavorites;
@@ -290,6 +336,7 @@ async retryUnsyncedMessages() {
             
             if (created) {
                 // Успешно создан
+                console.log(`✅ Чат ${chat.id} синхронизирован`);
             } else {
                 item.attempts = (item.attempts || 0) + 1;
                 if (item.attempts < 5) {
