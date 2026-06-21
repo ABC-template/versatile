@@ -82,7 +82,7 @@ class ChatService {
     }
     
     // ==========================================
-    // СОЗДАНИЕ ЧАТА
+    // ✅ ИСПРАВЛЕНО: СОЗДАНИЕ ЧАТА
     // ==========================================
     
     async createChat(topicId, title, options = {}) {
@@ -94,9 +94,13 @@ class ChatService {
         }
         
         try {
+            // ✅ ИСПРАВЛЕНО: если передан existingChatId, используем его
+            const chatId = options.existingChatId || undefined;
+            
             const data = await this.apiClient.post('/chats/actions/create', {
                 action: 'create_chat',
                 chat: {
+                    id: chatId,  // ← Передаём существующий ID
                     topic_id: topicId,
                     title: title || `Чат в ${topicId}`,
                     max_context: options.maxContext || 15,
@@ -106,25 +110,60 @@ class ChatService {
             });
             
             if (data.success) {
-                const chat = this.chatStore.createChat(topicId, title, {
-                    ...options,
-                    synced: true,
-                    id: data.chatId
-                });
+                // ✅ ИСПРАВЛЕНО: проверяем, есть ли уже локальный чат с таким ID
+                const existingChat = this.chatStore.findChat(data.chatId);
                 
-                if (options.firstMessage && data.messageId) {
-                    this.chatStore.addMessage(
-                        data.chatId,
-                        options.firstMessage.text,
-                        options.firstMessage.type || 'user-msg',
-                        {
-                            id: data.messageId,
-                            synced: true
+                if (existingChat) {
+                    // ✅ Обновляем существующий чат, а не создаём новый
+                    const updatedChat = this.chatStore.updateChat(data.chatId, {
+                        synced: true,
+                        title: title || existingChat.chat.title,
+                        updated_at: new Date().toISOString()
+                    });
+                    
+                    // Добавляем первое сообщение, если его нет
+                    if (options.firstMessage && data.messageId) {
+                        const existingMsg = existingChat.chat.messages.find(
+                            m => m.id === options.firstMessage.id
+                        );
+                        if (!existingMsg) {
+                            this.chatStore.addMessage(
+                                data.chatId,
+                                options.firstMessage.text,
+                                options.firstMessage.type || 'user-msg',
+                                {
+                                    id: data.messageId,
+                                    synced: true
+                                }
+                            );
                         }
-                    );
+                    }
+                    
+                    console.log(`✅ Чат ${data.chatId} обновлён в облаке`);
+                    return updatedChat || existingChat.chat;
+                } else {
+                    // Создаём новый чат, если его нет локально
+                    const chat = this.chatStore.createChat(topicId, title, {
+                        ...options,
+                        synced: true,
+                        id: data.chatId
+                    });
+                    
+                    if (options.firstMessage && data.messageId) {
+                        this.chatStore.addMessage(
+                            data.chatId,
+                            options.firstMessage.text,
+                            options.firstMessage.type || 'user-msg',
+                            {
+                                id: data.messageId,
+                                synced: true
+                            }
+                        );
+                    }
+                    
+                    console.log(`✅ Создан новый чат ${data.chatId} в облаке`);
+                    return chat;
                 }
-                
-                return chat;
             }
             return null;
         } catch (err) {
@@ -134,7 +173,8 @@ class ChatService {
     }
     
     // ==========================================
-    // УДАЛЕНИЕ ЧАТА    // ==========================================
+    // УДАЛЕНИЕ ЧАТА
+    // ==========================================
     
     async deleteChat(chatId) {
         try {
