@@ -146,6 +146,7 @@ class SyncService {
         await this.retryUnsyncedChats();
     }
     
+    // ✅ ИСПРАВЛЕНО: синхронизация с проверкой существующих чатов
     async retryUnsyncedMessages() {
         const items = this.syncStore.unsyncedMessages;
         if (items.length === 0) return;
@@ -178,6 +179,7 @@ class SyncService {
                 continue;
             }
             
+            // ✅ ИСПРАВЛЕНО: если чат не синхронизирован, создаём его
             if (!chat.synced) {
                 console.log(`📤 Создаем чат ${chatId} с первым сообщением...`);
                 const firstMessage = chatItems[0].message;
@@ -187,11 +189,16 @@ class SyncService {
                     {
                         maxContext: chat.maxContext,
                         userRenamed: chat.userRenamed,
-                        firstMessage: firstMessage
+                        firstMessage: firstMessage,
+                        existingChatId: chat.id  // ← Передаём существующий ID
                     }
                 );
                 
                 if (created) {
+                    // ✅ Помечаем чат как синхронизированный
+                    chat.synced = true;
+                    this.chatStore.saveToStorage();
+                    
                     const ids = chatItems.map(item => item.message.id);
                     this.chatStore.markMessagesSynced(chatId, ids);
                     console.log(`✅ Чат ${chatId} и ${ids.length} сообщений синхронизированы`);
@@ -207,6 +214,7 @@ class SyncService {
                 }
             }
             
+            // ✅ Если чат синхронизирован — отправляем сообщения
             if (chatItems.length > 1) {
                 try {
                     const messages = chatItems.map(item => item.message);
