@@ -112,7 +112,7 @@ class ChatUI {
         }
         if (inputArea) inputArea.style.display = 'flex';
         if (fabBtn) fabBtn.style.display = 'flex';
-        if (header) header.classList.remove('hidden');  // ← ПОКАЗЫВАЕМ ХЭДЕР
+        if (header) header.classList.remove('hidden');
     }
     
     showTagsCloud() {
@@ -129,7 +129,9 @@ class ChatUI {
         }
         if (inputArea) inputArea.style.display = 'none';
         if (fabBtn) fabBtn.style.display = 'none';
-        if (header) header.classList.add('hidden');  // ← СКРЫВАЕМ НА ОБЛАКЕ ТЕГОВ
+        
+        // ✅ ХЭДЕР ВСЕГДА ВИДЕН
+        if (header) header.classList.remove('hidden');
         
         if (this.uiRenderer) {
             this.uiRenderer.renderTagsCloud();
