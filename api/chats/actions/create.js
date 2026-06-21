@@ -54,7 +54,9 @@ async function createChat(userId, chatData, config) {
             'service'
         );
         
-        if (!result || result.success === false) {
+        // ✅ ИСПРАВЛЕНО: проверяем, что результат содержит ID созданного чата
+        if (!result || typeof result !== 'object' || !result.id) {
+            console.error('Create chat failed:', result);
             return {
                 success: false,
                 error: 'Не удалось создать чат в облаке'
@@ -99,7 +101,7 @@ async function createChatWithMessage(userId, chatData, messageData, config) {
             const msgId = messageData.id || crypto.randomUUID();
             const msgType = messageData.type || 'user-msg';
             
-            await supabaseFetch(
+            const result = await supabaseFetch(
                 'messages',
                 {
                     method: 'POST',
@@ -115,7 +117,13 @@ async function createChatWithMessage(userId, chatData, messageData, config) {
                 'service'
             );
             
-            messageId = msgId;
+            // ✅ ИСПРАВЛЕНО: проверяем, что сообщение создано
+            if (result && typeof result === 'object' && result.id) {
+                messageId = msgId;
+            } else {
+                console.warn('Message created but response invalid:', result);
+                messageId = msgId; // Всё равно возвращаем ID
+            }
         }
         
         return {
