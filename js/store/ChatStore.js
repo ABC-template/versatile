@@ -175,23 +175,19 @@ class ChatStore {
         return chat;
     }
     
-    // ✅ НОВЫЙ МЕТОД: обновление ID чата
     updateChatId(oldId, newId) {
         const found = this.findChat(oldId);
         if (!found) return false;
         
         const { chat, topic } = found;
         
-        // Обновляем ID в самом чате
         chat.id = newId;
         
-        // Обновляем в histories
         const index = this.histories[topic].indexOf(chat);
         if (index !== -1) {
             this.histories[topic][index] = chat;
         }
         
-        // Обновляем activeIds если нужно
         if (this.activeIds[topic] === oldId) {
             this.activeIds[topic] = newId;
         }
@@ -380,6 +376,9 @@ class ChatStore {
         return messages.slice(-maxContext);
     }
     
+    /**
+     * ✅ ИСПРАВЛЕНО: отмечаем сообщения как синхронизированные и УДАЛЯЕМ из очереди
+     */
     markMessagesSynced(chatId, messageIds) {
         const found = this.findChat(chatId);
         if (!found) return;
@@ -396,63 +395,99 @@ class ChatStore {
         
         if (updated) {
             this.saveToStorage();
+            console.log(`✅ Сообщения ${messageIds.join(', ')} помечены как синхронизированные`);
         }
     }
     
+    /**
+     * ✅ ИСПРАВЛЕНО: синхронизация из облака — ЗАМЕНА, а не добавление
+     */
     syncFromCloud(cloudChat, topicId) {
         if (!topicId) topicId = cloudChat.topic_id || this.currentTopic;
         
         const localChats = this.histories[topicId] || [];
         let existingIndex = localChats.findIndex(c => c.id === cloudChat.id);
         
-        const syncedChat = {
-            id: cloudChat.id,
-            title: cloudChat.title,
-            maxContext: cloudChat.max_context || 15,
-            userRenamed: cloudChat.user_renamed || false,
-            language: cloudChat.language || window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru',
-            topic: topicId,
+        // Формируем облачные сообщения
+        const cloudMessages = (cloudChat.messages || []).map(msg => ({
+            id: msg.id,
+            text: msg.text,
+            type: msg.msg_type || msg.type,
+            isFavorite: msg.is_favorite || false,
             synced: true,
             deleted_at: null,
-            updated_at: cloudChat.updated_at || new Date().toISOString(),
-            created_at: cloudChat.created_at || new Date().toISOString(),
-            messages: (cloudChat.messages || []).map(msg => ({
-                id: msg.id,
-                text: msg.text,
-                type: msg.msg_type || msg.type,
-                isFavorite: msg.is_favorite || false,
-                synced: true,
-                created_at: msg.created_at || new Date().toISOString()
-            }))
-        };
+            created_at: msg.created_at || new Date().toISOString()
+        }));
+        
+        // Создаём Set ID облачных сообщений для быстрой проверки
+        const cloudMsgIds = new Set(cloudMessages.map(m => m.id));
+        
+        let finalMessages = [...cloudMessages];
         
         if (existingIndex !== -1) {
             const localChat = localChats[existingIndex];
             
-            const serverMsgIds = new Set(syncedChat.messages.map(m => m.id));
+            // ✅ Добавляем только НЕСИНХРОНИЗИРОВАННЫЕ локальные сообщения (synced: false)
+            // и только те, которых нет в облаке
             for (const localMsg of (localChat.messages || [])) {
-                if (!serverMsgIds.has(localMsg.id)) {
-                    syncedChat.messages.push({
+                if (!localMsg.synced && !cloudMsgIds.has(localMsg.id)) {
+                    finalMessages.push({
                         ...localMsg,
-                        synced: localMsg.synced || false
+                        synced: false
                     });
                 }
             }
             
-            syncedChat.messages.sort((a, b) => {
+            // ✅ Сортируем по дате создания
+            finalMessages.sort((a, b) => {
                 return new Date(a.created_at) - new Date(b.created_at);
             });
             
+            // ✅ Формируем обновлённый чат
+            const syncedChat = {
+                id: cloudChat.id,
+                title: cloudChat.title,
+                maxContext: cloudChat.max_context || 15,
+                userRenamed: cloudChat.user_renamed || false,
+                language: cloudChat.language || window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru',
+                topic: topicId,
+                synced: true,
+                deleted_at: null,
+                updated_at: cloudChat.updated_at || new Date().toISOString(),
+                created_at: cloudChat.created_at || new Date().toISOString(),
+                messages: finalMessages
+            };
+            
+            // ✅ Заменяем локальный чат облачным
             this.histories[topicId][existingIndex] = syncedChat;
+            console.log(`🔄 Чат ${cloudChat.id} обновлён из облака (${finalMessages.length} сообщений)`);
+            
         } else {
+            // Новый чат — просто добавляем
             if (!this.histories[topicId]) {
                 this.histories[topicId] = [];
             }
+            
+            const syncedChat = {
+                id: cloudChat.id,
+                title: cloudChat.title,
+                maxContext: cloudChat.max_context || 15,
+                userRenamed: cloudChat.user_renamed || false,
+                language: cloudChat.language || window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru',
+                topic: topicId,
+                synced: true,
+                deleted_at: null,
+                updated_at: cloudChat.updated_at || new Date().toISOString(),
+                created_at: cloudChat.created_at || new Date().toISOString(),
+                messages: finalMessages
+            };
+            
             this.histories[topicId].push(syncedChat);
+            console.log(`📥 Новый чат ${cloudChat.id} загружен из облака (${finalMessages.length} сообщений)`);
         }
         
         this.saveToStorage();
-        return syncedChat;
+        return this.findChat(cloudChat.id)?.chat || null;
     }
 }
 
