@@ -58,6 +58,12 @@ class ChatSend {
             return;
         }
         
+        // ✅ РЕНДЕРИМ СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ СРАЗУ
+        if (this.uiRenderer) {
+            this.uiRenderer.renderMessage(text, 'user-msg');
+        }
+        
+        // Отправляем в сервис (сохраняет в хранилище)
         const msg = await window.messageService.sendMessage(
             activeChat.id,
             text,
