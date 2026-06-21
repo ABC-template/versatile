@@ -36,7 +36,7 @@ window.fetchPendingDeletions = async function() {
 };
 
 /**
- * Подтверждение удаления на сервере
+ * ✅ ИСПРАВЛЕНО: Подтверждение удаления на сервере с проверкой на дубликаты
  */
 window.confirmPendingDeletion = async function(id, deviceFingerprint) {
     if (!window.userStore?.canSync()) return false;
@@ -45,6 +45,13 @@ window.confirmPendingDeletion = async function(id, deviceFingerprint) {
     if (!initData) return false;
     
     try {
+        // ✅ ИСПРАВЛЕНО: Проверяем, не подтверждено ли уже
+        const cached = localStorage.getItem(`pending_confirmed_${id}`);
+        if (cached === deviceFingerprint) {
+            console.log(`⚠️ Удаление ${id} уже подтверждено этим устройством`);
+            return true;
+        }
+        
         const response = await fetch('/api/sync/confirm', {
             method: 'POST',
             headers: {
@@ -55,7 +62,13 @@ window.confirmPendingDeletion = async function(id, deviceFingerprint) {
         });
         
         const data = await response.json();
-        return data.success === true;
+        
+        if (data.success) {
+            // ✅ ИСПРАВЛЕНО: Кешируем подтверждение
+            localStorage.setItem(`pending_confirmed_${id}`, deviceFingerprint);
+            return true;
+        }
+        return false;
     } catch (err) {
         console.error('Ошибка подтверждения удаления:', err);
         return false;
