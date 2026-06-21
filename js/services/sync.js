@@ -1,6 +1,7 @@
 // ============================================
 // js/services/sync.js
 // Описание: Синхронизация и очереди
+// ✅ ИСПРАВЛЕНО: добавлена обработка удалений
 // ============================================
 
 class SyncService {
@@ -144,11 +145,51 @@ class SyncService {
         await this.retryUnsyncedMessages();
         await this.retryUnsyncedFavorites();
         await this.retryUnsyncedChats();
+        await this.retryUnsyncedDeletions(); // ✅ НОВОЕ
     }
     
-    /**
-     * ✅ ИСПРАВЛЕНО: синхронизация с удалением из очереди
-     */
+    // ✅ НОВАЯ ФУНКЦИЯ: Повторная отправка удалений
+    async retryUnsyncedDeletions() {
+        const items = this.syncStore.unsyncedDeletions;
+        if (items.length === 0) return;
+        
+        console.log(`🔄 Повторная отправка ${items.length} несинхронизированных удалений...`);
+        
+        const failedAgain = [];
+        
+        for (const item of items) {
+            try {
+                const data = await this.apiClient.post('/chats/actions/message', {
+                    action: 'delete_message',
+                    chatId: item.chatId,
+                    messageId: item.messageId
+                });
+                
+                if (data.success) {
+                    console.log(`✅ Удаление сообщения ${item.messageId} синхронизировано`);
+                    // Удаляем из очереди
+                    this.syncStore.removeUnsyncedDeletion(item.chatId, item.messageId);
+                } else {
+                    item.attempts = (item.attempts || 0) + 1;
+                    if (item.attempts < 5) {
+                        failedAgain.push(item);
+                    } else {
+                        console.error(`❌ Удаление ${item.messageId} не удалось после ${item.attempts} попыток`);
+                    }
+                }
+            } catch (err) {
+                console.error('Retry deletion error:', err);
+                item.attempts = (item.attempts || 0) + 1;
+                if (item.attempts < 5) {
+                    failedAgain.push(item);
+                }
+            }
+        }
+        
+        this.syncStore.unsyncedDeletions = failedAgain;
+        this.syncStore.saveToStorage();
+    }
+    
     async retryUnsyncedMessages() {
         const items = this.syncStore.unsyncedMessages;
         if (items.length === 0) return;
@@ -178,12 +219,10 @@ class SyncService {
                 console.warn(`⚠️ Чат ${chatId} пустой, удаляем из очереди`);
                 const ids = chatItems.map(item => item.message.id);
                 this.chatStore.markMessagesSynced(chatId, ids);
-                // ✅ Удаляем из SyncStore
                 this.syncStore.markMessagesSynced(chatId, ids);
                 continue;
             }
             
-            // Если чат не синхронизирован — создаём его
             if (!chat.synced) {
                 console.log(`📤 Создаем чат ${chatId} с первым сообщением...`);
                 const firstMessage = chatItems[0].message;
@@ -204,7 +243,6 @@ class SyncService {
                     
                     const ids = chatItems.map(item => item.message.id);
                     this.chatStore.markMessagesSynced(chatId, ids);
-                    // ✅ Удаляем из SyncStore
                     this.syncStore.markMessagesSynced(chatId, ids);
                     console.log(`✅ Чат ${chatId} и ${ids.length} сообщений синхронизированы`);
                     continue;
@@ -219,7 +257,6 @@ class SyncService {
                 }
             }
             
-            // Отправляем пачкой
             if (chatItems.length > 1) {
                 try {
                     const messages = chatItems.map(item => item.message);
@@ -233,7 +270,6 @@ class SyncService {
                     if (result && result.success) {
                         const ids = messages.map(m => m.id);
                         this.chatStore.markMessagesSynced(chatId, ids);
-                        // ✅ Удаляем из SyncStore
                         this.syncStore.markMessagesSynced(chatId, ids);
                         console.log(`✅ Пакет ${messages.length} сообщений синхронизирован`);
                         continue;
@@ -243,7 +279,6 @@ class SyncService {
                 }
             }
             
-            // Отправляем по одному
             for (const item of chatItems) {
                 try {
                     const data = await this.apiClient.post('/chats/actions/message', {
@@ -254,7 +289,6 @@ class SyncService {
                     
                     if (data.synced || data.success) {
                         this.chatStore.markMessagesSynced(chatId, [item.message.id]);
-                        // ✅ Удаляем из SyncStore
                         this.syncStore.markMessagesSynced(chatId, [item.message.id]);
                         console.log(`✅ Сообщение ${item.message.id} синхронизировано`);
                     } else {
@@ -295,7 +329,6 @@ class SyncService {
                 });
                 
                 if (data.success) {
-                    // ✅ Удаляем из очереди
                     continue;
                 } else {
                     item.attempts = (item.attempts || 0) + 1;
@@ -334,7 +367,6 @@ class SyncService {
             
             if (created) {
                 console.log(`✅ Чат ${chat.id} синхронизирован`);
-                // ✅ Удаляем из очереди
                 this.syncStore.markChatSynced(chat.id);
             } else {
                 item.attempts = (item.attempts || 0) + 1;
