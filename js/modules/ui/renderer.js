@@ -278,20 +278,5 @@ class UIRenderer {
 // Экспортируем как глобальный объект
 window.UIRenderer = UIRenderer;
 window.uiRenderer = new UIRenderer();
-window.handleTagClick = function(topic) {
-    console.log('🏷️ Клик по тегу:', topic);
-    
-    if (window.chatUI) {
-        window.chatUI.switchTopic(topic);
-    } else {
-        // Fallback для обратной совместимости
-        window.currentTopic = topic;
-        if (window.createTempChat) window.createTempChat(topic);
-        if (window.showChatInterface) window.showChatInterface();
-        if (window.refreshUiAfterChatSelection) window.refreshUiAfterChatSelection();
-    }
-};
-
-console.log('✅ UIRenderer загружен');
 
 console.log('✅ UIRenderer загружен');
