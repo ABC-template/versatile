@@ -1,4 +1,7 @@
+// ============================================
 // js/core/locale.js
+// Описание: Локализация интерфейса
+// ============================================
 
 window.locales = {
     ru: {
@@ -66,7 +69,10 @@ window.locales = {
     }
 };
 
-// Функция бесшовного перевода элементов интерфейса под текущий контекст языка
+// ==========================================
+// ПОЛУЧЕНИЕ ЛОКАЛИЗОВАННОЙ СТРОКИ
+// ==========================================
+
 window.getLangString = function(key) {
     const currentChat = window.getCurrentActiveChat();
     // Приоритет: язык текущего чата -> системный язык TG -> русский по умолчанию
@@ -75,7 +81,10 @@ window.getLangString = function(key) {
     return activeLocale[key] || window.locales['ru'][key] || key;
 };
 
-    
+// ==========================================
+// ПРИМЕНЕНИЕ ЛОКАЛИЗАЦИИ КО ВСЕМУ UI
+// ==========================================
+
 window.applyUiLocalization = function() {
     const ids = {
         'limit-info': 'limit',
@@ -87,19 +96,50 @@ window.applyUiLocalization = function() {
         'memory-off-label': 'memory_off',
         'memory-max-label': 'memory_max'
     };
+    
     const elOrg = document.getElementById('organizer-title-label');
     if (elOrg) elOrg.innerText = window.getLangString('organizer_title');
     
     Object.keys(ids).forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            if (ids[id] === 'memory_hint') el.innerHTML = window.getLangString(ids[id]);
-            else el.innerText = window.getLangString(ids[id]);
+            if (ids[id] === 'memory_hint') {
+                el.innerHTML = window.getLangString(ids[id]);
+            } else {
+                el.innerText = window.getLangString(ids[id]);
+            }
         }
     });
 
     const userInput = document.getElementById('user-input');
     if (userInput) userInput.placeholder = window.getLangString('placeholder');
     
+    // Обновляем отображение лимита
     window.updateLimitDisplay();
 };
+
+// ==========================================
+// ОБНОВЛЕНИЕ ОТОБРАЖЕНИЯ ЛИМИТА
+// ==========================================
+
+window.updateLimitDisplay = function() {
+    const info = document.getElementById('limit-info');
+    if (!info) return;
+    
+    const userStore = window.userStore;
+    if (!userStore) return;
+    
+    const total = userStore.dailyLimit || 0;
+    const used = userStore.usedToday || 0;
+    
+    // Получаем локализованное слово "Лимит"
+    const limitLabel = window.getLangString ? window.getLangString('limit') : 'Лимит';
+    
+    if (total >= 9999) {
+        info.innerText = `${limitLabel}: ∞`;
+    } else {
+        info.innerText = `${limitLabel}: ${used}/${total}`;
+    }
+};
+
+console.log('✅ locale.js загружен');
