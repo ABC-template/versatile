@@ -133,7 +133,7 @@ async function initApp() {
             
             if (window.chatUI) {
                 window.chatUI.showChatInterface();
-                if (window.uiRenderer) window.uiRenderer.renderTagsCloud();
+                // ✅ НЕ вызываем renderTagsCloud() здесь — это делает showChatInterface()
             }
             
             // Синхронизация
@@ -177,7 +177,6 @@ async function initApp() {
         console.warn('AuthService не найден, работа в офлайн-режиме');
         if (window.chatUI) {
             window.chatUI.showChatInterface();
-            if (window.uiRenderer) window.uiRenderer.renderTagsCloud();
         }
     }
     
@@ -225,10 +224,7 @@ async function initApp() {
             window.chatUI.refreshUI();
         } else {
             window.chatUI.cleanupTempChats();
-            if (window.uiRenderer) {
-                window.uiRenderer.renderTagsCloud();
-            }
-            window.chatUI.showTagsCloud();
+            window.chatUI.showTagsCloud();  // ← здесь сам вызовет renderTagsCloud()
         }
     }
     
@@ -282,7 +278,6 @@ async function initApp() {
             
             if (window.chatUI) {
                 window.chatUI.showTagsCloud();
-                if (window.uiRenderer) window.uiRenderer.renderTagsCloud();
             }
             return;
         }
