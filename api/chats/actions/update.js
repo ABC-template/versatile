@@ -31,9 +31,9 @@ async function renameChat(userId, chatId, newTitle, config) {
             return { success: false, error: 'Title too long (max 200 characters)' };
         }
         
-        // Проверяем, что чат принадлежит пользователю
+        // Проверяем, что чат принадлежит пользователю и не удалён
         const chatCheck = await supabaseFetch(
-            `chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`,
+            `chats?id=eq.${chatId}&user_id=eq.${userId}&deleted_at=is.null&select=id`,
             { method: 'GET' },
             config,
             'service'
@@ -81,9 +81,9 @@ async function updateContext(userId, chatId, maxContext, config) {
             return { success: false, error: 'Context must be between 1 and 40' };
         }
         
-        // Проверяем, что чат принадлежит пользователю
+        // Проверяем, что чат принадлежит пользователю и не удалён
         const chatCheck = await supabaseFetch(
-            `chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`,
+            `chats?id=eq.${chatId}&user_id=eq.${userId}&deleted_at=is.null&select=id`,
             { method: 'GET' },
             config,
             'service'
@@ -114,7 +114,7 @@ async function updateContext(userId, chatId, maxContext, config) {
 }
 
 /**
- * Удалить чат (soft delete)
+ * ✅ ИСПРАВЛЕНО: Удалить чат (soft delete) с пометкой всех сообщений
  * @param {number} userId - ID пользователя
  * @param {string} chatId - ID чата
  * @param {object} config - Конфигурация Supabase
@@ -124,32 +124,49 @@ async function deleteChat(userId, chatId, config) {
     try {
         validateUUID(chatId, 'Chat ID');
         
-        // Проверяем, что чат принадлежит пользователю
+        // ✅ ИСПРАВЛЕНО: проверяем, что чат существует и ещё не удалён
         const chatCheck = await supabaseFetch(
-            `chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`,
+            `chats?id=eq.${chatId}&user_id=eq.${userId}&deleted_at=is.null&select=id`,
             { method: 'GET' },
             config,
             'service'
         );
         
         if (!chatCheck || !Array.isArray(chatCheck) || chatCheck.length === 0) {
-            return { success: false, error: 'Chat not found or access denied' };
+            return { success: false, error: 'Chat not found or already deleted' };
         }
         
-        // Soft delete — просто ставим deleted_at
+        const now = new Date().toISOString();
+        
+        // ✅ ИСПРАВЛЕНО: 1. Помечаем ВСЕ сообщения чата как удалённые
         await supabaseFetch(
-            `chats?id=eq.${chatId}`,
+            `messages?chat_id=eq.${chatId}`,
             {
                 method: 'PATCH',
                 body: JSON.stringify({ 
-                    deleted_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
+                    deleted_at: now,
+                    updated_at: now
                 })
             },
             config,
             'service'
         );
         
+        // ✅ ИСПРАВЛЕНО: 2. Помечаем сам чат как удалённый
+        await supabaseFetch(
+            `chats?id=eq.${chatId}`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ 
+                    deleted_at: now,
+                    updated_at: now
+                })
+            },
+            config,
+            'service'
+        );
+        
+        console.log(`🗑️ Чат ${chatId} и все его сообщения помечены как удалённые`);
         return { success: true, error: null };
     } catch (err) {
         console.error('Delete chat error:', err.message);
@@ -216,7 +233,7 @@ export default async function handler(request) {
         }
         
         // ==========================================
-        // УДАЛЕНИЕ ЧАТА (НОВОЕ)
+        // ✅ ИСПРАВЛЕНО: УДАЛЕНИЕ ЧАТА
         // ==========================================
         if (action === 'delete_chat') {
             if (!chatId) {
