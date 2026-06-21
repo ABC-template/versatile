@@ -1,6 +1,8 @@
 // ============================================
 // js/services/messages.js
 // Описание: CRUD операции с сообщениями
+// ✅ ИСПРАВЛЕНО: удаление с восстановлением при ошибке
+// ✅ ИСПРАВЛЕНО: отдельная очередь для удалений
 // ============================================
 
 class MessageService {
@@ -33,17 +35,11 @@ class MessageService {
         
         // Если синхронизация включена
         if (this.userStore.canSync()) {
-            // ✅ ИСПРАВЛЕНО: проверяем, нужно ли создавать чат
-            // Создаём чат только если:
-            // 1. Чат ещё не синхронизирован (chat.synced === false)
-            // 2. И это первое сообщение в чате (isFirstMessage === true)
-            // 3. ИЛИ чат не имеет ID (старый баг)
             const needsCreation = !chat.synced || isFirstMessage || !chat.id;
             
             if (needsCreation) {
                 console.log(`📤 Создаем чат ${chat.id} в облаке с первым сообщением...`);
                 
-                // ✅ ИСПРАВЛЕНО: передаём существующий ID чата
                 const created = await window.chatService.createChat(
                     chat.topic,
                     chat.title,
@@ -51,20 +47,16 @@ class MessageService {
                         maxContext: chat.maxContext,
                         userRenamed: chat.userRenamed,
                         firstMessage: message,
-                        existingChatId: chat.id  // ← Передаём ID существующего чата
+                        existingChatId: chat.id
                     }
                 );
                 
                 if (created) {
-                    // ✅ ИСПРАВЛЕНО: помечаем чат как синхронизированный
                     chat.synced = true;
-                    // Если облачный ID отличается от локального, обновляем
                     if (created.id && created.id !== chat.id) {
-                        // Обновляем ID чата во всех местах
                         this.chatStore.updateChatId(chat.id, created.id);
                     }
                     this.chatStore.saveToStorage();
-                    
                     this.chatStore.markMessagesSynced(chatId, [message.id]);
                     console.log(`✅ Чат ${chat.id} создан в облаке, сообщение синхронизировано`);
                     return message;
@@ -75,7 +67,6 @@ class MessageService {
                 }
             }
             
-            // ✅ Если чат уже синхронизирован — отправляем сообщение
             try {
                 const data = await this.apiClient.post('/chats/actions/message', {
                     action: 'new_message',
@@ -106,31 +97,90 @@ class MessageService {
     }
     
     // ==========================================
-    // УДАЛЕНИЕ СООБЩЕНИЯ
+    // ✅ ИСПРАВЛЕНО: УДАЛЕНИЕ СООБЩЕНИЯ С ВОССТАНОВЛЕНИЕМ
     // ==========================================
     
     async deleteMessage(chatId, messageId) {
-        this.chatStore.deleteMessage(chatId, messageId);
+        // 1. Находим сообщение для возможного восстановления
+        const found = this.chatStore.findChat(chatId);
+        let msgCopy = null;
         
-        if (this.userStore.canSync()) {
-            try {
-                const data = await this.apiClient.post('/chats/actions/message', {
-                    action: 'delete_message',
-                    chatId: chatId,
-                    messageId: messageId
-                });
-                
-                if (data.success) {
-                    console.log(`✅ Сообщение ${messageId} удалено из облака`);
-                    return true;
-                }
-            } catch (err) {
-                console.error('Delete message sync error:', err);
-                this.syncStore.addUnsyncedMessage(chatId, { id: messageId, deleted: true }, null, null, null, null);
+        if (found) {
+            const originalMsg = found.chat.messages.find(m => m.id === messageId);
+            if (originalMsg) {
+                msgCopy = { ...originalMsg };
             }
         }
         
-        return true;
+        // 2. Оптимистично удаляем из стора
+        this.chatStore.deleteMessage(chatId, messageId);
+        
+        // 3. Удаляем из DOM (если есть)
+        const domBlock = document.getElementById(`msg-block-${messageId}`);
+        if (domBlock) {
+            domBlock.style.transition = 'all 0.25s ease';
+            domBlock.style.opacity = '0';
+            domBlock.style.transform = 'scale(0.95)';
+            setTimeout(() => domBlock.remove(), 250);
+        }
+        
+        // 4. Если синхронизация выключена, просто выходим
+        if (!this.userStore.canSync()) {
+            return true;
+        }
+        
+        // 5. Пытаемся удалить на сервере
+        try {
+            const data = await this.apiClient.post('/chats/actions/message', {
+                action: 'delete_message',
+                chatId: chatId,
+                messageId: messageId
+            });
+            
+            if (data.success) {
+                console.log(`✅ Сообщение ${messageId} удалено из облака`);
+                // Удаляем из очереди удалений, если было
+                this.syncStore.removeUnsyncedDeletion(chatId, messageId);
+                return true;
+            } else {
+                throw new Error(data.error || 'Unknown error');
+            }
+        } catch (err) {
+            console.error('Delete message sync error:', err);
+            
+            // ✅ ВОССТАНАВЛИВАЕМ сообщение при ошибке
+            if (msgCopy) {
+                // Восстанавливаем в сторе
+                const restoreResult = this.chatStore.restoreMessage(chatId, msgCopy);
+                if (restoreResult) {
+                    console.log(`♻️ Сообщение ${messageId} восстановлено локально из-за ошибки синхронизации`);
+                    
+                    // Восстанавливаем в DOM
+                    const container = document.getElementById('chat-container');
+                    if (container && window.uiRenderer) {
+                        const msgDiv = window.uiRenderer.renderMessage(
+                            msgCopy.text,
+                            msgCopy.type,
+                            msgCopy.id,
+                            msgCopy.isFavorite
+                        );
+                        if (msgDiv) {
+                            msgDiv.style.animation = 'none';
+                            msgDiv.style.opacity = '0';
+                            requestAnimationFrame(() => {
+                                msgDiv.style.transition = 'opacity 0.3s ease';
+                                msgDiv.style.opacity = '1';
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // ✅ Добавляем в ОТДЕЛЬНУЮ очередь удалений
+            this.syncStore.addUnsyncedDeletion(chatId, messageId);
+            
+            return false;
+        }
     }
     
     // ==========================================
