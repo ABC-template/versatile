@@ -5,7 +5,7 @@
 
 import { authenticate } from '../_lib/auth.js';
 import { corsHeaders, handleCORS, jsonResponse, errorResponse } from '../_lib/cors.js';
-import { getSupabaseConfig } from '../_lib/supabase-client.js';
+import { getSupabaseConfig, supabaseFetch } from '../_lib/supabase-client.js';
 
 export const config = { runtime: 'edge' };
 
