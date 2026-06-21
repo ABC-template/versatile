@@ -6,7 +6,7 @@
 import { authenticate } from '../_lib/auth.js';
 import { corsHeaders, handleCORS, jsonResponse, errorResponse } from '../_lib/cors.js';
 import { validateAudioSize } from '../_lib/validators.js';
-import { getRotatedKeysPool, hasAvailableKeys } from './models.js';
+import { getRotatedKeysPool, hasAvailableKeys } from '../chats/models.js';
 
 export const config = { runtime: 'edge' };
 
