@@ -107,6 +107,13 @@ async function initApp() {
         window.organizerStore.loadFromStorage();
     }
     
+    if (window.chatUI) {
+        const cleaned = window.chatUI.cleanupAllEmptyChats();
+        if (cleaned > 0) {
+            console.log(`🧹 При загрузке очищено ${cleaned} пустых чатов`);
+        }
+    }
+    
     // ==========================================
     // 5. АВТОРИЗАЦИЯ И СИНХРОНИЗАЦИЯ
     // ==========================================
