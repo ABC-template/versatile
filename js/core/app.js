@@ -107,6 +107,7 @@ async function initApp() {
         window.organizerStore.loadFromStorage();
     }
     
+    // ✅ НОВОЕ: При загрузке удаляем все пустые чаты
     if (window.chatUI) {
         const cleaned = window.chatUI.cleanupAllEmptyChats();
         if (cleaned > 0) {
@@ -135,15 +136,12 @@ async function initApp() {
         const result = await window.authService.checkSubscription();
         
         if (result.isMember || result.role === 'admin' || result.role === 'creator') {
-            // Пользователь авторизован
             console.log(`👤 Пользователь авторизован: ${result.role}`);
             
             if (window.chatUI) {
                 window.chatUI.showChatInterface();
-                // ✅ НЕ вызываем renderTagsCloud() здесь — это делает showChatInterface()
             }
             
-            // Синхронизация
             if (result.syncEnabled) {
                 console.log('🔄 Синхронизация включена');
                 
@@ -165,13 +163,11 @@ async function initApp() {
                 }
             }
             
-            // Отложенная очистка
             if (window.chatUI) {
                 setTimeout(() => window.chatUI.cleanupTempChats(), 5000);
             }
             
         } else {
-            // Гостевой режим
             if (window.showGuest) {
                 window.showGuest({
                     msg: '403',
@@ -180,7 +176,6 @@ async function initApp() {
             }
         }
     } else {
-        // Fallback
         console.warn('AuthService не найден, работа в офлайн-режиме');
         if (window.chatUI) {
             window.chatUI.showChatInterface();
@@ -231,7 +226,7 @@ async function initApp() {
             window.chatUI.refreshUI();
         } else {
             window.chatUI.cleanupTempChats();
-            window.chatUI.showTagsCloud();  // ← здесь сам вызовет renderTagsCloud()
+            window.chatUI.showTagsCloud();
         }
     }
     
@@ -323,7 +318,6 @@ async function initApp() {
         if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
     }
     
-    // Обновляем счетчик корзины
     if (window.updateTrashCount) {
         setTimeout(window.updateTrashCount, 1000);
     }
@@ -331,17 +325,12 @@ async function initApp() {
     console.log('✅ Приложение успешно загружено');
 }
 
-// ==========================================
-// ЗАПУСК
-// ==========================================
-
 document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(err => {
         console.error('Критический сбой инициализации:', err);
     });
 });
 
-// Запрос полноэкранного режима
 if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
 }
