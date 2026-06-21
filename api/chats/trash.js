@@ -1,6 +1,7 @@
 // ============================================
 // api/chats/trash.js
 // Описание: Работа с корзиной (GET, POST, DELETE)
+// ✅ ИСПРАВЛЕНО: восстановление чата — только сообщения, удаленные с ним
 // ============================================
 
 import { authenticate } from '../_lib/auth.js';
@@ -11,7 +12,7 @@ import { isValidUUID, validateUUID } from '../_lib/validators.js';
 export const config = { runtime: 'edge' };
 
 /**
- * ✅ ИСПРАВЛЕНО: Получить содержимое корзины (с пагинацией и без N+1)
+ * Получить содержимое корзины (с пагинацией и без N+1)
  */
 async function getTrash(userId, config, limit = 100, offset = 0) {
     // Получаем удалённые чаты с пагинацией
@@ -27,7 +28,6 @@ async function getTrash(userId, config, limit = 100, offset = 0) {
     if (deletedChats && Array.isArray(deletedChats) && deletedChats.length > 0) {
         const chatIds = deletedChats.map(c => c.id).join(',');
         
-        // ✅ ИСПРАВЛЕНО: ОДИН запрос с JOIN для получения названий чатов
         const messagesWithChats = await supabaseFetch(
             `messages?chat_id=in.(${chatIds})&deleted_at=not.is.null&select=id,text,chat_id,deleted_at,created_at,chats!inner(title)&order=deleted_at.desc&limit=${limit}&offset=${offset}`,
             { method: 'GET' },
@@ -35,13 +35,11 @@ async function getTrash(userId, config, limit = 100, offset = 0) {
             'service'
         );
         
-        // ✅ ИСПРАВЛЕНО: Извлекаем название чата из JOIN
         if (messagesWithChats && Array.isArray(messagesWithChats)) {
             deletedMessages = messagesWithChats.map(msg => ({
                 ...msg,
                 chat_title: msg.chats?.title || 'Unknown'
             }));
-            // Удаляем вложенный объект chats
             deletedMessages = deletedMessages.map(({ chats, ...rest }) => rest);
         }
     }
@@ -53,7 +51,9 @@ async function getTrash(userId, config, limit = 100, offset = 0) {
 }
 
 /**
- * ✅ ИСПРАВЛЕНО: Восстановить из корзины (с восстановлением связанных данных)
+ * ✅ ИСПРАВЛЕНО: Восстановить из корзины
+ * При восстановлении чата — восстанавливаем ТОЛЬКО сообщения,
+ * которые были удалены вместе с чатом (имеют ту же дату deleted_at)
  */
 async function restoreFromTrash(userId, id, type, config) {
     validateUUID(id, 'ID');
@@ -63,7 +63,7 @@ async function restoreFromTrash(userId, id, type, config) {
     if (type === 'chat') {
         // Проверяем, что чат принадлежит пользователю и находится в корзине
         const chatCheck = await supabaseFetch(
-            `chats?id=eq.${id}&user_id=eq.${userId}&deleted_at=not.is.null&select=id`,
+            `chats?id=eq.${id}&user_id=eq.${userId}&deleted_at=not.is.null&select=id,deleted_at`,
             { method: 'GET' },
             config,
             'service'
@@ -73,9 +73,12 @@ async function restoreFromTrash(userId, id, type, config) {
             return { success: false, error: 'Chat not found or not in trash' };
         }
         
-        // ✅ ИСПРАВЛЕНО: 1. Восстанавливаем ВСЕ сообщения чата
+        const chatDeletedAt = chatCheck[0].deleted_at;
+        
+        // ✅ ИСПРАВЛЕНО: Восстанавливаем ТОЛЬКО сообщения, 
+        // которые были удалены вместе с чатом (та же дата deleted_at)
         await supabaseFetch(
-            `messages?chat_id=eq.${id}`,
+            `messages?chat_id=eq.${id}&deleted_at=eq.${encodeURIComponent(chatDeletedAt)}`,
             {
                 method: 'PATCH',
                 body: JSON.stringify({ 
@@ -87,7 +90,7 @@ async function restoreFromTrash(userId, id, type, config) {
             'service'
         );
         
-        // ✅ ИСПРАВЛЕНО: 2. Восстанавливаем сам чат
+        // Восстанавливаем сам чат
         await supabaseFetch(
             `chats?id=eq.${id}`,
             {
@@ -101,7 +104,7 @@ async function restoreFromTrash(userId, id, type, config) {
             'service'
         );
         
-        console.log(`♻️ Восстановлен чат ${id} и все его сообщения`);
+        console.log(`♻️ Восстановлен чат ${id} и сообщения, удаленные с ним (${chatDeletedAt})`);
         
     } else if (type === 'message') {
         // Проверяем, что сообщение принадлежит пользователю через чат и находится в корзине
@@ -128,7 +131,7 @@ async function restoreFromTrash(userId, id, type, config) {
             return { success: false, error: 'Access denied' };
         }
         
-        // ✅ ИСПРАВЛЕНО: Восстанавливаем сообщение
+        // Восстанавливаем сообщение
         await supabaseFetch(
             `messages?id=eq.${id}`,
             {
@@ -163,7 +166,7 @@ async function restoreFromTrash(userId, id, type, config) {
 }
 
 /**
- * ✅ ИСПРАВЛЕНО: Удалить навсегда (HARD DELETE) с проверкой дубликатов
+ * Удалить навсегда (HARD DELETE) с проверкой дубликатов
  */
 async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, config) {
     validateUUID(id, 'ID');
@@ -186,7 +189,6 @@ async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, con
         
         const entityCreatedAt = chatCheck[0].created_at;
         
-        // Получаем список активных устройств
         const devices = await supabaseFetch(
             `user_devices?user_id=eq.${userId}&is_active=eq.true&select=device_fingerprint`,
             { method: 'GET' },
@@ -202,9 +204,7 @@ async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, con
         await supabaseFetch(`messages?chat_id=eq.${id}`, { method: 'DELETE' }, config, 'service');
         await supabaseFetch(`chats?id=eq.${id}`, { method: 'DELETE' }, config, 'service');
         
-        // ✅ ИСПРАВЛЕНО: Создаем запись в pending_deletions только если есть другие устройства
         if (deviceFingerprints.length > 0) {
-            // ✅ ИСПРАВЛЕНО: Проверяем, нет ли уже pending для этого чата
             const existingPending = await supabaseFetch(
                 `pending_deletions?user_id=eq.${userId}&entity_type=eq.chat&parent_id=eq.${id}&is_cleaned=eq.false&select=id`,
                 { method: 'GET' },
@@ -232,7 +232,6 @@ async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, con
                     'service'
                 );
                 
-                // ✅ ИСПРАВЛЕНО: Добавляем устройства по одному с обработкой ошибок
                 for (const fp of deviceFingerprints) {
                     try {
                         await supabaseFetch(
@@ -296,7 +295,6 @@ async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, con
         await supabaseFetch(`messages?id=eq.${id}`, { method: 'DELETE' }, config, 'service');
         
         if (deviceFingerprints.length > 0) {
-            // ✅ ИСПРАВЛЕНО: Проверяем, нет ли уже pending для этого сообщения
             const existingPending = await supabaseFetch(
                 `pending_deletions?user_id=eq.${userId}&entity_type=eq.message&parent_id=eq.${id}&is_cleaned=eq.false&select=id`,
                 { method: 'GET' },
