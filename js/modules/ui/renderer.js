@@ -273,6 +273,39 @@ class UIRenderer {
                 indicator.innerText = originalText;
         }
     }
+    // ==========================================
+// ОБЛАКО ТЕГОВ
+// ==========================================
+
+renderTagsCloud() {
+    const container = document.getElementById('tags-cloud-container');
+    if (!container) return;
+    
+    const topics = [
+        { id: 'code', icon: '💻', name: '#кодинг' },
+        { id: 'creative', icon: '✍️', name: '#креатив' },
+        { id: 'fast', icon: '⚡', name: '#флуд' },
+        { id: 'kitchen', icon: '🍳', name: '#кухня' },
+        { id: 'analytics', icon: '📊', name: '#аналитика' }
+    ];
+    
+    container.innerHTML = `
+        <div class="tags-cloud-wrapper">
+            <div class="tags-cloud-header">
+                <h2>🌤️ Добро пожаловать!</h2>
+                <p style="color: var(--hint-color); font-size: 14px; margin: 4px 0 16px 0;">Выбери направление для общения:</p>
+            </div>
+            <div class="tags-cloud-grid">
+                ${topics.map(t => `
+                    <div class="tag-chip" data-topic="${t.id}" onclick="window.chatUI.switchTopic('${t.id}')">
+                        <span class="tag-icon">${t.icon}</span>
+                        <span class="tag-name">${t.name}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
 }
 
 // Экспортируем как глобальный объект
