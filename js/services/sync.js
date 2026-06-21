@@ -166,42 +166,75 @@ class SyncService {
         await this.retryUnsyncedChats();
     }
     
-    async retryUnsyncedMessages() {
-        const items = this.syncStore.unsyncedMessages;
-        if (items.length === 0) return;
-        
-        console.log(`🔄 Повторная отправка ${items.length} несинхронизированных сообщений...`);
-        
-        const failedAgain = [];
-        
-        for (const item of items) {
-            try {
-                const data = await this.apiClient.post('/chats/actions/message', {
-                    action: 'new_message',
-                    chatId: item.chatId,
-                    message: item.message
-                });
-                
-                if (data.synced || data.success) {
-                    this.chatStore.markMessagesSynced(item.chatId, [item.message.id]);
-                } else {
-                    item.attempts = (item.attempts || 0) + 1;
-                    if (item.attempts < 5) {
-                        failedAgain.push(item);
+async retryUnsyncedMessages() {
+    const items = this.syncStore.unsyncedMessages;
+    if (items.length === 0) return;
+    
+    console.log(`🔄 Повторная отправка ${items.length} несинхронизированных сообщений...`);
+    
+    const failedAgain = [];
+    
+    for (const item of items) {
+        try {
+            // Проверяем, существует ли чат
+            const found = this.chatStore.findChat(item.chatId);
+            if (!found || !found.chat) {
+                console.warn(`⚠️ Чат ${item.chatId} не найден локально, пропускаем`);
+                continue;
+            }
+            
+            // Если чат не синхронизирован — создаем его
+            if (!found.chat.synced) {
+                console.log(`📤 Создаем чат ${item.chatId} перед отправкой сообщения...`);
+                const created = await this.chatService.createChat(
+                    found.chat.topic,
+                    found.chat.title,
+                    {
+                        maxContext: found.chat.maxContext,
+                        userRenamed: found.chat.userRenamed,
+                        firstMessage: item.message
                     }
+                );
+                if (created) {
+                    this.chatStore.markMessagesSynced(item.chatId, [item.message.id]);
+                    console.log(`✅ Сообщение ${item.message.id} синхронизировано через создание чата`);
+                    continue;
                 }
-            } catch (err) {
-                console.error('Retry message error:', err);
+            }
+            
+            const data = await this.apiClient.post('/chats/actions/message', {
+                action: 'new_message',
+                chatId: item.chatId,
+                message: item.message
+            });
+            
+            if (data.synced || data.success) {
+                this.chatStore.markMessagesSynced(item.chatId, [item.message.id]);
+            } else if (data.error && data.error.includes('Chat not found')) {
+                // Если чат не найден в облаке — помечаем как unsynced и попробуем позже
+                console.warn(`⚠️ Чат ${item.chatId} не найден в облаке, будет попытка позже`);
+                item.attempts = (item.attempts || 0) + 1;
+                if (item.attempts < 5) {
+                    failedAgain.push(item);
+                }
+            } else {
                 item.attempts = (item.attempts || 0) + 1;
                 if (item.attempts < 5) {
                     failedAgain.push(item);
                 }
             }
+        } catch (err) {
+            console.error('Retry message error:', err);
+            item.attempts = (item.attempts || 0) + 1;
+            if (item.attempts < 5) {
+                failedAgain.push(item);
+            }
         }
-        
-        this.syncStore.unsyncedMessages = failedAgain;
-        this.syncStore.saveToStorage();
     }
+    
+    this.syncStore.unsyncedMessages = failedAgain;
+    this.syncStore.saveToStorage();
+}
     
     async retryUnsyncedFavorites() {
         const items = this.syncStore.unsyncedFavorites;
