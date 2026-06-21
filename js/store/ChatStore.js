@@ -179,7 +179,17 @@ class ChatStore {
             return existing;
         }
         
-        return this.createChat(topicId, null, { synced: false });
+        // ✅ Создаём чат с synced = false (никогда не синхронизируется автоматически)
+        const newChat = this.createChat(topicId, null, { 
+            synced: false,
+            messages: []
+        });
+        
+        // ✅ Явно помечаем как несинхронизированный
+        newChat.synced = false;
+        this.saveToStorage();
+        
+        return newChat;
     }
     
     /**
@@ -251,12 +261,14 @@ class ChatStore {
     /**
      * Проверить, есть ли реальные сообщения в чате
      */
-    hasRealMessages(chat) {
+     hasRealMessages(chat) {
         if (!chat || !chat.messages) return false;
         return chat.messages.some(m => 
-            (m.type === 'user-msg' || m.type === 'ai-msg') && !m.deleted_at
+            (m.type === 'user-msg' || m.type === 'ai-msg') && 
+            !m.deleted_at && 
+            m.text && m.text.trim().length > 0
         );
-    }
+     }
     
     /**
      * Очистить пустые временные чаты (старше 5 минут)
