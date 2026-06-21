@@ -7,7 +7,7 @@ import { authenticate } from '../_lib/auth.js';
 import { corsHeaders, handleCORS, jsonResponse, errorResponse } from '../_lib/cors.js';
 import { getSupabaseConfig, checkUsageLimit, incrementUsage } from '../_lib/supabase-client.js';
 import { validateImageSize, validateMessageLength } from '../_lib/validators.js';
-import { getModelConfig, getLanguageInstruction, getRotatedKeysPool, hasAvailableKeys } from './models.js';
+import { getModelConfig, getLanguageInstruction, getRotatedKeysPool, hasAvailableKeys } from '../chats/models.js';
 import { buildSystemPrompt, buildMessages } from './prompts.js';
 
 export const config = { runtime: 'edge' };
