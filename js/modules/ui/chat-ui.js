@@ -126,6 +126,11 @@ class ChatUI {
         }
         if (inputArea) inputArea.style.display = 'none';
         if (fabBtn) fabBtn.style.display = 'none';
+        
+        // ✅ ВАЖНО: рендерим облако тегов!
+        if (this.uiRenderer) {
+            this.uiRenderer.renderTagsCloud();
+        }
     }
     
     refreshUI() {
@@ -136,18 +141,13 @@ class ChatUI {
         this.loadActiveChatMessages();
         
         // Обновляем историю чатов
-        if (window.renderHistoryChatsList) {
-            window.renderHistoryChatsList(window.currentFilter || 'all');
+        if (window.profileUI) {
+            window.profileUI.renderHistoryChatsList(window.currentFilter || 'all');
         }
         
         // Обновляем контекст
-        if (window.syncContextSliderWithActiveChat) {
-            window.syncContextSliderWithActiveChat();
-        }
-        
-        // Обновляем облако тегов
-        if (window.renderTagsCloud) {
-            window.renderTagsCloud();
+        if (window.profileUI) {
+            window.profileUI.syncContextSliderWithActiveChat();
         }
     }
     
@@ -210,48 +210,141 @@ class ChatUI {
         }
         return cleaned;
     }
-    // ==========================================
-// НОВЫЙ ЧАТ (ОБЕРТКА ДЛЯ КНОПКИ)
-// ==========================================
-
-createNewChat() {
-    const card = document.getElementById('profile-card');
-    if (card) card.classList.add('hidden');
-    if (window.tg?.BackButton) window.tg.BackButton.hide();
-    
-    const newChat = this.chatStore.createTempChat();
-    this.showChatInterface();
-    this.refreshUI();
-    return newChat;
-}
-
-// ==========================================
-// ПЕРЕКЛЮЧЕНИЕ ТОПИКА (ДЛЯ ОБЛАКА ТЕГОВ)
-// ==========================================
-
-switchTopic(topic) {
-    // Удаляем пустой временный чат при переключении
-    const currentChat = this.chatStore.getActiveChat();
-    if (currentChat && !currentChat.synced && !this.chatStore.hasRealMessages(currentChat)) {
-        const topicChats = this.chatStore.getChats(this.chatStore.currentTopic);
-        this.chatStore.histories[this.chatStore.currentTopic] = topicChats.filter(c => c.id !== currentChat.id);
-        this.chatStore.activeIds[this.chatStore.currentTopic] = null;
-    }
-    
-    this.chatStore.currentTopic = topic;
-    
-    document.querySelectorAll('.tag-chip').forEach(chip => {
-        chip.classList.toggle('active', chip.dataset.topic === topic);
-    });
-    
-    this.chatStore.createTempChat(topic);
-    this.refreshUI();
-    this.showChatInterface();
-}
 }
 
 // Экспортируем как глобальный объект
 window.ChatUI = ChatUI;
 window.chatUI = new ChatUI();
+
+// ==========================================
+// ОБЕРТКИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+// ==========================================
+
+window.getCurrentActiveChat = function() {
+    if (window.chatStore) {
+        return window.chatStore.getActiveChat();
+    }
+    return null;
+};
+
+window.handleTagClick = function(topic) {
+    if (window.chatUI) {
+        window.chatUI.switchTopic(topic);
+    }
+};
+
+window.renameChat = function(event, chatId) {
+    if (event) event.stopPropagation();
+    const found = window.chatStore.findChat(chatId);
+    if (!found) return;
+    const { chat } = found;
+    const newTitle = prompt('Введите новое название:', chat.title);
+    if (newTitle && newTitle.trim().length > 0) {
+        if (window.chatService) {
+            window.chatService.renameChat(chatId, newTitle.trim());
+            window.chatUI.refreshUI();
+        }
+    }
+};
+
+window.deleteChat = function(event, chatId) {
+    if (event) event.stopPropagation();
+    const confirmMsg = window.getLangString ? window.getLangString('confirm_del_chat') : 'Удалить чат?';
+    const action = () => {
+        if (window.chatService) {
+            window.chatService.deleteChat(chatId);
+            window.chatUI.refreshUI();
+        }
+    };
+    if (window.tg?.showConfirm) {
+        window.tg.showConfirm(confirmMsg, (ok) => { if (ok) action(); });
+    } else if (confirm(confirmMsg)) {
+        action();
+    }
+};
+
+window.copyMsgText = function(btn, msgId) {
+    const found = window.chatStore.findChat(msgId);
+    let msg = null;
+    if (found) {
+        const { chat } = found;
+        msg = chat.messages.find(m => m.id === msgId);
+    }
+    if (!msg) return;
+    
+    navigator.clipboard.writeText(msg.text).then(() => {
+        btn.classList.add('show-tip');
+        setTimeout(() => btn.classList.remove('show-tip'), 1200);
+    }).catch(() => {
+        if (window.tg?.showAlert) window.tg.showAlert('Ошибка копирования');
+    });
+};
+
+window.shareMsgText = function(btn, msgId) {
+    const found = window.chatStore.findChat(msgId);
+    let msg = null;
+    if (found) {
+        const { chat } = found;
+        msg = chat.messages.find(m => m.id === msgId);
+    }
+    if (!msg) return;
+    
+    const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(msg.text)}`;
+    btn.classList.add('show-tip');
+    setTimeout(() => btn.classList.remove('show-tip'), 1200);
+    
+    setTimeout(() => {
+        if (window.tg?.openTelegramLink) {
+            window.tg.openTelegramLink(shareUrl);
+        } else {
+            window.open(shareUrl, '_blank');
+        }
+    }, 300);
+};
+
+window.toggleFavoriteMsg = async function(btn, msgId) {
+    const activeChat = window.chatStore.getActiveChat();
+    if (!activeChat) return;
+    
+    const result = await window.messageService.toggleFavorite(activeChat.id, msgId);
+    if (result) {
+        const heartSpan = btn.querySelector('.icon-heart');
+        if (result.isFavorite) {
+            btn.classList.add('is-favorite');
+            if (heartSpan) heartSpan.textContent = '❤️';
+            btn.setAttribute('data-tooltip', '❤️');
+        } else {
+            btn.classList.remove('is-favorite');
+            if (heartSpan) heartSpan.textContent = '🤍';
+            btn.setAttribute('data-tooltip', '🤍');
+        }
+        btn.classList.add('show-tip');
+        setTimeout(() => btn.classList.remove('show-tip'), 1200);
+    }
+};
+
+window.deleteMessage = function(msgId) {
+    const activeChat = window.chatStore.getActiveChat();
+    if (!activeChat) return;
+    
+    const confirmMsg = window.getLangString ? window.getLangString('confirm_del_msg') : 'Удалить сообщение?';
+    const action = () => {
+        if (window.messageService) {
+            window.messageService.deleteMessage(activeChat.id, msgId);
+        }
+        const domBlock = document.getElementById(`msg-block-${msgId}`);
+        if (domBlock) {
+            domBlock.style.transition = 'all 0.25s ease';
+            domBlock.style.opacity = '0';
+            domBlock.style.transform = 'scale(0.95)';
+            setTimeout(() => domBlock.remove(), 250);
+        }
+    };
+    if (window.tg?.showConfirm) {
+        window.tg.showConfirm(confirmMsg, (ok) => { if (ok) action(); });
+    } else if (confirm(confirmMsg)) {
+        action();
+    }
+};
 
 console.log('✅ ChatUI загружен');
