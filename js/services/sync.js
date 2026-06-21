@@ -37,16 +37,9 @@ class SyncService {
         try {
             console.log('🔄 Начинаем полную синхронизацию...');
             
-            // 1. Синхронизируем метаданные
             const metadata = await this.chatService.getMetadata();
-            
-            // 2. Загружаем все чаты
             await this.loadAllChats(metadata.chats || []);
-            
-            // 3. Обрабатываем отложенные удаления
             await this.processPendingDeletions();
-            
-            // 4. Отправляем несинхронизированные сообщения
             await this.retryUnsyncedItems();
             
             console.log('✅ Полная синхронизация завершена');
@@ -76,18 +69,14 @@ class SyncService {
             const localChats = this.chatStore.getChats(topic);
             const existing = localChats.find(c => c.id === cloudChat.id);
             
-            // Проверяем, нужно ли обновлять
             if (existing) {
                 const cloudTime = new Date(cloudChat.updated_at);
                 const localTime = new Date(existing.updated_at || existing.created_at);
-                
                 if (cloudTime > localTime) {
-                    // Загружаем полный чат
                     const fullChat = await this.chatService.getChat(cloudChat.id);
                     if (fullChat) loadedCount++;
                 }
             } else {
-                // Новый чат
                 const fullChat = await this.chatService.getChat(cloudChat.id);
                 if (fullChat) loadedCount++;
             }
@@ -115,18 +104,14 @@ class SyncService {
             console.log(`🗑️ Обработка ${data.pending.length} удаленных элементов...`);
             
             for (const item of data.pending) {
-                // Удаляем локально
                 if (item.entity_type === 'chat') {
                     this.chatStore.deleteChat(item.id);
                 } else if (item.entity_type === 'message') {
-                    // Находим чат по parent_id
                     const found = this.chatStore.findChat(item.parent_id);
                     if (found) {
                         this.chatStore.deleteMessage(item.parent_id, item.id);
                     }
                 }
-                
-                // Подтверждаем на сервере
                 await this.confirmDeletion(item.id, deviceFingerprint);
             }
             
@@ -151,32 +136,22 @@ class SyncService {
     }
     
     // ==========================================
-    // ✅ ИСПРАВЛЕНО: ПОВТОРНАЯ ОТПРАВКА НЕСИНХРОНИЗИРОВАННЫХ
+    // ПОВТОРНАЯ ОТПРАВКА НЕСИНХРОНИЗИРОВАННЫХ
     // ==========================================
     
     async retryUnsyncedItems() {
         if (!this.userStore.canSync()) return;
-        
-        // Сообщения
         await this.retryUnsyncedMessages();
-        
-        // Избранное
         await this.retryUnsyncedFavorites();
-        
-        // Чаты
         await this.retryUnsyncedChats();
     }
     
-    /**
-     * ✅ ИСПРАВЛЕНО: Повторная отправка сообщений с группировкой
-     */
     async retryUnsyncedMessages() {
         const items = this.syncStore.unsyncedMessages;
         if (items.length === 0) return;
         
         console.log(`🔄 Повторная отправка ${items.length} несинхронизированных сообщений...`);
         
-        // ✅ ИСПРАВЛЕНО: Группируем по chatId
         const grouped = {};
         for (const item of items) {
             if (!grouped[item.chatId]) {
@@ -196,7 +171,13 @@ class SyncService {
             
             const chat = found.chat;
             
-            // ✅ ИСПРАВЛЕНО: Если чат не синхронизирован — создаём его ОДИН РАЗ
+            if (!this.chatStore.hasRealMessages(chat)) {
+                console.warn(`⚠️ Чат ${chatId} пустой, удаляем из очереди`);
+                const ids = chatItems.map(item => item.message.id);
+                this.chatStore.markMessagesSynced(chatId, ids);
+                continue;
+            }
+            
             if (!chat.synced) {
                 console.log(`📤 Создаем чат ${chatId} с первым сообщением...`);
                 const firstMessage = chatItems[0].message;
@@ -211,13 +192,11 @@ class SyncService {
                 );
                 
                 if (created) {
-                    // ✅ ИСПРАВЛЕНО: Отмечаем ВСЕ сообщения как синхронизированные
                     const ids = chatItems.map(item => item.message.id);
                     this.chatStore.markMessagesSynced(chatId, ids);
                     console.log(`✅ Чат ${chatId} и ${ids.length} сообщений синхронизированы`);
                     continue;
                 } else {
-                    // Если не удалось создать чат, пробуем позже
                     for (const item of chatItems) {
                         item.attempts = (item.attempts || 0) + 1;
                         if (item.attempts < 5) {
@@ -228,7 +207,6 @@ class SyncService {
                 }
             }
             
-            // ✅ ИСПРАВЛЕНО: Отправляем сообщения пачкой, если чат синхронизирован
             if (chatItems.length > 1) {
                 try {
                     const messages = chatItems.map(item => item.message);
@@ -250,7 +228,6 @@ class SyncService {
                 }
             }
             
-            // Отправляем по одному, если пачка не сработала
             for (const item of chatItems) {
                 try {
                     const data = await this.apiClient.post('/chats/actions/message', {
@@ -335,7 +312,6 @@ class SyncService {
             });
             
             if (created) {
-                // Успешно создан
                 console.log(`✅ Чат ${chat.id} синхронизирован`);
             } else {
                 item.attempts = (item.attempts || 0) + 1;
@@ -362,7 +338,7 @@ class SyncService {
             if (this.userStore.canSync() && navigator.onLine) {
                 this.retryUnsyncedItems();
             }
-        }, 30000); // Каждые 30 секунд
+        }, 30000);
         
         console.log('⏰ Периодическая синхронизация запущена');
     }
@@ -375,7 +351,6 @@ class SyncService {
     }
 }
 
-// Экспортируем как глобальный объект
 window.SyncService = SyncService;
 window.syncService = new SyncService();
 
