@@ -22,9 +22,9 @@ async function addMessage(userId, chatId, messageData, config) {
     try {
         validateUUID(chatId, 'Chat ID');
         
-        // Проверяем, что чат принадлежит пользователю
+        // Проверяем, что чат принадлежит пользователю и не удалён
         const chatCheck = await supabaseFetch(
-            `chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`,
+            `chats?id=eq.${chatId}&user_id=eq.${userId}&deleted_at=is.null&select=id`,
             { method: 'GET' },
             config,
             'service'
@@ -52,7 +52,7 @@ async function addMessage(userId, chatId, messageData, config) {
         );
         
         if (existingCheck && Array.isArray(existingCheck) && existingCheck.length > 0) {
-            // Обновляем существующее
+            // Обновляем существующее (восстанавливаем из корзины)
             await supabaseFetch(
                 `messages?id=eq.${msgId}`,
                 {
@@ -106,7 +106,7 @@ async function addMessage(userId, chatId, messageData, config) {
 }
 
 /**
- * Удалить сообщение (soft delete)
+ * ✅ ИСПРАВЛЕНО: Удалить сообщение (soft delete)
  * @param {number} userId - ID пользователя
  * @param {string} chatId - ID чата
  * @param {string} messageId - ID сообщения
@@ -117,18 +117,6 @@ async function deleteMessage(userId, chatId, messageId, config) {
     try {
         validateUUID(chatId, 'Chat ID');
         validateUUID(messageId, 'Message ID');
-        
-        // Проверяем, что сообщение принадлежит пользователю
-        const msgCheck = await supabaseFetch(
-            `messages?id=eq.${messageId}&select=chat_id`,
-            { method: 'GET' },
-            config,
-            'service'
-        );
-        
-        if (!msgCheck || !Array.isArray(msgCheck) || msgCheck.length === 0) {
-            return { success: true, alreadyDeleted: true };
-        }
         
         // Проверяем, что чат принадлежит пользователю
         const chatCheck = await supabaseFetch(
@@ -142,12 +130,27 @@ async function deleteMessage(userId, chatId, messageId, config) {
             return { success: false, error: 'Access denied' };
         }
         
-        // Soft delete
+        // ✅ ИСПРАВЛЕНО: проверяем, что сообщение существует и не удалено
+        const msgCheck = await supabaseFetch(
+            `messages?id=eq.${messageId}&chat_id=eq.${chatId}&deleted_at=is.null&select=id`,
+            { method: 'GET' },
+            config,
+            'service'
+        );
+        
+        if (!msgCheck || !Array.isArray(msgCheck) || msgCheck.length === 0) {
+            return { success: false, error: 'Message not found or already deleted' };
+        }
+        
+        // ✅ ИСПРАВЛЕНО: Soft delete сообщения
         await supabaseFetch(
             `messages?id=eq.${messageId}`,
             {
                 method: 'PATCH',
-                body: JSON.stringify({ deleted_at: new Date().toISOString() })
+                body: JSON.stringify({ 
+                    deleted_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
             },
             config,
             'service'
@@ -164,6 +167,7 @@ async function deleteMessage(userId, chatId, messageId, config) {
             'service'
         );
         
+        console.log(`🗑️ Сообщение ${messageId} помечено как удалённое`);
         return { success: true, error: null };
     } catch (err) {
         console.error('Delete message error:', err.message);
@@ -227,8 +231,7 @@ export default async function handler(request) {
             }
             
             return jsonResponse({
-                success: true,
-                alreadyDeleted: result.alreadyDeleted || false
+                success: true
             });
             
         } else {
