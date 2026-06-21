@@ -210,6 +210,44 @@ class ChatUI {
         }
         return cleaned;
     }
+    // ==========================================
+// НОВЫЙ ЧАТ (ОБЕРТКА ДЛЯ КНОПКИ)
+// ==========================================
+
+createNewChat() {
+    const card = document.getElementById('profile-card');
+    if (card) card.classList.add('hidden');
+    if (window.tg?.BackButton) window.tg.BackButton.hide();
+    
+    const newChat = this.chatStore.createTempChat();
+    this.showChatInterface();
+    this.refreshUI();
+    return newChat;
+}
+
+// ==========================================
+// ПЕРЕКЛЮЧЕНИЕ ТОПИКА (ДЛЯ ОБЛАКА ТЕГОВ)
+// ==========================================
+
+switchTopic(topic) {
+    // Удаляем пустой временный чат при переключении
+    const currentChat = this.chatStore.getActiveChat();
+    if (currentChat && !currentChat.synced && !this.chatStore.hasRealMessages(currentChat)) {
+        const topicChats = this.chatStore.getChats(this.chatStore.currentTopic);
+        this.chatStore.histories[this.chatStore.currentTopic] = topicChats.filter(c => c.id !== currentChat.id);
+        this.chatStore.activeIds[this.chatStore.currentTopic] = null;
+    }
+    
+    this.chatStore.currentTopic = topic;
+    
+    document.querySelectorAll('.tag-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.topic === topic);
+    });
+    
+    this.chatStore.createTempChat(topic);
+    this.refreshUI();
+    this.showChatInterface();
+}
 }
 
 // Экспортируем как глобальный объект
