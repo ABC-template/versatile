@@ -15,65 +15,71 @@ class MessageService {
     // ОТПРАВКА СООБЩЕНИЯ
     // ==========================================
     
-    async sendMessage(chatId, text, type, options = {}) {
-        // Сначала сохраняем локально
-        const message = this.chatStore.addMessage(chatId, text, type, {
-            synced: false,
-            isFavorite: options.isFavorite || false
-        });
+async sendMessage(chatId, text, type, options = {}) {
+    // Сначала сохраняем локально
+    const message = this.chatStore.addMessage(chatId, text, type, {
+        synced: false,
+        isFavorite: options.isFavorite || false
+    });
+    
+    // Если синхронизация включена
+    if (this.userStore.canSync()) {
+        const found = this.chatStore.findChat(chatId);
+        const chat = found?.chat;
         
-        // Если синхронизация включена и чат синхронизирован
-        if (this.userStore.canSync()) {
-            const chat = this.chatStore.findChat(chatId)?.chat;
-            
-            if (chat && chat.synced) {
-                try {
-                    const data = await this.apiClient.post('/chats/actions/message', {
-                        action: 'new_message',
-                        chatId: chatId,
-                        message: {
-                            id: message.id,
-                            text: message.text,
-                            type: message.type,
-                            isFavorite: message.isFavorite || false
-                        }
-                    });
-                    
-                    if (data.synced || data.success) {
-                        this.chatStore.markMessagesSynced(chatId, [message.id]);
-                        console.log(`✅ Сообщение ${message.id} синхронизировано`);
-                        return message;
-                    }
-                } catch (err) {
-                    console.error('Sync message error:', err);
-                    // Добавляем в офлайн-очередь
-                    this.syncStore.addUnsyncedMessage(chatId, message, chat.topic, chat.title, chat.maxContext, chat.userRenamed);
-                }
-            } else if (chat && !chat.synced) {
-                // Чат не синхронизирован, создаем его в облаке
-                const chatService = window.chatService;
-                if (chatService) {
-                    const synced = await chatService.createChat(chat.topic, chat.title, {
+        if (chat) {
+            // Если чат не синхронизирован — сначала создаем его в облаке
+            if (!chat.synced) {
+                console.log(`📤 Создаем чат ${chat.id} в облаке перед отправкой сообщения...`);
+                const created = await window.chatService.createChat(
+                    chat.topic,
+                    chat.title,
+                    {
                         maxContext: chat.maxContext,
                         userRenamed: chat.userRenamed,
                         firstMessage: message
-                    });
-                    
-                    if (synced) {
-                        console.log(`✅ Чат ${chat.id} создан в облаке, сообщение синхронизировано`);
                     }
+                );
+                
+                if (created) {
+                    console.log(`✅ Чат ${chat.id} создан в облаке`);
+                    // Сообщение уже добавлено в firstMessage, отмечаем как синхронизированное
+                    this.chatStore.markMessagesSynced(chatId, [message.id]);
+                    return message;
+                } else {
+                    // Если не удалось создать чат, добавляем в очередь
+                    this.syncStore.addUnsyncedMessage(chatId, message, chat.topic, chat.title, chat.maxContext, chat.userRenamed);
+                    return message;
                 }
             }
-        } else if (this.userStore.userId && !this.userStore.canSync()) {
-            // Пользователь не PRO, добавляем в офлайн-очередь
-            const chat = this.chatStore.findChat(chatId)?.chat;
-            if (chat) {
+            
+            // Если чат синхронизирован — отправляем сообщение
+            try {
+                const data = await this.apiClient.post('/chats/actions/message', {
+                    action: 'new_message',
+                    chatId: chatId,
+                    message: {
+                        id: message.id,
+                        text: message.text,
+                        type: message.type,
+                        isFavorite: message.isFavorite || false
+                    }
+                });
+                
+                if (data.synced || data.success) {
+                    this.chatStore.markMessagesSynced(chatId, [message.id]);
+                    console.log(`✅ Сообщение ${message.id} синхронизировано`);
+                    return message;
+                }
+            } catch (err) {
+                console.error('Sync message error:', err);
                 this.syncStore.addUnsyncedMessage(chatId, message, chat.topic, chat.title, chat.maxContext, chat.userRenamed);
             }
         }
-        
-        return message;
     }
+    
+    return message;
+}
     
     // ==========================================
     // УДАЛЕНИЕ СООБЩЕНИЯ
