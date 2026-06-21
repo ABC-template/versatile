@@ -103,6 +103,7 @@ class ChatUI {
         const chatContainer = document.getElementById('chat-container');
         const inputArea = document.getElementById('input-area');
         const fabBtn = document.getElementById('fab-open-input');
+        const header = document.getElementById('header');
         
         if (tagsCloud) tagsCloud.style.display = 'none';
         if (chatContainer) {
@@ -111,6 +112,7 @@ class ChatUI {
         }
         if (inputArea) inputArea.style.display = 'flex';
         if (fabBtn) fabBtn.style.display = 'flex';
+        if (header) header.classList.remove('hidden');  // ← ПОКАЗЫВАЕМ ХЭДЕР
     }
     
     showTagsCloud() {
@@ -118,6 +120,7 @@ class ChatUI {
         const chatContainer = document.getElementById('chat-container');
         const inputArea = document.getElementById('input-area');
         const fabBtn = document.getElementById('fab-open-input');
+        const header = document.getElementById('header');
         
         if (tagsCloud) tagsCloud.style.display = 'flex';
         if (chatContainer) {
@@ -126,8 +129,8 @@ class ChatUI {
         }
         if (inputArea) inputArea.style.display = 'none';
         if (fabBtn) fabBtn.style.display = 'none';
+        if (header) header.classList.add('hidden');  // ← СКРЫВАЕМ НА ОБЛАКЕ ТЕГОВ
         
-        // ✅ ВАЖНО: рендерим облако тегов!
         if (this.uiRenderer) {
             this.uiRenderer.renderTagsCloud();
         }
