@@ -11,45 +11,38 @@ import { isValidUUID, validateUUID } from '../_lib/validators.js';
 export const config = { runtime: 'edge' };
 
 /**
- * Получить содержимое корзины
+ * ✅ ИСПРАВЛЕНО: Получить содержимое корзины (с пагинацией и без N+1)
  */
-async function getTrash(userId, config) {
-    // Получаем удалённые чаты
+async function getTrash(userId, config, limit = 100, offset = 0) {
+    // Получаем удалённые чаты с пагинацией
     const deletedChats = await supabaseFetch(
-        `chats?user_id=eq.${userId}&deleted_at=not.is.null&select=id,title,topic_id,deleted_at,created_at&order=deleted_at.desc`,
-        { method: 'GET' },
-        config,
-        'service'
-    );
-    
-    // Получаем ID всех чатов пользователя (включая удалённые)
-    const allUserChats = await supabaseFetch(
-        `chats?user_id=eq.${userId}&select=id`,
+        `chats?user_id=eq.${userId}&deleted_at=not.is.null&select=id,title,topic_id,deleted_at,created_at&order=deleted_at.desc&limit=${limit}&offset=${offset}`,
         { method: 'GET' },
         config,
         'service'
     );
     
     let deletedMessages = [];
-    if (allUserChats && Array.isArray(allUserChats) && allUserChats.length > 0) {
-        const chatIds = allUserChats.map(c => c.id).join(',');
+    
+    if (deletedChats && Array.isArray(deletedChats) && deletedChats.length > 0) {
+        const chatIds = deletedChats.map(c => c.id).join(',');
         
-        deletedMessages = await supabaseFetch(
-            `messages?chat_id=in.(${chatIds})&deleted_at=not.is.null&select=id,text,chat_id,deleted_at,created_at&order=deleted_at.desc`,
+        // ✅ ИСПРАВЛЕНО: ОДИН запрос с JOIN для получения названий чатов
+        const messagesWithChats = await supabaseFetch(
+            `messages?chat_id=in.(${chatIds})&deleted_at=not.is.null&select=id,text,chat_id,deleted_at,created_at,chats!inner(title)&order=deleted_at.desc&limit=${limit}&offset=${offset}`,
             { method: 'GET' },
             config,
             'service'
         );
         
-        // Добавляем название чата к каждому сообщению
-        for (const msg of (deletedMessages || [])) {
-            const chat = await supabaseFetch(
-                `chats?id=eq.${msg.chat_id}&select=title`,
-                { method: 'GET' },
-                config,
-                'service'
-            );
-            msg.chat_title = (chat && chat[0]) ? chat[0].title : 'Unknown';
+        // ✅ ИСПРАВЛЕНО: Извлекаем название чата из JOIN
+        if (messagesWithChats && Array.isArray(messagesWithChats)) {
+            deletedMessages = messagesWithChats.map(msg => ({
+                ...msg,
+                chat_title: msg.chats?.title || 'Unknown'
+            }));
+            // Удаляем вложенный объект chats
+            deletedMessages = deletedMessages.map(({ chats, ...rest }) => rest);
         }
     }
     
@@ -60,45 +53,67 @@ async function getTrash(userId, config) {
 }
 
 /**
- * Восстановить из корзины
+ * ✅ ИСПРАВЛЕНО: Восстановить из корзины (с восстановлением связанных данных)
  */
 async function restoreFromTrash(userId, id, type, config) {
     validateUUID(id, 'ID');
     
+    const now = new Date().toISOString();
+    
     if (type === 'chat') {
-        // Проверяем, что чат принадлежит пользователю
+        // Проверяем, что чат принадлежит пользователю и находится в корзине
         const chatCheck = await supabaseFetch(
-            `chats?id=eq.${id}&user_id=eq.${userId}&select=id`,
+            `chats?id=eq.${id}&user_id=eq.${userId}&deleted_at=not.is.null&select=id`,
             { method: 'GET' },
             config,
             'service'
         );
         
         if (!chatCheck || !Array.isArray(chatCheck) || chatCheck.length === 0) {
-            return { success: false, error: 'Chat not found or access denied' };
+            return { success: false, error: 'Chat not found or not in trash' };
         }
         
+        // ✅ ИСПРАВЛЕНО: 1. Восстанавливаем ВСЕ сообщения чата
         await supabaseFetch(
-            `chats?id=eq.${id}`,
+            `messages?chat_id=eq.${id}`,
             {
                 method: 'PATCH',
-                body: JSON.stringify({ deleted_at: null, updated_at: new Date().toISOString() })
+                body: JSON.stringify({ 
+                    deleted_at: null,
+                    updated_at: now
+                })
             },
             config,
             'service'
         );
         
+        // ✅ ИСПРАВЛЕНО: 2. Восстанавливаем сам чат
+        await supabaseFetch(
+            `chats?id=eq.${id}`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ 
+                    deleted_at: null, 
+                    updated_at: now
+                })
+            },
+            config,
+            'service'
+        );
+        
+        console.log(`♻️ Восстановлен чат ${id} и все его сообщения`);
+        
     } else if (type === 'message') {
-        // Проверяем, что сообщение принадлежит пользователю через чат
+        // Проверяем, что сообщение принадлежит пользователю через чат и находится в корзине
         const msgCheck = await supabaseFetch(
-            `messages?id=eq.${id}&select=chat_id`,
+            `messages?id=eq.${id}&deleted_at=not.is.null&select=chat_id`,
             { method: 'GET' },
             config,
             'service'
         );
         
         if (!msgCheck || !Array.isArray(msgCheck) || msgCheck.length === 0) {
-            return { success: false, error: 'Message not found' };
+            return { success: false, error: 'Message not found or not in trash' };
         }
         
         const chatId = msgCheck[0].chat_id;
@@ -113,15 +128,32 @@ async function restoreFromTrash(userId, id, type, config) {
             return { success: false, error: 'Access denied' };
         }
         
+        // ✅ ИСПРАВЛЕНО: Восстанавливаем сообщение
         await supabaseFetch(
             `messages?id=eq.${id}`,
             {
                 method: 'PATCH',
-                body: JSON.stringify({ deleted_at: null, updated_at: new Date().toISOString() })
+                body: JSON.stringify({ 
+                    deleted_at: null,
+                    updated_at: now
+                })
             },
             config,
             'service'
         );
+        
+        // Обновляем чат
+        await supabaseFetch(
+            `chats?id=eq.${chatId}`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ updated_at: now })
+            },
+            config,
+            'service'
+        );
+        
+        console.log(`♻️ Восстановлено сообщение ${id}`);
         
     } else {
         return { success: false, error: 'Invalid type' };
@@ -131,7 +163,7 @@ async function restoreFromTrash(userId, id, type, config) {
 }
 
 /**
- * Удалить навсегда (HARD DELETE) с подтверждением
+ * ✅ ИСПРАВЛЕНО: Удалить навсегда (HARD DELETE) с проверкой дубликатов
  */
 async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, config) {
     validateUUID(id, 'ID');
@@ -170,39 +202,55 @@ async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, con
         await supabaseFetch(`messages?chat_id=eq.${id}`, { method: 'DELETE' }, config, 'service');
         await supabaseFetch(`chats?id=eq.${id}`, { method: 'DELETE' }, config, 'service');
         
-        // Создаем запись в pending_deletions
+        // ✅ ИСПРАВЛЕНО: Создаем запись в pending_deletions только если есть другие устройства
         if (deviceFingerprints.length > 0) {
-            const pendingId = crypto.randomUUID();
-            
-            await supabaseFetch(
-                'pending_deletions',
-                {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        id: pendingId,
-                        entity_type: 'chat',
-                        user_id: userId,
-                        entity_created_at: entityCreatedAt,
-                        is_cleaned: false
-                    })
-                },
+            // ✅ ИСПРАВЛЕНО: Проверяем, нет ли уже pending для этого чата
+            const existingPending = await supabaseFetch(
+                `pending_deletions?user_id=eq.${userId}&entity_type=eq.chat&parent_id=eq.${id}&is_cleaned=eq.false&select=id`,
+                { method: 'GET' },
                 config,
                 'service'
             );
             
-            for (const fp of deviceFingerprints) {
+            if (!existingPending || !Array.isArray(existingPending) || existingPending.length === 0) {
+                const pendingId = crypto.randomUUID();
+                
                 await supabaseFetch(
-                    'pending_deletion_devices',
+                    'pending_deletions',
                     {
                         method: 'POST',
                         body: JSON.stringify({
-                            pending_id: pendingId,
-                            device_fingerprint: fp
+                            id: pendingId,
+                            entity_type: 'chat',
+                            parent_id: id,
+                            user_id: userId,
+                            entity_created_at: entityCreatedAt,
+                            is_cleaned: false
                         })
                     },
                     config,
                     'service'
                 );
+                
+                // ✅ ИСПРАВЛЕНО: Добавляем устройства по одному с обработкой ошибок
+                for (const fp of deviceFingerprints) {
+                    try {
+                        await supabaseFetch(
+                            'pending_deletion_devices',
+                            {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    pending_id: pendingId,
+                                    device_fingerprint: fp
+                                })
+                            },
+                            config,
+                            'service'
+                        );
+                    } catch (err) {
+                        console.error(`Ошибка добавления устройства ${fp}:`, err.message);
+                    }
+                }
             }
         }
         
@@ -248,37 +296,52 @@ async function permanentDeleteFromTrash(userId, id, type, deviceFingerprint, con
         await supabaseFetch(`messages?id=eq.${id}`, { method: 'DELETE' }, config, 'service');
         
         if (deviceFingerprints.length > 0) {
-            const pendingId = crypto.randomUUID();
-            
-            await supabaseFetch(
-                'pending_deletions',
-                {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        id: pendingId,
-                        entity_type: 'message',
-                        user_id: userId,
-                        entity_created_at: entityCreatedAt,
-                        is_cleaned: false
-                    })
-                },
+            // ✅ ИСПРАВЛЕНО: Проверяем, нет ли уже pending для этого сообщения
+            const existingPending = await supabaseFetch(
+                `pending_deletions?user_id=eq.${userId}&entity_type=eq.message&parent_id=eq.${id}&is_cleaned=eq.false&select=id`,
+                { method: 'GET' },
                 config,
                 'service'
             );
             
-            for (const fp of deviceFingerprints) {
+            if (!existingPending || !Array.isArray(existingPending) || existingPending.length === 0) {
+                const pendingId = crypto.randomUUID();
+                
                 await supabaseFetch(
-                    'pending_deletion_devices',
+                    'pending_deletions',
                     {
                         method: 'POST',
                         body: JSON.stringify({
-                            pending_id: pendingId,
-                            device_fingerprint: fp
+                            id: pendingId,
+                            entity_type: 'message',
+                            parent_id: id,
+                            user_id: userId,
+                            entity_created_at: entityCreatedAt,
+                            is_cleaned: false
                         })
                     },
                     config,
                     'service'
                 );
+                
+                for (const fp of deviceFingerprints) {
+                    try {
+                        await supabaseFetch(
+                            'pending_deletion_devices',
+                            {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    pending_id: pendingId,
+                                    device_fingerprint: fp
+                                })
+                            },
+                            config,
+                            'service'
+                        );
+                    } catch (err) {
+                        console.error(`Ошибка добавления устройства ${fp}:`, err.message);
+                    }
+                }
             }
         }
         
@@ -301,12 +364,18 @@ export default async function handler(request) {
         const userId = auth.userId;
         const config = getSupabaseConfig('service');
         
-        // GET - получить корзину
+        // GET - получить корзину (с пагинацией)
         if (request.method === 'GET') {
-            const trash = await getTrash(userId, config);
+            const url = new URL(request.url);
+            const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+            const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+            
+            const trash = await getTrash(userId, config, Math.min(limit, 500), offset);
             return jsonResponse({
                 success: true,
-                ...trash
+                ...trash,
+                limit: Math.min(limit, 500),
+                offset: offset
             });
         }
         
