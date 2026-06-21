@@ -1,6 +1,6 @@
 // ============================================
 // api/chats/actions/update.js
-// Описание: Обновление чата (переименование, контекст)
+// Описание: Обновление чата (переименование, контекст, удаление)
 // ============================================
 
 import { authenticate } from '../../_lib/auth.js';
@@ -113,6 +113,50 @@ async function updateContext(userId, chatId, maxContext, config) {
     }
 }
 
+/**
+ * Удалить чат (soft delete)
+ * @param {number} userId - ID пользователя
+ * @param {string} chatId - ID чата
+ * @param {object} config - Конфигурация Supabase
+ * @returns {Promise<{ success: boolean, error: string|null }>}
+ */
+async function deleteChat(userId, chatId, config) {
+    try {
+        validateUUID(chatId, 'Chat ID');
+        
+        // Проверяем, что чат принадлежит пользователю
+        const chatCheck = await supabaseFetch(
+            `chats?id=eq.${chatId}&user_id=eq.${userId}&select=id`,
+            { method: 'GET' },
+            config,
+            'service'
+        );
+        
+        if (!chatCheck || !Array.isArray(chatCheck) || chatCheck.length === 0) {
+            return { success: false, error: 'Chat not found or access denied' };
+        }
+        
+        // Soft delete — просто ставим deleted_at
+        await supabaseFetch(
+            `chats?id=eq.${chatId}`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ 
+                    deleted_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+            },
+            config,
+            'service'
+        );
+        
+        return { success: true, error: null };
+    } catch (err) {
+        console.error('Delete chat error:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
 export default async function handler(request) {
     const corsResponse = handleCORS(request);
     if (corsResponse) return corsResponse;
@@ -139,6 +183,9 @@ export default async function handler(request) {
         
         const { action, chatId, newTitle, maxContext } = body;
         
+        // ==========================================
+        // ПЕРЕИМЕНОВАНИЕ
+        // ==========================================
         if (action === 'rename_chat') {
             if (!chatId || !newTitle) {
                 return errorResponse('Missing chatId or newTitle', 400);
@@ -150,8 +197,12 @@ export default async function handler(request) {
             }
             
             return jsonResponse({ success: true });
-            
-        } else if (action === 'update_context') {
+        }
+        
+        // ==========================================
+        // ОБНОВЛЕНИЕ КОНТЕКСТА
+        // ==========================================
+        if (action === 'update_context') {
             if (!chatId || maxContext === undefined) {
                 return errorResponse('Missing chatId or maxContext', 400);
             }
@@ -162,10 +213,25 @@ export default async function handler(request) {
             }
             
             return jsonResponse({ success: true });
-            
-        } else {
-            return errorResponse('Unknown action', 400);
         }
+        
+        // ==========================================
+        // УДАЛЕНИЕ ЧАТА (НОВОЕ)
+        // ==========================================
+        if (action === 'delete_chat') {
+            if (!chatId) {
+                return errorResponse('Missing chatId', 400);
+            }
+            
+            const result = await deleteChat(userId, chatId, config);
+            if (!result.success) {
+                return errorResponse(result.error, 400);
+            }
+            
+            return jsonResponse({ success: true });
+        }
+        
+        return errorResponse('Unknown action', 400);
         
     } catch (err) {
         console.error('Update handler error:', err.message);
