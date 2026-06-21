@@ -1,6 +1,7 @@
 // ============================================
 // api/chats/get.js
 // Описание: Получение чата с сообщениями (с ETag)
+// ✅ ИСПРАВЛЕНО: добавлен фильтр deleted_at=is.null
 // ============================================
 
 import { authenticate } from '../_lib/auth.js';
@@ -23,8 +24,9 @@ async function getMessages(chatId, config) {
     let hasMore = true;
     
     while (hasMore) {
+        // ✅ ИСПРАВЛЕНО: добавлен фильтр deleted_at=is.null
         const batch = await supabaseFetch(
-            `messages?chat_id=eq.${chatId}&order=created_at.asc&limit=${limit}&offset=${offset}`,
+            `messages?chat_id=eq.${chatId}&deleted_at=is.null&order=created_at.asc&limit=${limit}&offset=${offset}`,
             { method: 'GET' },
             config,
             'service'
@@ -69,9 +71,9 @@ export default async function handler(request) {
             return errorResponse('Invalid chat ID format', 400);
         }
         
-        // Получаем чат
+        // Получаем чат (только не удалённые)
         const chat = await supabaseFetch(
-            `chats?id=eq.${chatId}&user_id=eq.${userId}&select=*`,
+            `chats?id=eq.${chatId}&user_id=eq.${userId}&deleted_at=is.null&select=*`,
             { method: 'GET' },
             config,
             'service'
@@ -97,7 +99,7 @@ export default async function handler(request) {
             });
         }
         
-        // Получаем сообщения с пагинацией
+        // Получаем сообщения с пагинацией (только не удалённые)
         const messages = await getMessages(chatId, config);
         
         return jsonResponse({
