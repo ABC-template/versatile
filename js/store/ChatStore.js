@@ -110,7 +110,7 @@ class ChatStore {
         const chatTitle = title || `Новый чат в ${sectionName}`;
         
         const newChat = {
-            id: this.generateUUID(),
+            id: options.id || this.generateUUID(),
             title: chatTitle,
             maxContext: options.maxContext || 15,
             language: options.language || window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru',
@@ -173,6 +173,32 @@ class ChatStore {
         chat.updated_at = new Date().toISOString();
         this.saveToStorage();
         return chat;
+    }
+    
+    // ✅ НОВЫЙ МЕТОД: обновление ID чата
+    updateChatId(oldId, newId) {
+        const found = this.findChat(oldId);
+        if (!found) return false;
+        
+        const { chat, topic } = found;
+        
+        // Обновляем ID в самом чате
+        chat.id = newId;
+        
+        // Обновляем в histories
+        const index = this.histories[topic].indexOf(chat);
+        if (index !== -1) {
+            this.histories[topic][index] = chat;
+        }
+        
+        // Обновляем activeIds если нужно
+        if (this.activeIds[topic] === oldId) {
+            this.activeIds[topic] = newId;
+        }
+        
+        this.saveToStorage();
+        console.log(`🔄 ID чата обновлён: ${oldId} → ${newId}`);
+        return true;
     }
     
     deleteChat(chatId) {
