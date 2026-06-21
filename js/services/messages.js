@@ -25,28 +25,48 @@ class MessageService {
         const chat = found.chat;
         const isFirstMessage = !this.chatStore.hasRealMessages(chat);
         
+        // Сохраняем сообщение локально
         const message = this.chatStore.addMessage(chatId, text, type, {
             synced: false,
             isFavorite: options.isFavorite || false
         });
         
+        // Если синхронизация включена
         if (this.userStore.canSync()) {
-            if (!chat.synced || isFirstMessage) {
+            // ✅ ИСПРАВЛЕНО: проверяем, нужно ли создавать чат
+            // Создаём чат только если:
+            // 1. Чат ещё не синхронизирован (chat.synced === false)
+            // 2. И это первое сообщение в чате (isFirstMessage === true)
+            // 3. ИЛИ чат не имеет ID (старый баг)
+            const needsCreation = !chat.synced || isFirstMessage || !chat.id;
+            
+            if (needsCreation) {
                 console.log(`📤 Создаем чат ${chat.id} в облаке с первым сообщением...`);
                 
+                // ✅ ИСПРАВЛЕНО: передаём существующий ID чата
                 const created = await window.chatService.createChat(
                     chat.topic,
                     chat.title,
                     {
                         maxContext: chat.maxContext,
                         userRenamed: chat.userRenamed,
-                        firstMessage: message
+                        firstMessage: message,
+                        existingChatId: chat.id  // ← Передаём ID существующего чата
                     }
                 );
                 
                 if (created) {
-                    console.log(`✅ Чат ${chat.id} создан в облаке, сообщение синхронизировано`);
+                    // ✅ ИСПРАВЛЕНО: помечаем чат как синхронизированный
+                    chat.synced = true;
+                    // Если облачный ID отличается от локального, обновляем
+                    if (created.id && created.id !== chat.id) {
+                        // Обновляем ID чата во всех местах
+                        this.chatStore.updateChatId(chat.id, created.id);
+                    }
+                    this.chatStore.saveToStorage();
+                    
                     this.chatStore.markMessagesSynced(chatId, [message.id]);
+                    console.log(`✅ Чат ${chat.id} создан в облаке, сообщение синхронизировано`);
                     return message;
                 } else {
                     console.error(`❌ Не удалось создать чат ${chat.id} в облаке`);
@@ -55,10 +75,11 @@ class MessageService {
                 }
             }
             
+            // ✅ Если чат уже синхронизирован — отправляем сообщение
             try {
                 const data = await this.apiClient.post('/chats/actions/message', {
                     action: 'new_message',
-                    chatId: chatId,
+                    chatId: chat.id || chatId,
                     message: {
                         id: message.id,
                         text: message.text,
@@ -71,6 +92,9 @@ class MessageService {
                     this.chatStore.markMessagesSynced(chatId, [message.id]);
                     console.log(`✅ Сообщение ${message.id} синхронизировано`);
                     return message;
+                } else {
+                    console.warn(`⚠️ Сообщение ${message.id} не синхронизировано, добавим в очередь`);
+                    this.syncStore.addUnsyncedMessage(chatId, message, chat.topic, chat.title, chat.maxContext, chat.userRenamed);
                 }
             } catch (err) {
                 console.error('Sync message error:', err);
