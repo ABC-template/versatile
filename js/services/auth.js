@@ -1,6 +1,7 @@
 // ============================================
 // js/services/auth.js
-// Описание: Сервис авторизации
+// Описание: Сервис авторизации (упрощенный)
+// Версия: 2.0.0
 // ============================================
 
 class AuthService {
@@ -107,34 +108,10 @@ class AuthService {
             return null;
         }
     }
-    
-    // ==========================================
-    // РЕГИСТРАЦИЯ УСТРОЙСТВА
-    // ==========================================
-    
-    async registerDevice(fingerprint) {
-        try {
-            const data = await this.apiClient.post('/users/register-device', {
-                deviceFingerprint: fingerprint
-            });
-            
-            if (data.success) {
-                this.userStore.setDeviceFingerprint(
-                    fingerprint,
-                    data.signedFingerprint || fingerprint
-                );
-                return data;
-            }
-            return null;
-        } catch (err) {
-            console.error('Register device error:', err);
-            return null;
-        }
-    }
 }
 
-// Экспортируем как глобальный объект
+// Экспорт
 window.AuthService = AuthService;
 window.authService = new AuthService();
 
-console.log('✅ AuthService загружен');
+console.log('✅ AuthService v2.0 загружен');
