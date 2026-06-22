@@ -1,6 +1,7 @@
 // ============================================
 // js/store/UserStore.js
-// Описание: Пользователь, настройки, лимиты
+// Описание: Пользователь, настройки, лимиты, устройство
+// Версия: 2.0.0 (добавлен device fingerprint)
 // ============================================
 
 class UserStore {
@@ -17,8 +18,11 @@ class UserStore {
         this.usedToday = 0;
         this.syncEnabled = false;
         
+        // Устройство
         this.deviceFingerprint = null;
         this.signedFingerprint = null;
+        this.deviceType = 'web';
+        this.devicePlatform = 'web';
         
         this.isCreator = false;
         this.CREATOR_ID = 1541531808;
@@ -70,7 +74,9 @@ class UserStore {
                 usedToday: this.usedToday,
                 syncEnabled: this.syncEnabled,
                 deviceFingerprint: this.deviceFingerprint,
-                signedFingerprint: this.signedFingerprint
+                signedFingerprint: this.signedFingerprint,
+                deviceType: this.deviceType,
+                devicePlatform: this.devicePlatform
             };
             localStorage.setItem('user_store_data', JSON.stringify(data));
         } catch (e) {
@@ -109,14 +115,24 @@ class UserStore {
         this.saveToStorage();
     }
     
-    setDeviceFingerprint(fingerprint, signed) {
+    // ==========================================
+    // УСТРОЙСТВО
+    // ==========================================
+    
+    setDeviceFingerprint(fingerprint, signed, deviceType = 'web', platform = 'web') {
         this.deviceFingerprint = fingerprint;
-        this.signedFingerprint = signed;
+        this.signedFingerprint = signed || fingerprint;
+        this.deviceType = deviceType;
+        this.devicePlatform = platform;
         this.saveToStorage();
     }
     
     getDeviceFingerprint() {
         return this.signedFingerprint || this.deviceFingerprint || null;
+    }
+    
+    getDeviceType() {
+        return this.deviceType;
     }
     
     // ==========================================
@@ -136,7 +152,7 @@ class UserStore {
     }
     
     canSync() {
-        return this.syncEnabled === true;
+        return this.syncEnabled === true && this.isPro();
     }
     
     hasRemainingQuota() {
@@ -166,8 +182,8 @@ class UserStore {
     }
 }
 
-// Экспортируем как глобальный объект
+// Экспорт
 window.UserStore = UserStore;
 window.userStore = new UserStore();
 
-console.log('✅ UserStore загружен');
+console.log('✅ UserStore v2.0 загружен');
