@@ -1,6 +1,7 @@
 // ============================================
 // js/modules/ui/profile-ui.js
-// Описание: Профиль, настройки, история чатов
+// Описание: Профиль, настройки, история чатов (убрана sync)
+// Версия: 2.0.0
 // ============================================
 
 class ProfileUI {
@@ -153,7 +154,7 @@ class ProfileUI {
         this.renderHistoryChatsList(topic === 'all' ? null : topic);
     }
     
-    switchToChat(chatId, topic) {
+    async switchToChat(chatId, topic) {
         const card = document.getElementById('profile-card');
         if (card) card.classList.add('hidden');
         if (window.tg?.BackButton) window.tg.BackButton.hide();
@@ -166,6 +167,12 @@ class ProfileUI {
         }
         
         this.chatStore.setActiveChat(topic, chatId);
+        
+        // Проверяем версию при открытии
+        if (this.userStore.canSync() && window.chatService) {
+            await window.chatService.openChat(chatId);
+        }
+        
         this.chatUI.refreshUI();
         this.chatUI.showChatInterface();
     }
@@ -362,8 +369,8 @@ class ProfileUI {
     }
 }
 
-// Экспортируем как глобальный объект
+// Экспорт
 window.ProfileUI = ProfileUI;
 window.profileUI = new ProfileUI();
 
-console.log('✅ ProfileUI загружен');
+console.log('✅ ProfileUI v2.0 загружен');
