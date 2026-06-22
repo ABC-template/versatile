@@ -1,6 +1,7 @@
 // ============================================
 // js/services/api.js
-// Описание: Базовый API-клиент
+// Описание: Базовый API-клиент с улучшенной обработкой ошибок
+// Версия: 2.0.0
 // ============================================
 
 class ApiClient {
@@ -65,7 +66,7 @@ class ApiClient {
                 
                 // Обработка 304 (Not Modified)
                 if (response.status === 304) {
-                    return { success: true, cached: true };
+                    return { success: true, cached: true, status: 304 };
                 }
                 
                 // Проверяем Content-Type
@@ -73,29 +74,42 @@ class ApiClient {
                 
                 if (!response.ok) {
                     let errorMessage = `HTTP ${response.status}`;
+                    let errorDetails = null;
                     
                     if (contentType.includes('application/json')) {
                         try {
                             const errorData = await response.json();
-                            errorMessage = errorData.error || errorMessage;
+                            errorMessage = errorData.error || errorData.message || errorMessage;
+                            errorDetails = errorData;
                         } catch (e) {
                             // Игнорируем
                         }
                     } else {
                         try {
                             const text = await response.text();
-                            errorMessage = text.substring(0, 200);
+                            if (text && text.length < 200) {
+                                errorMessage = text;
+                            }
                         } catch (e) {
                             // Игнорируем
                         }
                     }
                     
-                    throw new Error(errorMessage);
+                    // Детальное логирование ошибки
+                    console.error(`❌ API Error [${endpoint}]:`, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorMessage,
+                        details: errorDetails,
+                        attempt: attempt
+                    });
+                    
+                    throw new ApiError(errorMessage, response.status, errorDetails);
                 }
                 
                 // Пустой ответ
                 if (response.status === 204 || response.headers.get('content-length') === '0') {
-                    return { success: true };
+                    return { success: true, status: 204 };
                 }
                 
                 // JSON ответ
@@ -110,9 +124,14 @@ class ApiClient {
             } catch (err) {
                 lastError = err;
                 
+                // Если это ошибка API, не ретраим
+                if (err instanceof ApiError && err.status < 500) {
+                    throw err;
+                }
+                
                 // Если это не последняя попытка и ошибка сети/таймаут
                 if (attempt < this.retries && 
-                    (err.name === 'AbortError' || err.name === 'TypeError' || err.message.includes('network'))) {
+                    (err.name === 'AbortError' || err.name === 'TypeError' || err.message?.includes('network'))) {
                     
                     const delay = this.retryDelay * Math.pow(2, attempt - 1);
                     console.log(`🔄 Повторная попытка ${attempt}/${this.retries} через ${delay}ms`);
@@ -124,7 +143,8 @@ class ApiClient {
             }
         }
         
-        throw lastError || new Error('Request failed');
+        console.error(`❌ API Error [${endpoint}]: Все попытки неудачны`, lastError);
+        throw lastError || new ApiError('Request failed', 500);
     }
     
     // ==========================================
@@ -228,8 +248,22 @@ class ApiClient {
     }
 }
 
-// Экспортируем как глобальный объект
+// ==========================================
+// КАСТОМНАЯ ОШИБКА API
+// ==========================================
+
+class ApiError extends Error {
+    constructor(message, status, details = null) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.details = details;
+    }
+}
+
+// Экспорт
 window.ApiClient = ApiClient;
+window.ApiError = ApiError;
 window.apiClient = new ApiClient();
 
-console.log('✅ ApiClient загружен');
+console.log('✅ ApiClient v2.0 загружен');
