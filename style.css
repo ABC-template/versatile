@@ -1,6 +1,6 @@
 /* ============================================
    style.css - Versatile AI v3.0
-   Оптимизированная рабочая версия
+   ИСПРАВЛЕНО: кликабельность, z-index, pointer-events
    ============================================ */
 :root{--app-bg-primary:#F8F9FA;--app-bg-secondary:#FFFFFF;--app-bg-tertiary:#F1F3F5;--app-bg-input:#FFFFFF;--app-bg-hover:rgba(0,0,0,0.04);--app-text-primary:#1A1A2E;--app-text-secondary:#4A4A5A;--app-text-tertiary:#8A8A9E;--app-text-inverse:#FFFFFF;--app-accent-primary:#6C63FF;--app-accent-secondary:#00D4FF;--app-accent-success:#2ECC71;--app-accent-warning:#F1C40F;--app-accent-danger:#E74C3C;--app-accent-glow:rgba(108,99,255,0.15);--app-gradient-primary:linear-gradient(135deg,#6C63FF 0%,#00D4FF 100%);--app-gradient-primary-reverse:linear-gradient(135deg,#00D4FF 0%,#6C63FF 100%);--app-gradient-message:linear-gradient(135deg,#6C63FF 0%,#8B7FFF 100%);--app-gradient-ai-msg:linear-gradient(135deg,rgba(108,99,255,0.05) 0%,rgba(0,212,255,0.05) 100%);--app-gradient-card:linear-gradient(135deg,rgba(108,99,255,0.02) 0%,rgba(0,212,255,0.02) 100%);--app-gradient-header:linear-gradient(135deg,#6C63FF 0%,#00D4FF 100%);--app-border-color:rgba(0,0,0,0.06);--app-border-color-light:rgba(0,0,0,0.03);--app-border-color-active:rgba(108,99,255,0.3);--app-shadow-sm:0 2px 8px rgba(0,0,0,0.04);--app-shadow-md:0 8px 32px rgba(0,0,0,0.08);--app-shadow-lg:0 20px 60px rgba(0,0,0,0.12);--app-shadow-glow:0 0 30px rgba(108,99,255,0.2);--app-radius-sm:8px;--app-radius-md:12px;--app-radius-lg:16px;--app-radius-xl:24px;--app-radius-full:50%;--app-spacing-xs:4px;--app-spacing-sm:8px;--app-spacing-md:12px;--app-spacing-lg:16px;--app-spacing-xl:20px;--app-spacing-2xl:24px;--app-spacing-3xl:32px;--app-font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,sans-serif;--app-font-size-xs:11px;--app-font-size-sm:12px;--app-font-size-md:14px;--app-font-size-lg:16px;--app-font-size-xl:18px;--app-font-size-2xl:22px;--app-font-size-3xl:28px;--app-opacity-disabled:0.4;--app-opacity-hint:0.6;--app-transition-fast:0.15s ease;--app-transition-medium:0.25s ease;--app-transition-slow:0.4s ease;--app-z-base:1;--app-z-header:10;--app-z-fab:50;--app-z-overlay:100;--app-z-input:200;--app-z-modal:1000;}
 
@@ -125,9 +125,13 @@ body{font-family:var(--app-font-family);background:var(--app-bg-primary);color:v
 #fab-open-input .lucide{width:24px;height:24px;stroke:currentColor;pointer-events:none;}
 #fab-open-input:active{transform:scale(0.92);}
 
+/* !!! ИСПРАВЛЕНО: оверлей не перекрывает клики !!! */
 #input-overlay{position:fixed;top:0;left:0;width:100vw;height:100dvh;background:rgba(0,0,0,0.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:var(--app-z-overlay);transition:opacity var(--app-transition-medium);pointer-events:none;}
-#input-overlay.hidden{opacity:0;}
+#input-overlay.hidden{opacity:0;display:none!important;}
+/* Когда оверлей видимый - он все равно не перехватывает клики */
+#input-overlay:not(.hidden){pointer-events:none;}
 
+/* !!! ИСПРАВЛЕНО: input-area правильно работает !!! */
 #input-area{position:fixed;bottom:calc(var(--tg-safe-bottom,0px)+var(--app-spacing-lg));left:var(--app-spacing-lg);right:var(--app-spacing-lg);width:calc(100vw - 32px);height:auto;background:var(--app-bg-secondary);border-radius:var(--app-radius-xl);padding:var(--app-spacing-md) var(--app-spacing-lg);box-shadow:var(--app-shadow-lg);border:1px solid var(--app-border-color-light);display:flex;flex-direction:column;gap:var(--app-spacing-sm);box-sizing:border-box;z-index:var(--app-z-input);opacity:0;visibility:hidden;pointer-events:none;transform:translateY(150dvh);transition:all 0.3s cubic-bezier(0.1,0.8,0.25,1);}
 #input-area.active{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);}
 #input-area .input-footer-bar{display:flex;visibility:visible;opacity:1;justify-content:space-between;align-items:center;width:100%;height:34px;margin-top:var(--app-spacing-xs);}
