@@ -1,7 +1,7 @@
 // ============================================
 // js/store/ChatStore.js
 // Описание: Управление чатами, сообщениями, версиями и корзиной
-// Версия: 2.0.0 (с версионностью и интеграцией trash)
+// Версия: 2.0.1 (добавлен createTempChat)
 // ============================================
 
 class ChatStore {
@@ -180,6 +180,34 @@ class ChatStore {
         this.saveToStorage();
 
         console.log(`📝 Создан чат ${newChat.id} в теме ${topicId}, version: ${version}`);
+        return newChat;
+    }
+
+    // ==========================================
+    // СОЗДАНИЕ ВРЕМЕННОГО ЧАТА (ДОБАВЛЕНО)
+    // ==========================================
+    
+    createTempChat(topicId) {
+        if (!topicId) topicId = this.currentTopic;
+        
+        // Проверяем, есть ли уже пустой несинхронизированный чат
+        const existing = this.histories[topicId]?.find(c => 
+            !c.synced && !c.deleted_at && (!c.messages || c.messages.length === 0)
+        );
+        
+        if (existing) {
+            this.activeIds[topicId] = existing.id;
+            this.saveToStorage();
+            return existing;
+        }
+        
+        // Создаем новый временный чат
+        const newChat = this.createChat(topicId, null, { 
+            synced: false,
+            messages: []
+        });
+        newChat.synced = false;
+        this.saveToStorage();
         return newChat;
     }
 
@@ -696,4 +724,4 @@ class ChatStore {
 window.ChatStore = ChatStore;
 window.chatStore = new ChatStore();
 
-console.log('✅ ChatStore v2.0 загружен (с версионностью и корзиной)');
+console.log('✅ ChatStore v2.0.1 загружен (с createTempChat)');
