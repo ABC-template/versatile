@@ -1,10 +1,10 @@
 // ============================================
 // js/modules/chat/stream.js
-// Описание: Стриминг ответов от ИИ (убрано дублирование)
-// Версия: 2.0.1
+// Описание: Стриминг ответов от ИИ
+// Версия: 2.0.3 (исправлен парсинг SSE)
 // ============================================
 
-console.log('✅ ChatStream v2.0.1 загружен');
+console.log('✅ ChatStream v2.0.3 загружен');
 
 // Флаг для предотвращения дублирования
 let isStreaming = false;
@@ -39,6 +39,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
     let accumulatedText = '';
     let isFirstChunk = true;
     let isCompleted = false;
+    let receivedData = false;
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -73,30 +74,68 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
             throw new Error(`Ошибка ${response.status}: ${text.substring(0, 200)}`);
         }
         
+        // ✅ ИСПРАВЛЕНО: читаем как текст (SSE формат)
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
         
+        console.log('📡 Начинаем чтение стрима...');
+        
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                console.log('📡 Стрим завершен (done)');
+                break;
+            }
             
-            buffer += decoder.decode(value, { stream: true });
+            // ✅ Декодируем чанк
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            
+            // ✅ Разбиваем по строкам
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
             
             for (const line of lines) {
                 const trimmedLine = line.trim();
+                
+                // ✅ Пропускаем пустые строки и комментарии
+                if (!trimmedLine || trimmedLine.startsWith(':')) continue;
+                
+                // ✅ Обрабатываем SSE данные
                 if (trimmedLine.startsWith('data: ')) {
                     const jsonStr = trimmedLine.slice(6).trim();
-                    if (jsonStr === '[DONE]') continue;
+                    
+                    // ✅ Пропускаем [DONE]
+                    if (jsonStr === '[DONE]') {
+                        console.log('📡 Получен [DONE] маркер');
+                        continue;
+                    }
                     
                     try {
                         const data = JSON.parse(jsonStr);
-                        const content = data.choices?.[0]?.delta?.content;
+                        receivedData = true;
+                        
+                        // ✅ Извлекаем контент из разных форматов
+                        let content = null;
+                        
+                        // Формат OpenRouter
+                        if (data.choices && data.choices[0] && data.choices[0].delta) {
+                            content = data.choices[0].delta.content;
+                        }
+                        // Формат других провайдеров
+                        else if (data.choices && data.choices[0] && data.choices[0].text) {
+                            content = data.choices[0].text;
+                        }
+                        // Формат с content напрямую
+                        else if (data.content) {
+                            content = data.content;
+                        }
+                        
                         if (content) {
                             accumulatedText += content;
                             
+                            // ✅ Создаем DOM элемент при первом чанке
                             if (isFirstChunk && accumulatedText.trim().length > 0) {
                                 if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
                                 
@@ -108,7 +147,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                                 isFirstChunk = false;
                             }
                             
-                            // Обновляем содержимое
+                            // ✅ Обновляем содержимое
                             if (msgDiv && !isFirstChunk) {
                                 if (typeof marked !== 'undefined') {
                                     try {
@@ -138,13 +177,23 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                             }
                         }
                     } catch (e) {
-                        // Игнорируем невалидный JSON
+                        console.warn('⚠️ Ошибка парсинга JSON:', e.message, 'Строка:', jsonStr.substring(0, 100));
                     }
                 }
             }
         }
         
         isCompleted = true;
+        
+        // ✅ Проверяем, были ли получены данные
+        if (!receivedData) {
+            console.warn('⚠️ Нет данных от сервера');
+            if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
+            if (uiRenderer.renderMessage) {
+                uiRenderer.renderMessage('⚠️ Сервер не вернул данных. Попробуйте позже.', 'ai-msg');
+            }
+            return false;
+        }
         
         if (accumulatedText.trim().length > 0) {
             // Финальное сохранение
@@ -202,7 +251,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
 };
 
 /**
- * Финальная обработка сообщения (без дублирования)
+ * Финальная обработка сообщения
  */
 function finalizeStreamMessage(msgDiv, finalText, activeChat, streamId) {
     const generatedAiMsgId = window.generateUUID ? window.generateUUID() : 'msg_' + Date.now();
@@ -280,7 +329,6 @@ window.deleteMessage = function(msgId) {
             window.messageService.deleteMessage(activeChat.id, msgId);
         }
         
-        // Удаляем из DOM
         const domBlock = document.getElementById(`msg-block-${msgId}`);
         if (domBlock) {
             domBlock.style.transition = 'all 0.25s ease';
@@ -362,4 +410,4 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
     }
 };
 
-console.log('✅ ChatStream v2.0.1 загружен');
+console.log('✅ ChatStream v2.0.3 загружен');
