@@ -1,18 +1,88 @@
 // ============================================
 // js/core/app.js
 // Описание: Инициализация приложения
+// Версия: 2.0.0 (убрана sync, добавлен push)
 // ============================================
 
-console.log('✅ App начал загрузку');
+console.log('🚀 App v2.0 начал загрузку');
 
-/**
- * Инициализация приложения
- */
+// ==========================================
+// 1. ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОФЛАЙН-РЕЖИМА
+// ==========================================
+
+let offlineBanner = null;
+
+function showOfflineBanner(message = 'Нет интернета. Просмотр доступен, изменения невозможны.') {
+    if (offlineBanner) return;
+    
+    offlineBanner = document.createElement('div');
+    offlineBanner.id = 'offline-banner';
+    offlineBanner.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        background: #e74c3c;
+        color: white;
+        padding: 12px 16px;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 500;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        animation: slideDown 0.3s ease;
+    `;
+    offlineBanner.textContent = `⚠️ ${message}`;
+    document.body.prepend(offlineBanner);
+    
+    // Добавляем стили для анимации
+    if (!document.getElementById('offline-banner-styles')) {
+        const style = document.createElement('style');
+        style.id = 'offline-banner-styles';
+        style.textContent = `
+            @keyframes slideDown {
+                from { transform: translateY(-100%); }
+                to { transform: translateY(0); }
+            }
+            @keyframes slideUp {
+                from { transform: translateY(0); }
+                to { transform: translateY(-100%); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
+function hideOfflineBanner() {
+    if (!offlineBanner) return;
+    
+    offlineBanner.style.animation = 'slideUp 0.3s ease';
+    setTimeout(() => {
+        if (offlineBanner) {
+            offlineBanner.remove();
+            offlineBanner = null;
+        }
+    }, 300);
+}
+
+function checkOnline() {
+    if (!navigator.onLine) {
+        showOfflineBanner();
+        return false;
+    }
+    hideOfflineBanner();
+    return true;
+}
+
+// ==========================================
+// 2. ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
+// ==========================================
+
 async function initApp() {
     const tg = window.Telegram?.WebApp;
     
     // ==========================================
-    // 1. НАСТРОЙКА TELEGRAM
+    // НАСТРОЙКА TELEGRAM
     // ==========================================
     
     if (tg) {
@@ -28,7 +98,7 @@ async function initApp() {
     }
     
     // ==========================================
-    // 2. INSETS
+    // INSETS
     // ==========================================
     
     function setTelegramInsets() {
@@ -65,16 +135,8 @@ async function initApp() {
     setTimeout(setTelegramInsets, 150);
     setTimeout(setTelegramInsets, 450);
     
-    if (tg) {
-        try {
-            tg.onEvent('backButtonClicked', setTelegramInsets);
-        } catch (e) {
-            console.error('Ошибка привязки кнопки Назад:', e);
-        }
-    }
-    
     // ==========================================
-    // 3. ПОЛЬЗОВАТЕЛЬ
+    // ПОЛЬЗОВАТЕЛЬ
     // ==========================================
     
     const user = tg?.initDataUnsafe?.user;
@@ -93,21 +155,17 @@ async function initApp() {
     }
     
     // ==========================================
-    // 4. ЗАГРУЗКА ДАННЫХ
+    // ЗАГРУЗКА ДАННЫХ
     // ==========================================
     
     chatStore.loadFromStorage();
     userStore.loadFromStorage();
     
-    if (window.syncStore) {
-        window.syncStore.loadFromStorage();
-    }
-    
     if (window.organizerStore) {
         window.organizerStore.loadFromStorage();
     }
     
-    // ✅ НОВОЕ: При загрузке удаляем все пустые чаты
+    // Очистка пустых чатов
     if (window.chatUI) {
         const cleaned = window.chatUI.cleanupAllEmptyChats();
         if (cleaned > 0) {
@@ -116,7 +174,7 @@ async function initApp() {
     }
     
     // ==========================================
-    // 5. АВТОРИЗАЦИЯ И СИНХРОНИЗАЦИЯ
+    // АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ УСТРОЙСТВА
     // ==========================================
     
     const uid = user?.id;
@@ -142,24 +200,13 @@ async function initApp() {
                 window.chatUI.showChatInterface();
             }
             
-            if (result.syncEnabled) {
-                console.log('🔄 Синхронизация включена');
+            // Регистрация устройства (только для PRO)
+            if (result.syncEnabled && window.deviceService) {
+                await window.deviceService.register();
                 
-                if (window.initDeviceManager) {
-                    await window.initDeviceManager();
-                }
-                
-                if (window.syncService) {
-                    await window.syncService.fullSync();
-                    window.syncService.startPeriodicSync();
-                }
-                
-                if (window.queueManager) {
-                    window.queueManager.start();
-                }
-                
-                if (window.initExportButtons) {
-                    window.initExportButtons();
+                // Загружаем метаданные чатов (версии)
+                if (window.chatService) {
+                    await window.chatService.loadMetadata();
                 }
             }
             
@@ -183,27 +230,32 @@ async function initApp() {
     }
     
     // ==========================================
-    // 6. PUSH-УВЕДОМЛЕНИЯ
+    // PUSH-УВЕДОМЛЕНИЯ (СИНХРОНИЗАЦИЯ)
     // ==========================================
     
     if (tg) {
         tg.onEvent('message', async (message) => {
             console.log('📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:', message);
             
-            if (message.text === '🔄' && window.userStore?.canSync()) {
+            if (message.text === '🔄') {
                 console.log('✅ СИГНАЛ СИНХРОНИЗАЦИИ РАСПОЗНАН!');
                 
                 if (window.uiRenderer) {
                     window.uiRenderer.showSyncStatus('syncing');
                 }
                 
-                if (window.syncService) {
-                    await window.syncService.fullSync();
-                }
-                
-                const activeChat = chatStore.getActiveChat();
-                if (activeChat && window.chatUI) {
-                    window.chatUI.refreshUI();
+                // Обновляем метаданные
+                if (window.chatService && userStore.canSync()) {
+                    await window.chatService.loadMetadata();
+                    
+                    // Проверяем активный чат
+                    const activeChat = chatStore.getActiveChat();
+                    if (activeChat) {
+                        const updated = await window.chatService.openChat(activeChat.id);
+                        if (updated && window.chatUI) {
+                            window.chatUI.refreshUI();
+                        }
+                    }
                 }
                 
                 if (window.uiRenderer) {
@@ -215,7 +267,34 @@ async function initApp() {
     }
     
     // ==========================================
-    // 7. ВОССТАНОВЛЕНИЕ ПОСЛЕДНЕГО ЧАТА
+    // ОНЛАЙН/ОФФЛАЙН ОБРАБОТЧИКИ
+    // ==========================================
+    
+    window.addEventListener('online', async () => {
+        console.log('🌐 Интернет восстановлен');
+        hideOfflineBanner();
+        
+        // Обновляем данные при восстановлении сети
+        if (userStore.canSync() && window.chatService) {
+            await window.chatService.loadMetadata();
+            
+            const activeChat = chatStore.getActiveChat();
+            if (activeChat) {
+                await window.chatService.openChat(activeChat.id);
+                if (window.chatUI) {
+                    window.chatUI.refreshUI();
+                }
+            }
+        }
+    });
+    
+    window.addEventListener('offline', () => {
+        console.log('📴 Интернет потерян');
+        showOfflineBanner();
+    });
+    
+    // ==========================================
+    // ВОССТАНОВЛЕНИЕ ПОСЛЕДНЕГО ЧАТА
     // ==========================================
     
     if (window.chatUI) {
@@ -231,20 +310,21 @@ async function initApp() {
     }
     
     // ==========================================
-    // 8. ПЕРИОДИЧЕСКАЯ ОЧИСТКА
+    // ПЕРИОДИЧЕСКАЯ ОЧИСТКА (только локальная)
     // ==========================================
     
     setInterval(() => {
         if (window.chatUI) {
             window.chatUI.cleanupTempChats();
         }
+        // Обновляем счетчик корзины (локально)
         if (window.updateTrashCount) {
             window.updateTrashCount();
         }
     }, 5 * 60 * 1000);
     
     // ==========================================
-    // 9. ОТСЛЕЖИВАНИЕ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
+    // ОТСЛЕЖИВАНИЕ СМЕНЫ ПОЛЬЗОВАТЕЛЯ
     // ==========================================
     
     let lastUserId = null;
@@ -256,7 +336,6 @@ async function initApp() {
             console.log(`🔄 Пользователь сменился с ${lastUserId} на ${currentUserId}`);
             if (chatStore) chatStore.loadFromStorage();
             if (userStore) userStore.loadFromStorage();
-            if (window.syncStore) window.syncStore.loadFromStorage();
             if (window.organizerStore) window.organizerStore.loadFromStorage();
             if (window.chatUI) window.chatUI.refreshUI();
         }
@@ -267,7 +346,7 @@ async function initApp() {
     window.addEventListener('focus', checkUserChanged);
     
     // ==========================================
-    // 10. КНОПКА "НОВЫЙ ЧАТ"
+    // КНОПКА "НОВЫЙ ЧАТ"
     // ==========================================
     
     window.handleNewChatClick = function() {
@@ -309,7 +388,7 @@ async function initApp() {
     };
     
     // ==========================================
-    // 11. ФИНАЛЬНАЯ ОТРИСОВКА
+    // ФИНАЛЬНАЯ ОТРИСОВКА
     // ==========================================
     
     const appScreen = document.getElementById('app-screen');
@@ -318,12 +397,22 @@ async function initApp() {
         if (appScreen.style.display === 'none') appScreen.style.display = 'flex';
     }
     
+    // Обновляем счетчик корзины
     if (window.updateTrashCount) {
         setTimeout(window.updateTrashCount, 1000);
     }
     
-    console.log('✅ Приложение успешно загружено');
+    // Проверяем интернет при старте
+    if (!navigator.onLine) {
+        showOfflineBanner();
+    }
+    
+    console.log('✅ Приложение v2.0 успешно загружено');
 }
+
+// ==========================================
+// СТАРТ
+// ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(err => {
@@ -335,4 +424,4 @@ if (window.Telegram?.WebApp?.requestFullscreen) {
     window.Telegram.WebApp.requestFullscreen();
 }
 
-console.log('✅ app.js полностью загружен');
+console.log('✅ app.js v2.0 полностью загружен');
