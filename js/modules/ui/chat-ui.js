@@ -58,31 +58,42 @@ class ChatUI {
     // ПЕРЕКЛЮЧЕНИЕ ЧАТА (С ПРОВЕРКОЙ ВЕРСИИ)
     // ==========================================
     
-    async switchToChat(chatId, topic) {
-        this.deleteEmptyCurrentChat();
-        
-        const card = document.getElementById('profile-card');
-        if (card) card.classList.add('hidden');
-        
-        if (window.tg?.BackButton) window.tg.BackButton.hide();
-        
-        if (this.chatStore.currentTopic !== topic) {
-            this.chatStore.currentTopic = topic;
-            document.querySelectorAll('.tag-chip').forEach(chip => {
-                chip.classList.toggle('active', chip.dataset.topic === topic);
-            });
-        }
-        
-        this.chatStore.setActiveChat(topic, chatId);
-        
-        // Проверяем версию чата при открытии (если есть синхронизация)
-        if (this.userStore.canSync() && this.chatService) {
-            await this.chatService.openChat(chatId);
-        }
-        
-        this.refreshUI();
-        this.showChatInterface();
+// ==========================================
+// ПЕРЕКЛЮЧЕНИЕ ЧАТА (С ПРОВЕРКОЙ ВЕРСИИ)
+// ==========================================
+
+async switchToChat(chatId, topic) {
+    this.deleteEmptyCurrentChat();
+    
+    const card = document.getElementById('profile-card');
+    if (card) card.classList.add('hidden');
+    
+    if (window.tg?.BackButton) window.tg.BackButton.hide();
+    
+    if (this.chatStore.currentTopic !== topic) {
+        this.chatStore.currentTopic = topic;
+        document.querySelectorAll('.tag-chip').forEach(chip => {
+            chip.classList.toggle('active', chip.dataset.topic === topic);
+        });
     }
+    
+    this.chatStore.setActiveChat(topic, chatId);
+    
+    // ✅ ИСПРАВЛЕНО: обрабатываем ошибку открытия чата
+    if (this.userStore.canSync() && this.chatService) {
+        try {
+            const updated = await this.chatService.openChat(chatId);
+            if (updated) {
+                console.log(`🔄 Чат ${chatId} обновлён`);
+            }
+        } catch (err) {
+            console.warn(`⚠️ Не удалось обновить чат ${chatId}, использую локальную версию`);
+        }
+    }
+    
+    this.refreshUI();
+    this.showChatInterface();
+}
     
     async switchTopic(topic) {
         this.deleteEmptyCurrentChat();
