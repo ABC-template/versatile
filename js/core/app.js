@@ -232,23 +232,23 @@ async function initApp() {
     // ==========================================
     // PUSH-УВЕДОМЛЕНИЯ (СИНХРОНИЗАЦИЯ)
     // ==========================================
-    
-    if (tg) {
-        tg.onEvent('message', async (message) => {
-            console.log('📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:', message);
+ 
+if (tg) {
+    tg.onEvent('message', async (message) => {
+        console.log('📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:', message);
+        
+        if (message.text === '🔄') {
+            console.log('✅ СИГНАЛ СИНХРОНИЗАЦИИ РАСПОЗНАН!');
             
-            if (message.text === '🔄') {
-                console.log('✅ СИГНАЛ СИНХРОНИЗАЦИИ РАСПОЗНАН!');
-                
-                if (window.uiRenderer) {
-                    window.uiRenderer.showSyncStatus('syncing');
-                }
-                
-                // Обновляем метаданные
-                if (window.chatService && userStore.canSync()) {
+            if (window.uiRenderer) {
+                window.uiRenderer.showSyncStatus('syncing');
+            }
+            
+            // ✅ ИСПРАВЛЕНО: обновляем только если есть синхронизация
+            if (window.chatService && userStore.canSync()) {
+                try {
                     await window.chatService.loadMetadata();
                     
-                    // Проверяем активный чат
                     const activeChat = chatStore.getActiveChat();
                     if (activeChat) {
                         const updated = await window.chatService.openChat(activeChat.id);
@@ -256,15 +256,18 @@ async function initApp() {
                             window.chatUI.refreshUI();
                         }
                     }
-                }
-                
-                if (window.uiRenderer) {
-                    window.uiRenderer.showSyncStatus('success');
+                } catch (err) {
+                    console.warn('⚠️ Ошибка при обработке push:', err);
                 }
             }
-        });
-        console.log('📨 Push-подписка активирована');
-    }
+            
+            if (window.uiRenderer) {
+                window.uiRenderer.showSyncStatus('success');
+            }
+        }
+    });
+    console.log('📨 Push-подписка активирована');
+}
     
     // ==========================================
     // ОНЛАЙН/ОФФЛАЙН ОБРАБОТЧИКИ
