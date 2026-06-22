@@ -1,6 +1,7 @@
 // ============================================
 // js/modules/chat/send.js
-// Описание: Отправка сообщений
+// Описание: Отправка сообщений (с проверкой интернета)
+// Версия: 2.0.0
 // ============================================
 
 class ChatSend {
@@ -9,6 +10,7 @@ class ChatSend {
         this.userStore = window.userStore;
         this.uiRenderer = window.uiRenderer;
         this.chatUI = window.chatUI;
+        this.messageService = window.messageService;
         this.isSending = false;
     }
     
@@ -17,6 +19,14 @@ class ChatSend {
     // ==========================================
     
     async sendMessage() {
+        // Проверка интернета
+        if (!navigator.onLine) {
+            if (window.showOfflineBanner) {
+                window.showOfflineBanner();
+            }
+            return;
+        }
+        
         if (this.isSending) return;
         if (window.isVoiceRecording) {
             window.isExpressVoiceTarget = true;
@@ -58,13 +68,13 @@ class ChatSend {
             return;
         }
         
-        // ✅ РЕНДЕРИМ СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ СРАЗУ
+        // Рендерим сообщение пользователя сразу
         if (this.uiRenderer) {
             this.uiRenderer.renderMessage(text, 'user-msg');
         }
         
         // Отправляем в сервис (сохраняет в хранилище)
-        const msg = await window.messageService.sendMessage(
+        const msg = await this.messageService.sendMessage(
             activeChat.id,
             text,
             'user-msg'
@@ -251,8 +261,8 @@ class ChatSend {
     }
 }
 
-// Экспортируем как глобальный объект
+// Экспорт
 window.ChatSend = ChatSend;
 window.chatSend = new ChatSend();
 
-console.log('✅ ChatSend загружен');
+console.log('✅ ChatSend v2.0 загружен');
