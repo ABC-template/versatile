@@ -1,7 +1,7 @@
 // ============================================
 // js/services/messages.js
 // Описание: Работа с сообщениями (УПРОЩЕННАЯ ВЕРСИЯ)
-// Версия: 3.0.0
+// Версия: 3.0.1
 // ============================================
 
 class MessageService {
@@ -13,7 +13,7 @@ class MessageService {
     }
 
     // ==========================================
-    // ОТПРАВКА СООБЩЕНИЯ (УПРОЩЕНО)
+    // ОТПРАВКА СООБЩЕНИЯ
     // ==========================================
 
     async sendMessage(chatId, text, type, options = {}) {
@@ -30,9 +30,84 @@ class MessageService {
         }
 
         const chat = found.chat;
-        const messageId = options.id || this.chatStore.generateUUID();
 
-        // ✅ 1. ВСЕГДА сохраняем локально (для всех пользователей)
+        // ==========================================
+        // ✅ ЕСЛИ ПЕРЕДАН ID - СООБЩЕНИЕ УЖЕ СУЩЕСТВУЕТ
+        // ==========================================
+        if (options.id) {
+            console.log(`📤 [sendMessage] Сообщение уже существует (ID: ${options.id}), просто синхронизируем`);
+            
+            // Находим существующее сообщение
+            const existingMsg = chat.messages.find(m => m.id === options.id);
+            if (!existingMsg) {
+                console.error(`❌ [sendMessage] Сообщение с ID ${options.id} не найдено в чате`);
+                return null;
+            }
+
+            // Если синхронизация включена (PRO) — отправляем на сервер
+            if (this.userStore.canSync()) {
+                // Проверяем, нужно ли создать чат на сервере
+                if (!chat.synced) {
+                    console.log(`📤 [sendMessage] Чат не синхронизирован, создаем...`);
+                    const created = await this.chatService.createChat(
+                        chat.topic,
+                        chat.title,
+                        {
+                            maxContext: chat.maxContext,
+                            userRenamed: chat.userRenamed,
+                            firstMessage: existingMsg,
+                            existingChatId: chat.id
+                        }
+                    );
+                    if (created) {
+                        chat.synced = true;
+                        console.log(`✅ [sendMessage] Чат ${chat.id} создан на сервере`);
+                    } else {
+                        console.error(`❌ [sendMessage] Не удалось создать чат ${chat.id}`);
+                        return existingMsg;
+                    }
+                }
+
+                // Отправляем сообщение на сервер
+                try {
+                    console.log(`📤 [sendMessage] Отправка на сервер: ${existingMsg.id}`);
+                    const result = await this.apiClient.post('/chats/actions/message', {
+                        action: 'new_message',
+                        chatId: chatId,
+                        message: {
+                            id: existingMsg.id,
+                            text: existingMsg.text,
+                            type: existingMsg.type,
+                            isFavorite: existingMsg.isFavorite || false
+                        }
+                    });
+
+                    if (result.synced || result.success) {
+                        console.log(`✅ [sendMessage] Сообщение ${existingMsg.id} синхронизировано`);
+                    } else {
+                        console.warn(`⚠️ [sendMessage] Сообщение ${existingMsg.id} не синхронизировано`);
+                    }
+                } catch (err) {
+                    console.error(`❌ [sendMessage] Ошибка синхронизации:`, err);
+                }
+            } else {
+                console.log(`⏭️ [sendMessage] Синхронизация отключена (TRIAL)`);
+            }
+
+            return existingMsg;
+        }
+
+        // ==========================================
+        // ✅ НОВОЕ СООБЩЕНИЕ (ID НЕ ПЕРЕДАН)
+        // ==========================================
+        
+        console.log(`📤 [sendMessage] Новое сообщение, создаем локально`);
+        
+        // Генерируем ID
+        const messageId = this.chatStore.generateUUID();
+        const isFirstMessage = !this.chatStore.hasRealMessages(chat);
+
+        // Сохраняем локально
         const message = this.chatStore.addMessage(chatId, text, type, {
             id: messageId,
             isFavorite: options.isFavorite || false,
@@ -41,16 +116,12 @@ class MessageService {
 
         if (!message) return null;
 
-        // ✅ 2. Если синхронизация включена (PRO) — отправляем на сервер
+        // Если синхронизация включена (PRO)
         if (this.userStore.canSync()) {
-            // Проверяем, нужно ли сначала создать чат на сервере
-            const isFirstMessage = !this.chatStore.hasRealMessages(chat);
-            const chatNeedsCreation = !chat.deleted_at && !chat.id;
-
-            if (!chatNeedsCreation && (isFirstMessage || !chat.id)) {
-                // Создаем чат на сервере
-                console.log(`📤 Создаём чат ${chat.id} в облаке с первым сообщением...`);
-
+            // Проверяем, нужно ли создать чат на сервере
+            if (!chat.synced || isFirstMessage) {
+                console.log(`📤 [sendMessage] Создаем чат ${chat.id} на сервере...`);
+                
                 const created = await this.chatService.createChat(
                     chat.topic,
                     chat.title,
@@ -63,10 +134,10 @@ class MessageService {
                 );
 
                 if (created) {
-                    console.log(`✅ Чат ${chat.id} создан в облаке`);
-                    return message;
+                    chat.synced = true;
+                    console.log(`✅ [sendMessage] Чат ${chat.id} создан на сервере`);
                 } else {
-                    console.error(`❌ Не удалось создать чат ${chat.id} в облаке`);
+                    console.error(`❌ [sendMessage] Не удалось создать чат ${chat.id}`);
                     return message;
                 }
             }
@@ -85,24 +156,26 @@ class MessageService {
                 });
 
                 if (result.synced || result.success) {
-                    console.log(`✅ Сообщение ${message.id} синхронизировано`);
+                    console.log(`✅ [sendMessage] Сообщение ${message.id} синхронизировано`);
                 } else {
-                    console.warn(`⚠️ Сообщение ${message.id} не синхронизировано`);
+                    console.warn(`⚠️ [sendMessage] Сообщение ${message.id} не синхронизировано`);
                 }
             } catch (err) {
-                console.error('❌ Ошибка синхронизации сообщения:', err);
+                console.error(`❌ [sendMessage] Ошибка синхронизации:`, err);
             }
+        } else {
+            console.log(`⏭️ [sendMessage] Синхронизация отключена (TRIAL)`);
         }
 
         return message;
     }
 
     // ==========================================
-    // УДАЛЕНИЕ СООБЩЕНИЯ (УПРОЩЕНО)
+    // УДАЛЕНИЕ СООБЩЕНИЯ
     // ==========================================
 
     async deleteMessage(chatId, messageId) {
-        // ✅ Всегда удаляем локально
+        // Всегда удаляем локально
         this.chatStore.deleteMessage(chatId, messageId);
 
         // Если синхронизация включена — удаляем на сервере
@@ -115,12 +188,12 @@ class MessageService {
                 });
 
                 if (result.success) {
-                    console.log(`✅ Сообщение ${messageId} удалено на сервере`);
+                    console.log(`✅ [deleteMessage] Сообщение ${messageId} удалено на сервере`);
                     return true;
                 }
                 return false;
             } catch (err) {
-                console.error(`❌ Ошибка удаления сообщения ${messageId}:`, err);
+                console.error(`❌ [deleteMessage] Ошибка удаления:`, err);
                 return false;
             }
         }
@@ -129,11 +202,11 @@ class MessageService {
     }
 
     // ==========================================
-    // ИЗБРАННОЕ (УПРОЩЕНО)
+    // ИЗБРАННОЕ
     // ==========================================
 
     async toggleFavorite(chatId, messageId) {
-        // ✅ Всегда переключаем локально
+        // Всегда переключаем локально
         const msg = this.chatStore.toggleFavorite(chatId, messageId);
         if (!msg) return null;
 
@@ -148,10 +221,10 @@ class MessageService {
                 });
 
                 if (result.success) {
-                    console.log(`✅ Избранное ${messageId} синхронизировано`);
+                    console.log(`✅ [toggleFavorite] Избранное ${messageId} синхронизировано`);
                 }
             } catch (err) {
-                console.error(`❌ Ошибка синхронизации избранного ${messageId}:`, err);
+                console.error(`❌ [toggleFavorite] Ошибка синхронизации:`, err);
             }
         }
 
@@ -163,4 +236,4 @@ class MessageService {
 window.MessageService = MessageService;
 window.messageService = new MessageService();
 
-console.log('✅ MessageService v3.0 загружен (упрощенная версия)');
+console.log('✅ MessageService v3.0.1 загружен');
