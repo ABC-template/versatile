@@ -1,7 +1,7 @@
 // ============================================
 // js/modules/chat/stream.js
-// Описание: Стриминг ответов от ИИ (ОРИГИНАЛ)
-// Версия: 1.0.0 (возврат к исходной рабочей версии)
+// Описание: Стриминг ответов от ИИ (ОРИГИНАЛ ИЗ .MD)
+// Версия: 1.0.0 (возврат к рабочей версии)
 // ============================================
 
 console.log('✅ ChatStream загружен');
@@ -23,12 +23,6 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
     let accumulatedText = '';
     let isFirstChunk = true;
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        console.warn('⏰ Таймаут 60 секунд истек');
-        controller.abort();
-    }, 60000);
-    
     try {
         const requestBody = {
             historyMessages: historyMessages || [],
@@ -45,20 +39,14 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                 'Content-Type': 'application/json',
                 'X-Telegram-Init-Data': window.Telegram?.WebApp?.initData || ''
             },
-            body: JSON.stringify(requestBody),
-            signal: controller.signal
+            body: JSON.stringify(requestBody)
         });
-        
-        clearTimeout(timeoutId);
         
         if (!response.ok) {
             const text = await response.text();
             throw new Error(`Ошибка ${response.status}: ${text.substring(0, 200)}`);
         }
         
-        // ==========================================
-        // ✅ ОРИГИНАЛЬНЫЙ ПАРСИНГ (РАБОТАЕТ)
-        // ==========================================
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
@@ -129,9 +117,6 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
             }
         }
         
-        // ==========================================
-        // ✅ ФИНАЛИЗАЦИЯ (ОРИГИНАЛ)
-        // ==========================================
         if (accumulatedText.trim().length > 0) {
             const generatedAiMsgId = window.generateUUID ? window.generateUUID() : 'msg_' + Date.now();
             
@@ -144,7 +129,6 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
             
             const safeFinalText = typeof accumulatedText === 'string' ? accumulatedText : String(accumulatedText);
             
-            // Добавляем действия
             if (msgDiv) {
                 const act = document.createElement('div');
                 act.className = 'msg-actions';
@@ -223,4 +207,4 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
     }
 };
 
-console.log('✅ ChatStream загружен (оригинальная версия)');
+console.log('✅ ChatStream загружен (оригинальная версия из .md)');
