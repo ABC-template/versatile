@@ -1,8 +1,9 @@
 // ============================================
 // js/modules/chat/stream.js
 // Описание: Стриминг ответов от ИИ (ОРИГИНАЛ ИЗ .MD)
-// Версия: 1.0.0 (возврат к рабочей версии)
 // ============================================
+
+console.log('✅ ChatStream загружен');
 
 window.streamAiResponse = async function(historyMessages, topic, userLang, attachedImage, activeChat) {
     console.log('🎯 streamAiResponse вызвана');
@@ -205,4 +206,4 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
     }
 };
 
-console.log('✅ ChatStream загружен (оригинальная версия из .md)');
+console.log('✅ ChatStream загружен (оригинальная версия)');
