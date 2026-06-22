@@ -1,7 +1,7 @@
 // ============================================
 // js/services/messages.js
 // Описание: Работа с сообщениями (с версионностью)
-// Версия: 2.0.0
+// Версия: 2.0.1
 // ============================================
 
 class MessageService {
@@ -94,7 +94,6 @@ class MessageService {
                 
                 // Обновляем ID сообщения если изменился
                 if (result.messageId && result.messageId !== message.id) {
-                    // Обновляем ID в сообщении
                     const foundChat = this.chatStore.findChat(chatId);
                     if (foundChat) {
                         const msg = foundChat.chat.messages.find(m => m.id === message.id);
@@ -115,13 +114,12 @@ class MessageService {
             return message;
         } catch (err) {
             console.error('❌ Ошибка отправки сообщения:', err);
-            // Сообщение уже сохранено локально
             return message;
         }
     }
     
     // ==========================================
-    // УДАЛЕНИЕ СООБЩЕНИЯ
+    // УДАЛЕНИЕ СООБЩЕНИЯ (ИСПРАВЛЕНО)
     // ==========================================
     
     async deleteMessage(chatId, messageId) {
@@ -141,7 +139,12 @@ class MessageService {
         }
         
         try {
-            const result = await this.apiClient.delete(`/chats/${chatId}/message/${messageId}`);
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
+            const result = await this.apiClient.post('/chats/actions/message', {
+                action: 'delete_message',
+                chatId: chatId,
+                messageId: messageId
+            });
             
             if (result.success) {
                 if (result.version) {
@@ -153,9 +156,6 @@ class MessageService {
             return false;
         } catch (err) {
             console.error(`❌ Ошибка удаления сообщения ${messageId}:`, err);
-            // В случае ошибки - НЕ ВОССТАНАВЛИВАЕМ сообщение
-            // Оно уже удалено локально, а на сервере попробуем удалить при следующей синхронизации
-            // Но т.к. мы убрали очереди, это будет сделано при следующем открытии чата
             return false;
         }
     }
@@ -168,7 +168,6 @@ class MessageService {
         // Проверка интернета
         if (!navigator.onLine) {
             console.warn('⚠️ Нет интернета, изменение избранного невозможно');
-            // Всё равно переключаем локально
             return this.chatStore.toggleFavorite(chatId, messageId);
         }
         
@@ -183,7 +182,9 @@ class MessageService {
         }
         
         try {
-            const result = await this.apiClient.post(`/chats/${chatId}/favorite`, {
+            const result = await this.apiClient.post('/chats/actions/favorite', {
+                action: 'favorite_message',
+                chatId: chatId,
                 messageId: messageId,
                 isFavorite: msg.isFavorite
             });
@@ -243,4 +244,4 @@ class MessageService {
 window.MessageService = MessageService;
 window.messageService = new MessageService();
 
-console.log('✅ MessageService v2.0 загружен');
+console.log('✅ MessageService v2.0.1 загружен');
