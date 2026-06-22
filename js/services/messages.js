@@ -1,7 +1,7 @@
 // ============================================
 // js/services/messages.js
 // Описание: Работа с сообщениями (с версионностью)
-// Версия: 2.0.1
+// Версия: 2.0.2 (исправлены пути API)
 // ============================================
 
 class MessageService {
@@ -52,7 +52,6 @@ class MessageService {
             if (!chat.synced || isFirstMessage) {
                 console.log(`📤 Создаём чат ${chat.id} в облаке с первым сообщением...`);
                 
-                // Создаём чат через ChatService
                 const created = await this.chatService.createChat(
                     chat.topic,
                     chat.title,
@@ -78,35 +77,23 @@ class MessageService {
                 }
             }
             
-            // Отправляем сообщение в существующий чат
-            const result = await this.apiClient.post(`/chats/${chatId}/message`, {
-                text: message.text,
-                type: message.type,
-                messageId: message.id,
-                isFavorite: message.isFavorite || false
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
+            const result = await this.apiClient.post('/chats/actions/message', {
+                action: 'new_message',
+                chatId: chatId,
+                message: {
+                    id: message.id,
+                    text: message.text,
+                    type: message.type,
+                    isFavorite: message.isFavorite || false
+                }
             });
             
-            if (result.success || result.messageId) {
-                // Обновляем версию чата
+            if (result.synced || result.success) {
                 if (result.version) {
                     this.chatStore.setVersion(chatId, result.version);
                 }
-                
-                // Обновляем ID сообщения если изменился
-                if (result.messageId && result.messageId !== message.id) {
-                    const foundChat = this.chatStore.findChat(chatId);
-                    if (foundChat) {
-                        const msg = foundChat.chat.messages.find(m => m.id === message.id);
-                        if (msg) {
-                            msg.id = result.messageId;
-                            msg.synced = true;
-                            this.chatStore.saveToStorage();
-                        }
-                    }
-                } else {
-                    this.chatStore.markMessagesSynced(chatId, [message.id]);
-                }
-                
+                this.chatStore.markMessagesSynced(chatId, [message.id]);
                 console.log(`✅ Сообщение ${message.id} синхронизировано`);
                 return message;
             }
@@ -182,6 +169,7 @@ class MessageService {
         }
         
         try {
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
             const result = await this.apiClient.post('/chats/actions/favorite', {
                 action: 'favorite_message',
                 chatId: chatId,
@@ -214,6 +202,7 @@ class MessageService {
         }
         
         try {
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
             const result = await this.apiClient.post('/chats/actions/batch', {
                 action: 'batch_messages',
                 chatId: chatId,
@@ -244,4 +233,4 @@ class MessageService {
 window.MessageService = MessageService;
 window.messageService = new MessageService();
 
-console.log('✅ MessageService v2.0.1 загружен');
+console.log('✅ MessageService v2.0.2 загружен');
