@@ -196,7 +196,8 @@ function finalizeStreamMessage(msgDiv, finalText, activeChat) {
             if (window.messageService) {
                 window.messageService.sendMessage(activeChat.id, safeFinalText, 'ai-msg', {
                     synced: false,
-                    isFavorite: false
+                    isFavorite: false,
+                    id: generatedAiMsgId  // ✅ ИСПРАВЛЕНО: передаем ID, чтобы не создавать дубликат
                 }).catch(err => {
                     console.error('Синхронизация AI ответа не удалась:', err);
                 });
