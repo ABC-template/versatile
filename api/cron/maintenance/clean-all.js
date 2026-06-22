@@ -1,6 +1,7 @@
 // ============================================
 // api/cron/maintenance/clean-all.js
 // Описание: Объединенная очистка (корзина + логи + usage + pending)
+// ✅ ИСПРАВЛЕНО: добавлена очистка orphaned pending_deletion_devices
 // ============================================
 
 import { getSupabaseConfig, supabaseFetch, supabaseRPC } from '../../_lib/supabase-client.js';
@@ -32,7 +33,6 @@ export default async function handler(request) {
         let trashCleaned = 0;
         
         try {
-            // Находим чаты в корзине старше 30 дней
             const expiredTrash = await supabaseFetch(
                 `chats?deleted_at=lt.${encodeURIComponent(thirtyDaysAgo)}&select=id`,
                 { method: 'GET' },
@@ -43,7 +43,6 @@ export default async function handler(request) {
             if (expiredTrash && Array.isArray(expiredTrash) && expiredTrash.length > 0) {
                 for (const chat of expiredTrash) {
                     try {
-                        // Удаляем сообщения
                         await supabaseFetch(
                             `messages?chat_id=eq.${chat.id}`,
                             { method: 'DELETE' },
@@ -51,7 +50,6 @@ export default async function handler(request) {
                             'service'
                         );
                         
-                        // Удаляем чат
                         await supabaseFetch(
                             `chats?id=eq.${chat.id}`,
                             { method: 'DELETE' },
@@ -113,7 +111,50 @@ export default async function handler(request) {
         }
         
         // ==========================================
-        // 5. ОЧИСТКА СТАРЫХ УВЕДОМЛЕНИЙ (60 дней)
+        // 5. ✅ НОВОЕ: ОЧИСТКА ORPHANED PENDING_DELETION_DEVICES
+        // ==========================================
+        console.log('🧹 Очистка orphaned pending_deletion_devices...');
+        let orphanedDevicesCleaned = 0;
+        
+        try {
+            // Находим записи в pending_deletion_devices, у которых нет связанной pending_deletions
+            // или pending_deletions уже помечена как is_cleaned = true
+            const orphaned = await supabaseFetch(
+                `pending_deletion_devices?select=pending_id,device_fingerprint`,
+                { method: 'GET' },
+                config,
+                'service'
+            );
+            
+            if (orphaned && Array.isArray(orphaned) && orphaned.length > 0) {
+                for (const item of orphaned) {
+                    // Проверяем, существует ли связанная запись
+                    const parentCheck = await supabaseFetch(
+                        `pending_deletions?id=eq.${item.pending_id}&select=id,is_cleaned`,
+                        { method: 'GET' },
+                        config,
+                        'service'
+                    );
+                    
+                    // Если записи нет или она уже очищена — удаляем связь
+                    if (!parentCheck || !Array.isArray(parentCheck) || parentCheck.length === 0 || parentCheck[0].is_cleaned === true) {
+                        await supabaseFetch(
+                            `pending_deletion_devices?pending_id=eq.${item.pending_id}&device_fingerprint=eq.${encodeURIComponent(item.device_fingerprint)}`,
+                            { method: 'DELETE' },
+                            config,
+                            'service'
+                        );
+                        orphanedDevicesCleaned++;
+                    }
+                }
+            }
+            console.log(`✅ Очищено ${orphanedDevicesCleaned} orphaned записей pending_deletion_devices`);
+        } catch (err) {
+            console.error('Ошибка очистки orphaned pending_deletion_devices:', err.message);
+        }
+        
+        // ==========================================
+        // 6. ОЧИСТКА СТАРЫХ УВЕДОМЛЕНИЙ (60 дней)
         // ==========================================
         console.log('🔔 Очистка старых уведомлений (> 60 дней)...');
         let notificationsDeleted = 0;
@@ -126,14 +167,14 @@ export default async function handler(request) {
                 config,
                 'service'
             );
-            notificationsDeleted = result?.success ? 1 : 0; // Примерно
+            notificationsDeleted = result?.success ? 1 : 0;
             console.log(`✅ Удалены старые уведомления`);
         } catch (err) {
             console.error('Ошибка очистки уведомлений:', err.message);
         }
         
         // ==========================================
-        // 6. ОТВЕТ
+        // 7. ОТВЕТ
         // ==========================================
         
         const report = {
@@ -143,6 +184,7 @@ export default async function handler(request) {
             security_logs_deleted: logsDeleted,
             usage_records_deleted: usageDeleted,
             pending_deletions_cleaned: pendingDeleted,
+            orphaned_devices_cleaned: orphanedDevicesCleaned,
             notifications_cleaned: notificationsDeleted
         };
         
