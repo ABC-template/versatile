@@ -1,7 +1,7 @@
 // ============================================
 // js/services/chats.js
 // Описание: CRUD операции с чатами (с версионностью)
-// Версия: 2.0.1
+// Версия: 2.0.2 (исправлены пути API)
 // ============================================
 
 class ChatService {
@@ -38,20 +38,6 @@ class ChatService {
     }
     
     // ==========================================
-    // ПОЛУЧЕНИЕ ВЕРСИИ ЧАТА
-    // ==========================================
-    
-    async getVersion(chatId) {
-        try {
-            const data = await this.apiClient.get(`/chats/${chatId}/version`);
-            return data.version || null;
-        } catch (err) {
-            console.error(`❌ Ошибка получения версии чата ${chatId}:`, err);
-            return null;
-        }
-    }
-    
-    // ==========================================
     // ОТКРЫТИЕ ЧАТА (С ПРОВЕРКОЙ ВЕРСИИ)
     // ==========================================
     
@@ -64,7 +50,7 @@ class ChatService {
         try {
             const localVersion = this.chatStore.getVersion(chatId);
             
-            // Запрашиваем чат только если версия отличается
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
             const url = localVersion 
                 ? `/chats/get?id=${chatId}&version=${encodeURIComponent(localVersion)}`
                 : `/chats/get?id=${chatId}`;
@@ -102,11 +88,12 @@ class ChatService {
     }
     
     // ==========================================
-    // ПОЛУЧЕНИЕ ПОЛНОГО ЧАТА (ПРИНУДИТЕЛЬНО)
+    // ПОЛУЧЕНИЕ ПОЛНОГО ЧАТА
     // ==========================================
     
     async getChat(chatId) {
         try {
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
             const data = await this.apiClient.get(`/chats/get?id=${chatId}`);
             
             if (data.success && data.chat) {
@@ -142,11 +129,18 @@ class ChatService {
         }
         
         try {
-            const result = await this.apiClient.patch(`/chats/${chatId}`, data);
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
+            const result = await this.apiClient.post('/chats/actions/update', {
+                action: 'update_context',
+                chatId: chatId,
+                ...data
+            });
             
-            if (result.version) {
-                this.chatStore.setVersion(chatId, result.version);
-                console.log(`✅ Чат ${chatId} обновлён, новая версия: ${result.version}`);
+            if (result.success) {
+                if (result.version) {
+                    this.chatStore.setVersion(chatId, result.version);
+                }
+                console.log(`✅ Чат ${chatId} обновлён`);
                 return true;
             }
             return false;
@@ -161,15 +155,32 @@ class ChatService {
     // ==========================================
     
     async renameChat(chatId, newTitle) {
-        const result = await this.updateChat(chatId, { 
-            title: newTitle.trim(),
-            userRenamed: true 
-        });
-        
-        if (result) {
-            this.chatStore.renameChat(chatId, newTitle);
+        if (!this.userStore.canSync()) {
+            console.log('⏭️ Синхронизация отключена');
+            return false;
         }
-        return result;
+        
+        try {
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
+            const result = await this.apiClient.post('/chats/actions/update', {
+                action: 'rename_chat',
+                chatId: chatId,
+                newTitle: newTitle.trim()
+            });
+            
+            if (result.success) {
+                this.chatStore.renameChat(chatId, newTitle);
+                if (result.version) {
+                    this.chatStore.setVersion(chatId, result.version);
+                }
+                console.log(`✅ Чат ${chatId} переименован`);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error(`❌ Ошибка переименования чата ${chatId}:`, err);
+            return false;
+        }
     }
     
     // ==========================================
@@ -177,12 +188,32 @@ class ChatService {
     // ==========================================
     
     async updateContext(chatId, maxContext) {
-        const result = await this.updateChat(chatId, { maxContext: maxContext });
-        
-        if (result) {
-            this.chatStore.updateChat(chatId, { maxContext: maxContext });
+        if (!this.userStore.canSync()) {
+            console.log('⏭️ Синхронизация отключена');
+            return false;
         }
-        return result;
+        
+        try {
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
+            const result = await this.apiClient.post('/chats/actions/update', {
+                action: 'update_context',
+                chatId: chatId,
+                maxContext: maxContext
+            });
+            
+            if (result.success) {
+                this.chatStore.updateChat(chatId, { maxContext: maxContext });
+                if (result.version) {
+                    this.chatStore.setVersion(chatId, result.version);
+                }
+                console.log(`✅ Контекст чата ${chatId} обновлён`);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error(`❌ Ошибка обновления контекста ${chatId}:`, err);
+            return false;
+        }
     }
     
     // ==========================================
@@ -191,12 +222,12 @@ class ChatService {
     
     async deleteChat(chatId) {
         if (!this.userStore.canSync()) {
-            // Офлайн-режим: удаляем только локально
             this.chatStore.deleteChat(chatId);
             return true;
         }
         
         try {
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
             const result = await this.apiClient.post('/chats/actions/update', {
                 action: 'delete_chat',
                 chatId: chatId
@@ -204,6 +235,9 @@ class ChatService {
             
             if (result.success) {
                 this.chatStore.deleteChat(chatId);
+                if (result.version) {
+                    this.chatStore.setVersion(chatId, result.version);
+                }
                 console.log(`✅ Чат ${chatId} удалён на сервере`);
                 return true;
             }
@@ -216,7 +250,7 @@ class ChatService {
     }
     
     // ==========================================
-    // СОЗДАНИЕ ЧАТА (ИСПРАВЛЕНО)
+    // СОЗДАНИЕ ЧАТА
     // ==========================================
     
     async createChat(topicId, title, options = {}) {
@@ -230,6 +264,7 @@ class ChatService {
         try {
             const chatId = options.existingChatId || undefined;
             
+            // ✅ ИСПРАВЛЕНО: используем правильный эндпоинт
             const data = await this.apiClient.post('/chats/actions/create', {
                 action: 'create_chat',
                 chat: {
@@ -314,4 +349,4 @@ class ChatService {
 window.ChatService = ChatService;
 window.chatService = new ChatService();
 
-console.log('✅ ChatService v2.0.1 загружен');
+console.log('✅ ChatService v2.0.2 загружен');
