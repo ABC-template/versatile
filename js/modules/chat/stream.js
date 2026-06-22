@@ -4,8 +4,6 @@
 // Версия: 1.0.0 (возврат к рабочей версии)
 // ============================================
 
-console.log('✅ ChatStream загружен');
-
 window.streamAiResponse = async function(historyMessages, topic, userLang, attachedImage, activeChat) {
     console.log('🎯 streamAiResponse вызвана');
     console.log('📸 Есть фото?', !!attachedImage);
