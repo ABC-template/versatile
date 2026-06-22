@@ -1,6 +1,7 @@
 // ============================================
 // js/modules/ui/chat-ui.js
-// Описание: Интерфейс чата
+// Описание: Интерфейс чата (убрана синхронизация)
+// Версия: 2.0.0
 // ============================================
 
 class ChatUI {
@@ -54,10 +55,10 @@ class ChatUI {
     }
     
     // ==========================================
-    // ПЕРЕКЛЮЧЕНИЕ ЧАТА
+    // ПЕРЕКЛЮЧЕНИЕ ЧАТА (С ПРОВЕРКОЙ ВЕРСИИ)
     // ==========================================
     
-    switchToChat(chatId, topic) {
+    async switchToChat(chatId, topic) {
         this.deleteEmptyCurrentChat();
         
         const card = document.getElementById('profile-card');
@@ -73,11 +74,17 @@ class ChatUI {
         }
         
         this.chatStore.setActiveChat(topic, chatId);
+        
+        // Проверяем версию чата при открытии (если есть синхронизация)
+        if (this.userStore.canSync() && this.chatService) {
+            await this.chatService.openChat(chatId);
+        }
+        
         this.refreshUI();
         this.showChatInterface();
     }
     
-    switchTopic(topic) {
+    async switchTopic(topic) {
         this.deleteEmptyCurrentChat();
         
         this.chatStore.currentTopic = topic;
@@ -297,6 +304,10 @@ class ChatUI {
     }
 }
 
+// ==========================================
+// ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+// ==========================================
+
 window.ChatUI = ChatUI;
 window.chatUI = new ChatUI();
 
@@ -343,88 +354,4 @@ window.deleteChat = function(event, chatId) {
     }
 };
 
-window.copyMsgText = function(btn, msgId) {
-    const found = window.chatStore.findChat(msgId);
-    let msg = null;
-    if (found) {
-        const { chat } = found;
-        msg = chat.messages.find(m => m.id === msgId);
-    }
-    if (!msg) return;
-    
-    navigator.clipboard.writeText(msg.text).then(() => {
-        btn.classList.add('show-tip');
-        setTimeout(() => btn.classList.remove('show-tip'), 1200);
-    }).catch(() => {
-        if (window.tg?.showAlert) window.tg.showAlert('Ошибка копирования');
-    });
-};
-
-window.shareMsgText = function(btn, msgId) {
-    const found = window.chatStore.findChat(msgId);
-    let msg = null;
-    if (found) {
-        const { chat } = found;
-        msg = chat.messages.find(m => m.id === msgId);
-    }
-    if (!msg) return;
-    
-    const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(msg.text)}`;
-    btn.classList.add('show-tip');
-    setTimeout(() => btn.classList.remove('show-tip'), 1200);
-    
-    setTimeout(() => {
-        if (window.tg?.openTelegramLink) {
-            window.tg.openTelegramLink(shareUrl);
-        } else {
-            window.open(shareUrl, '_blank');
-        }
-    }, 300);
-};
-
-window.toggleFavoriteMsg = async function(btn, msgId) {
-    const activeChat = window.chatStore.getActiveChat();
-    if (!activeChat) return;
-    
-    const result = await window.messageService.toggleFavorite(activeChat.id, msgId);
-    if (result) {
-        const heartSpan = btn.querySelector('.icon-heart');
-        if (result.isFavorite) {
-            btn.classList.add('is-favorite');
-            if (heartSpan) heartSpan.textContent = '❤️';
-            btn.setAttribute('data-tooltip', '❤️');
-        } else {
-            btn.classList.remove('is-favorite');
-            if (heartSpan) heartSpan.textContent = '🤍';
-            btn.setAttribute('data-tooltip', '🤍');
-        }
-        btn.classList.add('show-tip');
-        setTimeout(() => btn.classList.remove('show-tip'), 1200);
-    }
-};
-
-window.deleteMessage = function(msgId) {
-    const activeChat = window.chatStore.getActiveChat();
-    if (!activeChat) return;
-    
-    const confirmMsg = window.getLangString ? window.getLangString('confirm_del_msg') : 'Удалить сообщение?';
-    const action = () => {
-        if (window.messageService) {
-            window.messageService.deleteMessage(activeChat.id, msgId);
-        }
-        const domBlock = document.getElementById(`msg-block-${msgId}`);
-        if (domBlock) {
-            domBlock.style.transition = 'all 0.25s ease';
-            domBlock.style.opacity = '0';
-            domBlock.style.transform = 'scale(0.95)';
-            setTimeout(() => domBlock.remove(), 250);
-        }
-    };
-    if (window.tg?.showConfirm) {
-        window.tg.showConfirm(confirmMsg, (ok) => { if (ok) action(); });
-    } else if (confirm(confirmMsg)) {
-        action();
-    }
-};
-
-console.log('✅ ChatUI загружен');
+console.log('✅ ChatUI v2.0 загружен');
