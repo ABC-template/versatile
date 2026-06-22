@@ -1,34 +1,18 @@
 // ============================================
 // js/modules/chat/stream.js
-// Описание: Стриминг ответов от ИИ (рабочая версия)
-// Версия: 2.0.5 (возврат к проверенному коду)
+// Описание: Стриминг ответов от ИИ (ОРИГИНАЛ)
+// Версия: 1.0.0 (возврат к исходной рабочей версии)
 // ============================================
 
-console.log('✅ ChatStream v2.0.5 загружен');
-
-// Флаг для предотвращения дублирования
-let isStreaming = false;
-let currentStreamId = null;
+console.log('✅ ChatStream загружен');
 
 window.streamAiResponse = async function(historyMessages, topic, userLang, attachedImage, activeChat) {
-    // Защита от дублирования
-    const streamId = Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-    
-    if (isStreaming) {
-        console.warn('⚠️ Стрим уже выполняется, пропускаем дублирующий вызов');
-        return false;
-    }
-    
-    isStreaming = true;
-    currentStreamId = streamId;
-    
-    console.log(`🎯 streamAiResponse вызвана (ID: ${streamId})`);
+    console.log('🎯 streamAiResponse вызвана');
     console.log('📸 Есть фото?', !!attachedImage);
     
     const container = document.getElementById('chat-container');
     if (!container) {
         console.error('❌ chat-container не найден');
-        isStreaming = false;
         return false;
     }
     
@@ -38,7 +22,6 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
     let msgDiv = null;
     let accumulatedText = '';
     let isFirstChunk = true;
-    let isCompleted = false;
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -74,20 +57,15 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
         }
         
         // ==========================================
-        // ✅ КЛАССИЧЕСКИЙ ПАРСИНГ SSE (РАБОТАЕТ)
+        // ✅ ОРИГИНАЛЬНЫЙ ПАРСИНГ (РАБОТАЕТ)
         // ==========================================
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
         
-        console.log('📡 Начинаем чтение стрима...');
-        
         while (true) {
             const { done, value } = await reader.read();
-            if (done) {
-                console.log('📡 Стрим завершен (done)');
-                break;
-            }
+            if (done) break;
             
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -95,8 +73,6 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
             
             for (const line of lines) {
                 const trimmedLine = line.trim();
-                
-                // ✅ Только data: префикс
                 if (trimmedLine.startsWith('data: ')) {
                     const jsonStr = trimmedLine.slice(6).trim();
                     if (jsonStr === '[DONE]') continue;
@@ -107,19 +83,17 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                         if (content) {
                             accumulatedText += content;
                             
-                            // Создаем DOM элемент при первом чанке
                             if (isFirstChunk && accumulatedText.trim().length > 0) {
                                 if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
                                 
                                 msgDiv = document.createElement('div');
                                 msgDiv.className = 'msg ai-msg msg-animated';
-                                msgDiv.id = `msg-block-stream-${streamId}`;
+                                msgDiv.id = `msg-block-${Date.now()}-${Math.random()}`;
                                 msgDiv.setAttribute('data-sanitized', 'true');
                                 container.appendChild(msgDiv);
                                 isFirstChunk = false;
                             }
                             
-                            // Обновляем содержимое
                             if (msgDiv && !isFirstChunk) {
                                 if (typeof marked !== 'undefined') {
                                     try {
@@ -139,7 +113,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                                         }
                                         msgDiv.innerHTML = rawHTML;
                                     } catch (markErr) {
-                                        console.warn('Ошибка marked, используем textContent:', markErr);
+                                        console.warn('Ошибка marked:', markErr);
                                         msgDiv.textContent = accumulatedText;
                                     }
                                 } else {
@@ -149,22 +123,66 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                             }
                         }
                     } catch (e) {
-                        // Игнорируем невалидный JSON
+                        // Игнорируем
                     }
                 }
             }
         }
         
-        isCompleted = true;
-        
+        // ==========================================
+        // ✅ ФИНАЛИЗАЦИЯ (ОРИГИНАЛ)
+        // ==========================================
         if (accumulatedText.trim().length > 0) {
+            const generatedAiMsgId = window.generateUUID ? window.generateUUID() : 'msg_' + Date.now();
+            
             if (msgDiv) {
-                finalizeStreamMessage(msgDiv, accumulatedText, activeChat, streamId);
+                msgDiv.id = `msg-block-${generatedAiMsgId}`;
             } else {
                 if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
-                const finalMsg = uiRenderer.renderMessage(accumulatedText, 'ai-msg');
-                if (finalMsg) {
-                    finalizeStreamMessage(finalMsg, accumulatedText, activeChat, streamId);
+                msgDiv = uiRenderer.renderMessage(accumulatedText, 'ai-msg', generatedAiMsgId);
+            }
+            
+            const safeFinalText = typeof accumulatedText === 'string' ? accumulatedText : String(accumulatedText);
+            
+            // Добавляем действия
+            if (msgDiv) {
+                const act = document.createElement('div');
+                act.className = 'msg-actions';
+                act.innerHTML = `
+                    <button class="action-btn" data-tooltip="📋" onclick="window.chatSend.copyMsgText(this, '${generatedAiMsgId}')">📋</button>
+                    <button class="action-btn" data-tooltip="🔗" onclick="window.chatSend.shareMsgText(this, '${generatedAiMsgId}')">🔗</button>
+                    <button class="action-btn" onclick="window.chatSend.toggleFavoriteMsg(this, '${generatedAiMsgId}')"><span class="icon-heart">🤍</span></button>
+                    <button class="action-btn" style="margin-left:auto; background:rgba(231,76,60,0.05); color:#e74c3c;" onclick="window.chatSend.deleteMessage('${generatedAiMsgId}')">🗑️</button>
+                `;
+                msgDiv.appendChild(act);
+            }
+            
+            if (activeChat) {
+                const aiMessage = {
+                    id: generatedAiMsgId,
+                    text: safeFinalText,
+                    type: 'ai-msg',
+                    isFavorite: false,
+                    synced: false,
+                    created_at: new Date().toISOString()
+                };
+                
+                activeChat.messages.push(aiMessage);
+                window.chatStore.saveToStorage();
+                
+                if (window.userStore && !window.userStore.hasUnlimited()) {
+                    window.userStore.incrementUsage();
+                }
+                
+                if (window.userStore && window.userStore.canSync() && activeChat.id) {
+                    if (window.messageService) {
+                        window.messageService.sendMessage(activeChat.id, safeFinalText, 'ai-msg', {
+                            synced: false,
+                            isFavorite: false
+                        }).catch(err => {
+                            console.error('Синхронизация AI ответа не удалась:', err);
+                        });
+                    }
                 }
             }
         } else {
@@ -174,14 +192,13 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                 uiRenderer.renderMessage('⚠️ Сервер вернул пустой ответ.', 'ai-msg');
             }
         }
-        
         return true;
         
     } catch (err) {
         console.error('❌ Критический сбой стрима:', err);
         if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
         
-        if (msgDiv && accumulatedText.trim().length > 0 && !isCompleted) {
+        if (msgDiv && accumulatedText.trim().length > 0) {
             const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано]`;
             if (typeof marked !== 'undefined') {
                 try {
@@ -197,177 +214,13 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
             } else {
                 msgDiv.textContent = disconnectNotice;
             }
-            finalizeStreamMessage(msgDiv, disconnectNotice, activeChat, streamId);
-        } else if (!isCompleted) {
+        } else {
             if (uiRenderer.renderMessage) {
                 uiRenderer.renderMessage(`⚠️ Ошибка: ${err.message || 'Неизвестная ошибка'}`, 'ai-msg');
             }
         }
         return false;
-    } finally {
-        isStreaming = false;
-        currentStreamId = null;
     }
 };
 
-/**
- * Финальная обработка сообщения
- */
-function finalizeStreamMessage(msgDiv, finalText, activeChat, streamId) {
-    const generatedAiMsgId = window.generateUUID ? window.generateUUID() : 'msg_' + Date.now();
-    
-    // Проверяем дублирование по ID
-    if (activeChat) {
-        const exists = activeChat.messages.some(m => m.id === generatedAiMsgId);
-        if (exists) {
-            console.warn('⚠️ Сообщение с таким ID уже существует, пропускаем');
-            return;
-        }
-    }
-    
-    msgDiv.id = `msg-block-${generatedAiMsgId}`;
-    
-    const safeFinalText = typeof finalText === 'string' ? finalText : String(finalText);
-    
-    // Добавляем действия
-    const act = document.createElement('div');
-    act.className = 'msg-actions';
-    act.innerHTML = `
-        <button class="action-btn" data-tooltip="📋" onclick="window.copyMsgText(this, '${generatedAiMsgId}')">📋</button>
-        <button class="action-btn" data-tooltip="🔗" onclick="window.shareMsgText(this, '${generatedAiMsgId}')">🔗</button>
-        <button class="action-btn" onclick="window.toggleFavoriteMsg(this, '${generatedAiMsgId}')"><span class="icon-heart">🤍</span></button>
-        <button class="action-btn" style="margin-left:auto; background:rgba(231,76,60,0.05); color:#e74c3c;" onclick="window.deleteMessage('${generatedAiMsgId}')">🗑️</button>
-    `;
-    msgDiv.appendChild(act);
-    
-    if (activeChat) {
-        const aiMessage = {
-            id: generatedAiMsgId,
-            text: safeFinalText,
-            type: 'ai-msg',
-            isFavorite: false,
-            synced: false,
-            created_at: new Date().toISOString()
-        };
-        
-        activeChat.messages.push(aiMessage);
-        window.chatStore.saveToStorage();
-        
-        // Инкремент лимита
-        if (window.userStore && !window.userStore.hasUnlimited()) {
-            window.userStore.incrementUsage();
-        }
-        
-        // Синхронизация с сервером (если включена)
-        if (window.userStore && window.userStore.canSync() && activeChat.id) {
-            if (window.messageService) {
-                window.messageService.sendMessage(activeChat.id, safeFinalText, 'ai-msg', {
-                    synced: false,
-                    isFavorite: false
-                }).catch(err => {
-                    console.error('Синхронизация AI ответа не удалась:', err);
-                });
-            }
-        }
-        
-        console.log(`✅ AI-сообщение ${generatedAiMsgId} сохранено (стрим ${streamId})`);
-    }
-}
-
-// ============================================
-// ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
-// ============================================
-
-window.deleteMessage = function(msgId) {
-    const activeChat = window.chatStore?.getActiveChat();
-    if (!activeChat) return;
-    
-    const confirmMsg = window.getLangString ? window.getLangString('confirm_del_msg') : 'Удалить это сообщение?';
-    
-    const action = () => {
-        if (window.messageService) {
-            window.messageService.deleteMessage(activeChat.id, msgId);
-        }
-        
-        const domBlock = document.getElementById(`msg-block-${msgId}`);
-        if (domBlock) {
-            domBlock.style.transition = 'all 0.25s ease';
-            domBlock.style.opacity = '0';
-            domBlock.style.transform = 'scale(0.95)';
-            setTimeout(() => domBlock.remove(), 250);
-        }
-    };
-    
-    if (window.tg?.showConfirm) {
-        window.tg.showConfirm(confirmMsg, (ok) => { if (ok) action(); });
-    } else if (confirm(confirmMsg)) {
-        action();
-    }
-};
-
-window.copyMsgText = function(btn, msgId) {
-    const found = window.chatStore?.findChat(msgId);
-    let msg = null;
-    
-    if (found) {
-        const { chat } = found;
-        msg = chat.messages.find(m => m.id === msgId);
-    }
-    
-    if (!msg) return;
-    
-    navigator.clipboard.writeText(msg.text).then(() => {
-        btn.classList.add('show-tip');
-        setTimeout(() => btn.classList.remove('show-tip'), 1200);
-    }).catch(() => {
-        if (window.tg?.showAlert) window.tg.showAlert('Ошибка копирования');
-    });
-};
-
-window.shareMsgText = function(btn, msgId) {
-    const found = window.chatStore?.findChat(msgId);
-    let msg = null;
-    
-    if (found) {
-        const { chat } = found;
-        msg = chat.messages.find(m => m.id === msgId);
-    }
-    
-    if (!msg) return;
-    
-    const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(msg.text)}`;
-    btn.classList.add('show-tip');
-    setTimeout(() => btn.classList.remove('show-tip'), 1200);
-    
-    setTimeout(() => {
-        if (window.tg?.openTelegramLink) {
-            window.tg.openTelegramLink(shareUrl);
-        } else {
-            window.open(shareUrl, '_blank');
-        }
-    }, 300);
-};
-
-window.toggleFavoriteMsg = async function(btn, msgId) {
-    const activeChat = window.chatStore?.getActiveChat();
-    if (!activeChat) return;
-    
-    const result = await window.messageService?.toggleFavorite(activeChat.id, msgId);
-    
-    if (result) {
-        const heartSpan = btn.querySelector('.icon-heart');
-        if (result.isFavorite) {
-            btn.classList.add('is-favorite');
-            if (heartSpan) heartSpan.textContent = '❤️';
-            btn.setAttribute('data-tooltip', '❤️');
-        } else {
-            btn.classList.remove('is-favorite');
-            if (heartSpan) heartSpan.textContent = '🤍';
-            btn.setAttribute('data-tooltip', '🤍');
-        }
-        btn.classList.add('show-tip');
-        setTimeout(() => btn.classList.remove('show-tip'), 1200);
-    }
-};
-
-console.log('✅ ChatStream v2.0.5 загружен');
+console.log('✅ ChatStream загружен (оригинальная версия)');
