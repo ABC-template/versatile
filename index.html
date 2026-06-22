@@ -8,43 +8,82 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/eruda@3.4.1/eruda.min.js"></script>
     <script>eruda.init();</script>
 </head>
 <body>
+    <!-- ==========================================
+         HEADER
+    ========================================== -->
     <div id="header" class="hidden">
-        <span id="limit-info">Синхронизация...</span>
+        <span id="limit-info">Лимит: 0/0</span>
         <span id="chat-model-indicator">Versatile AI</span>
-        <div id="header-navigation" style="display: flex; align-items: center; gap: 8px;">
-            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('chats')" title="Диалоги">💬</button>
-            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('favorites')" title="Избранное">⭐</button>
-            <button id="organizer-trigger-btn" class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('organizer')" title="Органайзер">📅</button>
-            <div id="user-profile-trigger" onclick="window.profileUI.openModalTab('profile')" style="cursor:pointer; margin-left: 4px;">
-                <img id="user-avatar" src="" alt="Avatar" style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--button-color); background: #eee;">
+        <div id="header-navigation">
+            <button class="action-btn" onclick="window.profileUI.openModalTab('chats')" title="Диалоги">
+                <i data-lucide="message-square"></i>
+            </button>
+            <button class="action-btn" onclick="window.profileUI.openModalTab('favorites')" title="Избранное">
+                <i data-lucide="star"></i>
+            </button>
+            <button class="action-btn" onclick="window.profileUI.openModalTab('organizer')" title="Органайзер">
+                <i data-lucide="calendar"></i>
+            </button>
+            <button class="action-btn" onclick="window.themeManager.toggleTheme()" title="Сменить тему">
+                <i data-lucide="sun" id="theme-icon"></i>
+            </button>
+            <div id="user-profile-trigger" onclick="window.profileUI.openModalTab('profile')">
+                <img id="user-avatar" src="" alt="Avatar">
             </div>
         </div>
     </div>
 
+    <!-- ==========================================
+         PROFILE CARD (Модальное окно)
+    ========================================== -->
     <div id="profile-card" class="hidden">
         <div class="profile-content">
             <div class="profile-scrollable-zone">
+                <!-- TAB: Профиль -->
                 <div id="tab-profile" class="modal-tab hidden">
-                    <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 15px;">
-                        <img id="card-avatar" src="" alt="Avatar Large" style="width: 55px; height: 55px; border-radius: 50%; margin-bottom: 8px; border: 2px solid var(--button-color);">
-                        <div id="user-name" style="font-weight: bold; font-size: 15px; color: var(--text-color);">Пользователь</div>
+                    <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: var(--app-spacing-lg);">
+                        <img id="card-avatar" src="" alt="Avatar Large" style="width: 64px; height: 64px; border-radius: var(--app-radius-full); margin-bottom: var(--app-spacing-sm); border: 3px solid var(--app-accent-primary); object-fit: cover;">
+                        <div id="user-name" style="font-weight: 700; font-size: var(--app-font-size-xl); color: var(--app-text-primary);">Пользователь</div>
                     </div>
-                </div>
-                <div id="tab-chats" class="modal-tab hidden">
-                    <div class="modal-sticky-header">
-                        <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">💬 Ваши диалоги:</p>
-                        <div style="display: flex; gap: 6px;">
-                            <button id="new-chat-btn" class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px;" onclick="window.chatUI.createNewChat()">+ Новый чат</button>
-                            <button class="btn" style="padding: 5px 12px; font-size: 12px; border-radius: 8px; background: rgba(231,76,60,0.1); color: #e74c3c; display: flex; align-items: center; gap: 4px;" onclick="window.openTrashModal()">
-                                🗑️ <span id="trash-count" style="font-size: 10px; background: #e74c3c; color: white; border-radius: 50%; padding: 1px 6px; min-width: 18px; text-align: center; display: none;">0</span>
+                    
+                    <!-- Выбор темы -->
+                    <div style="margin-top: var(--app-spacing-md); border-top: 1px solid var(--app-border-color); padding-top: var(--app-spacing-lg);">
+                        <p style="font-size: var(--app-font-size-sm); font-weight: 600; color: var(--app-text-secondary); margin-bottom: var(--app-spacing-md);">🎨 Выберите тему</p>
+                        <div style="display: flex; gap: var(--app-spacing-sm); flex-wrap: wrap;">
+                            <button class="theme-selector-btn" data-theme-btn="light" onclick="window.themeManager.setTheme('light')">
+                                <i data-lucide="sun"></i> Светлая
+                            </button>
+                            <button class="theme-selector-btn" data-theme-btn="dark" onclick="window.themeManager.setTheme('dark')">
+                                <i data-lucide="moon"></i> Темная
+                            </button>
+                            <button class="theme-selector-btn" data-theme-btn="amoled" onclick="window.themeManager.setTheme('amoled')">
+                                <i data-lucide="monitor"></i> AMOLED
                             </button>
                         </div>
                     </div>
-                    <div id="chat-filters" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(0,0,0,0.04);">
+                </div>
+
+                <!-- TAB: Чаты -->
+                <div id="tab-chats" class="modal-tab hidden">
+                    <div class="modal-sticky-header">
+                        <p id="dialogs-label">💬 Ваши диалоги:</p>
+                        <div style="display: flex; gap: var(--app-spacing-sm);">
+                            <button id="new-chat-btn" class="btn" style="padding: 6px 14px; font-size: var(--app-font-size-sm); border-radius: var(--app-radius-sm);" onclick="window.chatUI.createNewChat()">
+                                <i data-lucide="plus"></i> Новый
+                            </button>
+                            <button class="btn" style="padding: 6px 14px; font-size: var(--app-font-size-sm); border-radius: var(--app-radius-sm); background: rgba(231,76,60,0.1); color: var(--app-accent-danger); display: flex; align-items: center; gap: var(--app-spacing-xs);" onclick="window.openTrashModal()">
+                                <i data-lucide="trash-2"></i>
+                                <span id="trash-count" style="font-size: var(--app-font-size-xs); background: var(--app-accent-danger); color: white; border-radius: var(--app-radius-full); padding: 1px 6px; min-width: 18px; text-align: center; display: none;">0</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="chat-filters">
                         <button class="filter-chip active" data-topic="all" onclick="window.profileUI.applyChatFilter('all')">Все</button>
                         <button class="filter-chip" data-topic="code" onclick="window.profileUI.applyChatFilter('code')">#кодинг</button>
                         <button class="filter-chip" data-topic="creative" onclick="window.profileUI.applyChatFilter('creative')">#креатив</button>
@@ -54,88 +93,132 @@
                     </div>
                     <div id="history-chats-list"></div>
                 </div>
+
+                <!-- TAB: Избранное -->
                 <div id="tab-favorites" class="modal-tab hidden">
                     <div class="modal-sticky-header">
-                        <p id="fav-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
+                        <p id="fav-title-label">⭐ Избранные ответы:</p>
                     </div>
-                    <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                    <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: var(--app-spacing-md);"></div>
                 </div>
+
+                <!-- TAB: Органайзер -->
                 <div id="tab-organizer" class="modal-tab hidden">
                     <div class="modal-sticky-header">
-                        <p id="organizer-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">📅 Органайзер Прогресса</p>
+                        <p id="organizer-title-label">📅 Органайзер Прогресса</p>
                     </div>
-                    <div id="todo-module-container" style="margin-bottom: 20px;"></div>
-                    <div id="scheduler-module-container" style="margin-bottom: 20px;"></div>
-                    <div id="tracker-module-container" style="margin-bottom: 20px;"></div>
+                    <div id="todo-module-container" style="margin-bottom: var(--app-spacing-xl);"></div>
+                    <div id="scheduler-module-container" style="margin-bottom: var(--app-spacing-xl);"></div>
+                    <div id="tracker-module-container" style="margin-bottom: var(--app-spacing-xl);"></div>
                 </div>
             </div>
+
+            <!-- Нижняя часть профиля -->
             <div id="dynamic-key-area">
                 <div id="sub-footer-key" class="hidden">
-                    <div style="width: 100%; padding: 10px; border-radius: 12px; background: rgba(var(--tg-theme-button-color, 0, 136, 204), 0.08); border: 1px dashed var(--button-color); color: var(--button-color); font-size: 13px; font-weight: 600; text-align: center; box-sizing: border-box;">
+                    <div style="width: 100%; padding: var(--app-spacing-md); border-radius: var(--app-radius-md); background: var(--app-accent-glow); border: 1px dashed var(--app-accent-primary); color: var(--app-accent-primary); font-size: var(--app-font-size-sm); font-weight: 600; text-align: center; box-sizing: border-box;">
                         🚀 Versatile AI — Beta Version
                     </div>
                 </div>
                 <div id="sub-footer-context" class="hidden">
-                    <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; margin-bottom: 6px;">
-                        <span id="memory-label" style="color: var(--text-color); display: flex; align-items: center; gap: 6px;">🧠 Память чата <span onclick="window.profileUI.toggleContextHelp(event)" style="cursor: pointer; background: rgba(0,0,0,0.05); width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--hint-color);">❓</span></span>
-                        <span id="context-range-value" style="color: var(--button-color);">15</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: var(--app-font-size-sm); margin-bottom: var(--app-spacing-xs);">
+                        <span id="memory-label" style="color: var(--app-text-primary); display: flex; align-items: center; gap: var(--app-spacing-sm);">
+                            <i data-lucide="brain" style="width: 16px; height: 16px;"></i> Память чата
+                            <span onclick="window.profileUI.toggleContextHelp(event)" style="cursor: pointer; background: var(--app-bg-tertiary); width: 18px; height: 18px; border-radius: var(--app-radius-full); display: inline-flex; align-items: center; justify-content: center; font-size: var(--app-font-size-xs); color: var(--app-text-tertiary);">❓</span>
+                        </span>
+                        <span id="context-range-value" style="color: var(--app-accent-primary); font-weight: 700;">15</span>
                     </div>
-                    <div id="context-help-text" class="hidden" style="font-size: 11px; color: var(--hint-color); line-height: 1.4; text-align: left; background: var(--bg-color); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 3px solid var(--button-color);"></div>
+                    <div id="context-help-text" class="hidden" style="font-size: var(--app-font-size-xs); color: var(--app-text-secondary); line-height: 1.5; text-align: left; background: var(--app-bg-tertiary); padding: var(--app-spacing-md); border-radius: var(--app-radius-md); margin-bottom: var(--app-spacing-sm); border-left: 3px solid var(--app-accent-primary);"></div>
                     <input type="range" id="context-slider" min="1" max="40" value="15" style="width: 100%; cursor: pointer; display: block;" oninput="window.profileUI.onContextSliderChange(this.value)" onchange="window.profileUI.saveContextSettings()">
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--hint-color); margin-top: 2px;"><span id="memory-off-label">1 (Выкл)</span><span id="memory-max-label">40 сообщений</span></div>
+                    <div style="display: flex; justify-content: space-between; font-size: var(--app-font-size-xs); color: var(--app-text-tertiary); margin-top: 2px;">
+                        <span id="memory-off-label">1 (Выкл)</span>
+                        <span id="memory-max-label">40 сообщений</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="trash-modal" class="hidden" style="position:fixed; top:0; left:0; width:100vw; height:100dvh; background:rgba(0,0,0,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:2000; display:none; align-items:center; justify-content:center; box-sizing:border-box; padding:20px;">
-        <div style="background:var(--bg-color); border-radius:24px; padding:20px; width:100%; max-width:420px; max-height:80dvh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-shrink:0;">
-                <h3 style="margin:0; color:var(--text-color); font-size:18px;">🗑️ Корзина</h3>
-                <button onclick="window.closeTrashModal()" style="background:transparent; border:none; font-size:22px; cursor:pointer; color:var(--hint-color); padding:0 4px;">✕</button>
+    <!-- ==========================================
+         TRASH MODAL (Корзина)
+    ========================================== -->
+    <div id="trash-modal" class="hidden">
+        <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--app-spacing-lg); flex-shrink: 0;">
+                <h3><i data-lucide="trash-2" style="width: 20px; height: 20px;"></i> Корзина</h3>
+                <button onclick="window.closeTrashModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: var(--app-text-tertiary); padding: 0 4px;">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
-            <div id="trash-list" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; min-height:100px;"></div>
-            <p id="trash-empty" style="text-align:center; color:var(--hint-color); font-size:13px; margin:20px 0; display:none;">Корзина пуста</p>
-            <div id="trash-actions" style="display:none; flex-shrink:0; margin-top:16px; border-top:1px solid rgba(0,0,0,0.06); padding-top:16px;">
-                <button class="btn" style="width:100%; padding:12px; border-radius:12px; font-size:13px; font-weight:600; background:rgba(231,76,60,0.08); color:#e74c3c; border:1px solid rgba(231,76,60,0.2);" onclick="window.clearAllTrash()">
-                    🗑️ Очистить корзину полностью
+            <div id="trash-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--app-spacing-sm); padding-right: var(--app-spacing-xs); min-height: 100px;"></div>
+            <p id="trash-empty" style="text-align: center; color: var(--app-text-tertiary); font-size: var(--app-font-size-sm); margin: var(--app-spacing-xl) 0; display: none;">Корзина пуста</p>
+            <div id="trash-actions" style="display: none; flex-shrink: 0; margin-top: var(--app-spacing-lg); border-top: 1px solid var(--app-border-color-light); padding-top: var(--app-spacing-lg);">
+                <button class="btn btn-danger" style="width: 100%; padding: var(--app-spacing-md); border-radius: var(--app-radius-md); font-size: var(--app-font-size-sm); font-weight: 600;" onclick="window.clearAllTrash()">
+                    <i data-lucide="trash-2"></i> Очистить корзину полностью
                 </button>
             </div>
         </div>
     </div>
 
+    <!-- ==========================================
+         GUEST SCREEN
+    ========================================== -->
     <div id="guest-screen" class="hidden">
         <h1 id="error-title">Доступ ограничен</h1>
         <p id="joke-text">Проверка статуса подписки...</p>
-        <a href="https://t.me" class="btn" style="text-decoration:none; display:inline-block;">Подписаться на канал!</a>
+        <a href="https://t.me" class="btn" style="text-decoration: none; display: inline-flex;">Подписаться на канал!</a>
     </div>
 
-    <div id="app-screen" style="display:none;">
+    <!-- ==========================================
+         APP SCREEN
+    ========================================== -->
+    <div id="app-screen" style="display: none;">
         <div id="tags-cloud-container"></div>
-        <div id="chat-container" style="display:none;"></div>
-        <button id="fab-open-input" onclick="window.expandInputArea()" style="display:none;">➤</button>
+        <div id="chat-container" style="display: none;"></div>
+        
+        <!-- FAB кнопка открытия капсулы -->
+        <button id="fab-open-input" style="display: none;">
+            <i data-lucide="chevron-up"></i>
+        </button>
+        
+        <!-- Оверлей -->
         <div id="input-overlay" class="hidden"></div>
-        <div id="input-area" style="display:none;">
+        
+        <!-- Капсула ввода -->
+        <div id="input-area" style="display: none;">
             <div style="position: relative; width: 100%; display: flex; align-items: flex-start;">
                 <textarea id="user-input" placeholder="Ваш вопрос..." rows="1"></textarea>
-                <button id="clear-input-btn" class="hidden" onclick="window.chatSend.clearUserText(event)">✕</button>
+                <button id="clear-input-btn" class="hidden" onclick="window.chatSend.clearUserText(event)">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
             <div class="input-footer-bar">
                 <div class="footer-btn-group left-group">
-                    <button class="footer-action-btn media-btn" onclick="window.triggerMediaSelector()">📎</button>
+                    <button class="footer-action-btn media-btn" onclick="window.triggerMediaSelector()">
+                        <i data-lucide="paperclip"></i>
+                    </button>
                 </div>
                 <div class="footer-btn-group right-group">
                     <span id="voice-timer" class="hidden">15s</span>
-                    <button class="footer-action-btn voice-btn" onclick="window.toggleVoiceRecording(this)">🎙️</button>
-                    <button class="footer-action-btn send-btn" onclick="window.chatSend.sendMessage()">➤</button>
+                    <button class="footer-action-btn voice-btn" onclick="window.toggleVoiceRecording(this)">
+                        <i data-lucide="mic"></i>
+                    </button>
+                    <button class="footer-action-btn send-btn" onclick="window.chatSend.sendMessage()">
+                        <i data-lucide="send"></i>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- ==========================================
+         SCRIPTS
+    ========================================== -->
+    
     <!-- Core -->
     <script src="js/core/locale.js"></script>
     <script src="js/core/config.js"></script>
+    <script src="js/core/theme-manager.js"></script>
 
     <!-- Store -->
     <script src="js/store/ChatStore.js"></script>
@@ -181,5 +264,22 @@
 
     <!-- Core App -->
     <script src="js/core/app.js"></script>
+
+    <!-- Инициализация Lucide -->
+    <script>
+        // Инициализируем иконки после загрузки DOM
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        });
+        
+        // Также инициализируем после всех скриптов
+        setTimeout(function() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }, 500);
+    </script>
 </body>
 </html>
