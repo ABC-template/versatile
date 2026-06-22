@@ -1,10 +1,10 @@
 // ============================================
 // js/modules/chat/stream.js
 // Описание: Стриминг ответов от ИИ (рабочая версия)
-// Версия: 2.0.4 (возврат к рабочему парсингу)
+// Версия: 2.0.5 (возврат к проверенному коду)
 // ============================================
 
-console.log('✅ ChatStream v2.0.4 загружен');
+console.log('✅ ChatStream v2.0.5 загружен');
 
 // Флаг для предотвращения дублирования
 let isStreaming = false;
@@ -38,6 +38,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
     let msgDiv = null;
     let accumulatedText = '';
     let isFirstChunk = true;
+    let isCompleted = false;
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -72,7 +73,9 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
             throw new Error(`Ошибка ${response.status}: ${text.substring(0, 200)}`);
         }
         
-        // ✅ ВОЗВРАЩАЕМ РАБОЧИЙ ПАРСИНГ (как в старой версии)
+        // ==========================================
+        // ✅ КЛАССИЧЕСКИЙ ПАРСИНГ SSE (РАБОТАЕТ)
+        // ==========================================
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
@@ -86,20 +89,14 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                 break;
             }
             
-            // Декодируем чанк
             buffer += decoder.decode(value, { stream: true });
-            
-            // ✅ Разбиваем по строкам (как в старой версии)
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
             
             for (const line of lines) {
                 const trimmedLine = line.trim();
                 
-                // ✅ Пропускаем пустые строки
-                if (!trimmedLine) continue;
-                
-                // ✅ Проверяем на data: префикс (SSE)
+                // ✅ Только data: префикс
                 if (trimmedLine.startsWith('data: ')) {
                     const jsonStr = trimmedLine.slice(6).trim();
                     if (jsonStr === '[DONE]') continue;
@@ -155,52 +152,11 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                         // Игнорируем невалидный JSON
                     }
                 }
-                // ✅ Если нет префикса data:, пробуем парсить как обычный текст (fallback)
-                else {
-                    // Пропускаем строки, которые не являются данными
-                    if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
-                        try {
-                            const data = JSON.parse(trimmedLine);
-                            const content = data.choices?.[0]?.delta?.content || data.content;
-                            if (content) {
-                                accumulatedText += content;
-                                
-                                if (isFirstChunk && accumulatedText.trim().length > 0) {
-                                    if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
-                                    msgDiv = document.createElement('div');
-                                    msgDiv.className = 'msg ai-msg msg-animated';
-                                    msgDiv.id = `msg-block-stream-${streamId}`;
-                                    msgDiv.setAttribute('data-sanitized', 'true');
-                                    container.appendChild(msgDiv);
-                                    isFirstChunk = false;
-                                }
-                                
-                                if (msgDiv && !isFirstChunk) {
-                                    if (typeof marked !== 'undefined') {
-                                        try {
-                                            let rawHTML = marked.parse(accumulatedText);
-                                            if (typeof DOMPurify !== 'undefined') {
-                                                rawHTML = DOMPurify.sanitize(rawHTML);
-                                            }
-                                            msgDiv.innerHTML = rawHTML;
-                                        } catch {
-                                            msgDiv.textContent = accumulatedText;
-                                        }
-                                    } else {
-                                        msgDiv.textContent = accumulatedText;
-                                    }
-                                    container.scrollTop = container.scrollHeight;
-                                }
-                            }
-                        } catch (e) {
-                            // Игнорируем
-                        }
-                    }
-                }
             }
         }
         
-        // ✅ Финализируем сообщение
+        isCompleted = true;
+        
         if (accumulatedText.trim().length > 0) {
             if (msgDiv) {
                 finalizeStreamMessage(msgDiv, accumulatedText, activeChat, streamId);
@@ -225,7 +181,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
         console.error('❌ Критический сбой стрима:', err);
         if (uiRenderer.hideSkeleton) uiRenderer.hideSkeleton();
         
-        if (msgDiv && accumulatedText.trim().length > 0) {
+        if (msgDiv && accumulatedText.trim().length > 0 && !isCompleted) {
             const disconnectNotice = `${accumulatedText}\n\n[⚠️ Соединение разорвано]`;
             if (typeof marked !== 'undefined') {
                 try {
@@ -242,7 +198,7 @@ window.streamAiResponse = async function(historyMessages, topic, userLang, attac
                 msgDiv.textContent = disconnectNotice;
             }
             finalizeStreamMessage(msgDiv, disconnectNotice, activeChat, streamId);
-        } else {
+        } else if (!isCompleted) {
             if (uiRenderer.renderMessage) {
                 uiRenderer.renderMessage(`⚠️ Ошибка: ${err.message || 'Неизвестная ошибка'}`, 'ai-msg');
             }
@@ -414,4 +370,4 @@ window.toggleFavoriteMsg = async function(btn, msgId) {
     }
 };
 
-console.log('✅ ChatStream v2.0.4 загружен');
+console.log('✅ ChatStream v2.0.5 загружен');
