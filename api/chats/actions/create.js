@@ -1,15 +1,12 @@
 // ============================================
 // api/chats/actions/create.js
 // Описание: Создание нового чата
-// ✅ ИСПРАВЛЕНО: пути для импортов (абсолютные пути)
-// ✅ ИСПРАВЛЕНО: улучшена обработка ошибок и логирование
 // ============================================
 
-// ✅ ИСПРАВЛЕНО: используем абсолютные пути от корня api/
-import { authenticate } from '/api/_lib/auth.js';
-import { corsHeaders, handleCORS, jsonResponse, errorResponse } from '/api/_lib/cors.js';
-import { getSupabaseConfig, supabaseFetch, canUserSync } from '/api/_lib/supabase-client.js';
-import { isValidUUID, isValidTopic, validateTopic, validateUserId } from '/api/_lib/validators.js';
+import { authenticate } from '../../_lib/auth.js';
+import { corsHeaders, handleCORS, jsonResponse, errorResponse } from '../../_lib/cors.js';
+import { getSupabaseConfig, supabaseFetch } from '../../_lib/supabase-client.js';
+import { isValidUUID, isValidTopic, validateTopic, validateUserId } from '../../_lib/validators.js';
 
 export const config = { runtime: 'edge' };
 
@@ -30,11 +27,23 @@ async function createChat(userId, chatData, config) {
         
         validateTopic(topic);
         
-        console.log(`📤 Создание чата: userId=${userId}, chatId=${chatId}, topic=${topic}`);
-        
         // Проверяем права на синхронизацию
-        const syncAllowed = await canUserSync(userId, config);
-        console.log(`📤 syncAllowed=${syncAllowed}`);
+        const canSync = await supabaseFetch(
+            `users?telegram_id=eq.${userId}&select=role,premium_until`,
+            { method: 'GET' },
+            config,
+            'service'
+        );
+        
+        let syncAllowed = false;
+        if (canSync && Array.isArray(canSync) && canSync.length > 0) {
+            const user = canSync[0];
+            if (['admin', 'creator'].includes(user.role)) {
+                syncAllowed = true;
+            } else if (user.role === 'premium' && user.premium_until && new Date(user.premium_until) > new Date()) {
+                syncAllowed = true;
+            }
+        }
         
         if (!syncAllowed) {
             return {
@@ -43,46 +52,7 @@ async function createChat(userId, chatData, config) {
             };
         }
         
-        // Проверяем, не существует ли уже чат с таким ID
-        const existingCheck = await supabaseFetch(
-            `chats?id=eq.${chatId}&select=id`,
-            { method: 'GET' },
-            config,
-            'service'
-        );
-        
-        if (existingCheck && Array.isArray(existingCheck) && existingCheck.length > 0) {
-            console.log(`⚠️ Чат ${chatId} уже существует, обновляем...`);
-            
-            // Обновляем существующий чат
-            await supabaseFetch(
-                `chats?id=eq.${chatId}`,
-                {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                        user_id: userId,
-                        topic_id: topic,
-                        title: title,
-                        max_context: maxContext,
-                        user_renamed: userRenamed,
-                        deleted_at: null,
-                        updated_at: new Date().toISOString()
-                    })
-                },
-                config,
-                'service'
-            );
-            
-            return {
-                success: true,
-                chatId: chatId,
-                error: null
-            };
-        }
-        
         // Создаем чат
-        console.log(`📤 Создаем новый чат ${chatId}`);
-        
         const result = await supabaseFetch(
             'chats',
             {
@@ -100,39 +70,24 @@ async function createChat(userId, chatData, config) {
             'service'
         );
         
-        console.log(`📤 Результат создания чата:`, JSON.stringify(result));
-        
-        // Проверяем, что результат содержит ID созданного чата
-        if (!result || typeof result !== 'object') {
-            console.error('Create chat failed: invalid result', result);
+        if (!result || typeof result !== 'object' || !result.id) {
+            console.error('Create chat failed:', result);
             return {
                 success: false,
-                error: 'Не удалось создать чат в облаке: пустой ответ'
-            };
-        }
-        
-        // В некоторых случаях Supabase возвращает массив
-        const createdId = Array.isArray(result) ? (result[0]?.id || chatId) : (result.id || chatId);
-        
-        if (!createdId) {
-            console.error('Create chat failed: no ID in result', result);
-            return {
-                success: false,
-                error: 'Не удалось создать чат в облаке: нет ID'
+                error: 'Не удалось создать чат в облаке'
             };
         }
         
         return {
             success: true,
-            chatId: createdId,
+            chatId: chatId,
             error: null
         };
     } catch (err) {
         console.error('Create chat error:', err.message);
-        console.error('Create chat stack:', err.stack);
         return {
             success: false,
-            error: err.message || 'Unknown error creating chat'
+            error: err.message
         };
     }
 }
@@ -161,56 +116,28 @@ async function createChatWithMessage(userId, chatData, messageData, config) {
             const msgId = messageData.id || crypto.randomUUID();
             const msgType = messageData.type || 'user-msg';
             
-            console.log(`📤 Создаем сообщение ${msgId} в чате ${chatId}`);
-            
-            // Проверяем, не существует ли уже сообщение
-            const existingMsg = await supabaseFetch(
-                `messages?id=eq.${msgId}&select=id`,
-                { method: 'GET' },
+            const result = await supabaseFetch(
+                'messages',
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        id: msgId,
+                        chat_id: chatId,
+                        msg_type: msgType,
+                        text: messageData.text,
+                        is_favorite: messageData.is_favorite || false,
+                    })
+                },
                 config,
                 'service'
             );
             
-            if (existingMsg && Array.isArray(existingMsg) && existingMsg.length > 0) {
-                console.log(`⚠️ Сообщение ${msgId} уже существует, обновляем...`);
-                
-                await supabaseFetch(
-                    `messages?id=eq.${msgId}`,
-                    {
-                        method: 'PATCH',
-                        body: JSON.stringify({
-                            chat_id: chatId,
-                            msg_type: msgType,
-                            text: messageData.text,
-                            is_favorite: messageData.is_favorite || false,
-                            deleted_at: null,
-                            updated_at: new Date().toISOString()
-                        })
-                    },
-                    config,
-                    'service'
-                );
+            if (result && typeof result === 'object' && result.id) {
+                messageId = msgId;
             } else {
-                const result = await supabaseFetch(
-                    'messages',
-                    {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            id: msgId,
-                            chat_id: chatId,
-                            msg_type: msgType,
-                            text: messageData.text,
-                            is_favorite: messageData.is_favorite || false,
-                        })
-                    },
-                    config,
-                    'service'
-                );
-                
-                console.log(`📤 Результат создания сообщения:`, JSON.stringify(result));
+                console.warn('Message created but response invalid:', result);
+                messageId = msgId;
             }
-            
-            messageId = msgId;
         }
         
         return {
@@ -221,10 +148,9 @@ async function createChatWithMessage(userId, chatData, messageData, config) {
         };
     } catch (err) {
         console.error('Create chat with message error:', err.message);
-        console.error('Create chat with message stack:', err.stack);
         return {
             success: false,
-            error: err.message || 'Unknown error creating chat with message'
+            error: err.message
         };
     }
 }
@@ -240,38 +166,29 @@ export default async function handler(request) {
     try {
         const auth = await authenticate(request);
         if (auth.error) {
-            console.error('Auth error:', auth.error);
             return errorResponse(auth.error, auth.status || 401);
         }
         
         const userId = auth.userId;
-        console.log(`📤 handler: userId=${userId}`);
-        
         const config = getSupabaseConfig('service');
         
         let body;
         try {
             body = await request.json();
         } catch (err) {
-            console.error('JSON parse error:', err);
             return errorResponse('Invalid JSON body', 400);
         }
         
-        console.log(`📤 body:`, JSON.stringify(body));
-        
         const { chat, firstMessage, action } = body;
         
-        // Проверяем обязательные поля
         if (!chat) {
             return errorResponse('Missing chat data', 400);
         }
         
-        // Проверяем топик
         if (chat.topic_id && !isValidTopic(chat.topic_id)) {
             return errorResponse(`Invalid topic: ${chat.topic_id}`, 400);
         }
         
-        // Создаем чат
         const result = await createChatWithMessage(
             userId,
             chat,
@@ -279,10 +196,8 @@ export default async function handler(request) {
             config
         );
         
-        console.log(`📤 Результат:`, JSON.stringify(result));
-        
         if (!result.success) {
-            return errorResponse(result.error || 'Failed to create chat', 400);
+            return errorResponse(result.error, 400);
         }
         
         return jsonResponse({
@@ -293,7 +208,6 @@ export default async function handler(request) {
         
     } catch (err) {
         console.error('Create chat handler error:', err.message);
-        console.error('Create chat handler stack:', err.stack);
-        return errorResponse(err.message || 'Internal server error', 500);
+        return errorResponse(err.message, 500);
     }
 }
