@@ -1,25 +1,29 @@
 /* ============================================
    style.css - Versatile AI v3.0
-   СВОБОДНАЯ ВЕРСИЯ - читаемая и рабочая
+   Полный редизайн с поддержкой AMOLED/Светлой тем
    ============================================ */
 
 /* ==========================================
-   ПЕРЕМЕННЫЕ
+   БАЗОВЫЕ ПЕРЕМЕННЫЕ
    ========================================== */
 
 :root {
-    /* Светлая тема */
+    /* ---------- СВЕТЛАЯ ТЕМА (по умолчанию) ---------- */
+    
+    /* Фоны */
     --app-bg-primary: #F8F9FA;
     --app-bg-secondary: #FFFFFF;
     --app-bg-tertiary: #F1F3F5;
     --app-bg-input: #FFFFFF;
     --app-bg-hover: rgba(0, 0, 0, 0.04);
     
+    /* Текст */
     --app-text-primary: #1A1A2E;
     --app-text-secondary: #4A4A5A;
     --app-text-tertiary: #8A8A9E;
     --app-text-inverse: #FFFFFF;
     
+    /* Акценты */
     --app-accent-primary: #6C63FF;
     --app-accent-secondary: #00D4FF;
     --app-accent-success: #2ECC71;
@@ -27,24 +31,31 @@
     --app-accent-danger: #E74C3C;
     --app-accent-glow: rgba(108, 99, 255, 0.15);
     
+    /* Градиенты */
     --app-gradient-primary: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
+    --app-gradient-primary-reverse: linear-gradient(135deg, #00D4FF 0%, #6C63FF 100%);
     --app-gradient-message: linear-gradient(135deg, #6C63FF 0%, #8B7FFF 100%);
     --app-gradient-ai-msg: linear-gradient(135deg, rgba(108, 99, 255, 0.05) 0%, rgba(0, 212, 255, 0.05) 100%);
+    --app-gradient-card: linear-gradient(135deg, rgba(108, 99, 255, 0.02) 0%, rgba(0, 212, 255, 0.02) 100%);
+    --app-gradient-header: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
     
+    /* Границы и тени */
     --app-border-color: rgba(0, 0, 0, 0.06);
     --app-border-color-light: rgba(0, 0, 0, 0.03);
-    
+    --app-border-color-active: rgba(108, 99, 255, 0.3);
     --app-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
     --app-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.08);
     --app-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.12);
     --app-shadow-glow: 0 0 30px rgba(108, 99, 255, 0.2);
     
+    /* Скругления */
     --app-radius-sm: 8px;
     --app-radius-md: 12px;
     --app-radius-lg: 16px;
     --app-radius-xl: 24px;
     --app-radius-full: 50%;
     
+    /* Отступы */
     --app-spacing-xs: 4px;
     --app-spacing-sm: 8px;
     --app-spacing-md: 12px;
@@ -53,6 +64,7 @@
     --app-spacing-2xl: 24px;
     --app-spacing-3xl: 32px;
     
+    /* Шрифты */
     --app-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
     --app-font-size-xs: 11px;
     --app-font-size-sm: 12px;
@@ -62,74 +74,93 @@
     --app-font-size-2xl: 22px;
     --app-font-size-3xl: 28px;
     
+    /* Прозрачности */
+    --app-opacity-disabled: 0.4;
+    --app-opacity-hint: 0.6;
+    
+    /* Анимации */
     --app-transition-fast: 0.15s ease;
     --app-transition-medium: 0.25s ease;
     --app-transition-slow: 0.4s ease;
     
-    /* Z-индексы - все элементы на своих местах */
-    --z-base: 1;
-    --z-header: 10;
-    --z-fab: 50;
-    --z-overlay: 100;
-    --z-input: 200;
-    --z-modal: 1000;
-    --z-max: 9999;
+    /* Z-индексы */
+    --app-z-overlay: 1000;
+    --app-z-modal: 2000;
+    --app-z-input: 1005;
+    --app-z-fab: 97;
+    --app-z-header: 50;
 }
 
-/* AMOLED тема */
+/* ---------- AMOLED ТЕМА (черная) ---------- */
 body[data-theme="amoled"] {
+    /* Фоны */
     --app-bg-primary: #000000;
     --app-bg-secondary: #0A0A0A;
     --app-bg-tertiary: #141414;
     --app-bg-input: #1A1A1A;
     --app-bg-hover: rgba(255, 255, 255, 0.06);
     
+    /* Текст */
     --app-text-primary: #FFFFFF;
     --app-text-secondary: #C0C0C8;
     --app-text-tertiary: #80808C;
     --app-text-inverse: #1A1A2E;
     
+    /* Акценты (чуть ярче для контраста) */
     --app-accent-primary: #7C73FF;
     --app-accent-secondary: #33D9FF;
     --app-accent-glow: rgba(124, 115, 255, 0.25);
     
+    /* Градиенты */
     --app-gradient-primary: linear-gradient(135deg, #7C73FF 0%, #33D9FF 100%);
+    --app-gradient-primary-reverse: linear-gradient(135deg, #33D9FF 0%, #7C73FF 100%);
     --app-gradient-message: linear-gradient(135deg, #7C73FF 0%, #9B8FFF 100%);
     --app-gradient-ai-msg: linear-gradient(135deg, rgba(124, 115, 255, 0.08) 0%, rgba(51, 217, 255, 0.08) 100%);
+    --app-gradient-card: linear-gradient(135deg, rgba(124, 115, 255, 0.04) 0%, rgba(51, 217, 255, 0.04) 100%);
+    --app-gradient-header: linear-gradient(135deg, #7C73FF 0%, #33D9FF 100%);
     
+    /* Границы и тени (светящиеся) */
     --app-border-color: rgba(255, 255, 255, 0.08);
     --app-border-color-light: rgba(255, 255, 255, 0.04);
-    
+    --app-border-color-active: rgba(124, 115, 255, 0.4);
     --app-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.6);
     --app-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.8);
     --app-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.9);
     --app-shadow-glow: 0 0 40px rgba(124, 115, 255, 0.3);
 }
 
-/* Темная тема */
+/* ---------- ТЕМНАЯ ТЕМА (dark, не AMOLED) ---------- */
 body[data-theme="dark"] {
+    /* Фоны - глубокий серый */
     --app-bg-primary: #121212;
     --app-bg-secondary: #1E1E1E;
     --app-bg-tertiary: #2A2A2A;
     --app-bg-input: #2A2A2A;
     --app-bg-hover: rgba(255, 255, 255, 0.05);
     
+    /* Текст */
     --app-text-primary: #E8E8E8;
     --app-text-secondary: #B0B0B8;
     --app-text-tertiary: #70707C;
     --app-text-inverse: #FFFFFF;
     
+    /* Акценты */
     --app-accent-primary: #6C63FF;
     --app-accent-secondary: #00D4FF;
     --app-accent-glow: rgba(108, 99, 255, 0.15);
     
+    /* Градиенты */
     --app-gradient-primary: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
+    --app-gradient-primary-reverse: linear-gradient(135deg, #00D4FF 0%, #6C63FF 100%);
     --app-gradient-message: linear-gradient(135deg, #6C63FF 0%, #8B7FFF 100%);
     --app-gradient-ai-msg: linear-gradient(135deg, rgba(108, 99, 255, 0.06) 0%, rgba(0, 212, 255, 0.06) 100%);
+    --app-gradient-card: linear-gradient(135deg, rgba(108, 99, 255, 0.03) 0%, rgba(0, 212, 255, 0.03) 100%);
+    --app-gradient-header: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
     
+    /* Границы и тени */
     --app-border-color: rgba(255, 255, 255, 0.06);
     --app-border-color-light: rgba(255, 255, 255, 0.03);
-    
+    --app-border-color-active: rgba(108, 99, 255, 0.3);
     --app-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
     --app-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.6);
     --app-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.8);
@@ -147,8 +178,7 @@ body[data-theme="dark"] {
     -webkit-tap-highlight-color: transparent;
 }
 
-html,
-body {
+html, body {
     height: 100dvh;
     overflow: hidden;
     width: 100vw;
@@ -161,7 +191,6 @@ body {
     transition: background var(--app-transition-medium), color var(--app-transition-medium);
     display: flex;
     flex-direction: column;
-    position: relative;
 }
 
 /* ==========================================
@@ -188,7 +217,7 @@ body {
 }
 
 /* ==========================================
-   ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ
+   ОБЩИЕ КЛАССЫ
    ========================================== */
 
 .hidden {
@@ -209,7 +238,9 @@ body {
     flex-shrink: 0;
     width: 100%;
     position: relative;
-    z-index: var(--z-header);
+    z-index: var(--app-z-header);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 #header::after {
@@ -250,7 +281,6 @@ body {
     display: flex;
     align-items: center;
     gap: var(--app-spacing-sm);
-    flex-shrink: 0;
 }
 
 #header-navigation .action-btn {
@@ -262,11 +292,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: var(--app-font-size-lg);
     cursor: pointer;
     transition: all var(--app-transition-fast);
     color: var(--app-text-secondary);
     position: relative;
-    padding: 0;
 }
 
 #header-navigation .action-btn:active {
@@ -278,7 +308,6 @@ body {
     width: 18px;
     height: 18px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 #user-avatar {
@@ -340,7 +369,7 @@ body {
 }
 
 /* ==========================================
-   TAGS CLOUD
+   TAGS CLOUD (Облако тегов)
    ========================================== */
 
 #tags-cloud-container {
@@ -399,8 +428,7 @@ body {
     border: 2px solid var(--app-border-color-light);
     box-shadow: var(--app-shadow-sm);
     user-select: none;
-    position: relative;
-    z-index: var(--z-base);
+    -webkit-tap-highlight-color: transparent;
 }
 
 .tag-chip:active {
@@ -445,8 +473,6 @@ body {
     gap: var(--app-spacing-md);
     min-height: 0;
     -webkit-overflow-scrolling: touch;
-    position: relative;
-    z-index: var(--z-base);
 }
 
 #chat-container.visible {
@@ -469,6 +495,7 @@ body {
     animation: fadeInUp 0.25s cubic-bezier(0.1, 0.8, 0.25, 1);
 }
 
+/* Сообщение пользователя */
 .user-msg {
     align-self: flex-end;
     background: var(--app-gradient-message);
@@ -477,6 +504,7 @@ body {
     box-shadow: var(--app-shadow-sm);
 }
 
+/* Сообщение AI */
 .ai-msg {
     align-self: flex-start;
     background: var(--app-gradient-ai-msg);
@@ -488,11 +516,16 @@ body {
     border-left: 3px solid var(--app-accent-primary);
 }
 
+/* Приветственное сообщение */
 .welcome-msg {
     opacity: 0.7;
     font-style: italic;
     border-left-color: var(--app-accent-secondary);
 }
+
+/* ==========================================
+   ДЕЙСТВИЯ НАД СООБЩЕНИЯМИ
+   ========================================== */
 
 .msg-actions {
     display: flex;
@@ -525,7 +558,6 @@ body {
     width: 16px;
     height: 16px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 .action-btn:active {
@@ -596,6 +628,7 @@ body {
     padding: 0;
 }
 
+/* Кнопка копирования кода */
 .code-copy-btn {
     position: absolute;
     bottom: var(--app-spacing-sm);
@@ -617,6 +650,7 @@ body {
     transform: scale(0.95);
 }
 
+/* Таблицы */
 .ai-msg .table-wrapper {
     width: 100%;
     overflow-x: auto;
@@ -676,35 +710,27 @@ body {
 .skeleton-line {
     height: 12px;
     border-radius: 6px;
-    background: linear-gradient(90deg, var(--app-bg-tertiary) 25%, var(--app-bg-hover) 37%, var(--app-bg-tertiary) 63%);
+    background: linear-gradient(90deg, 
+        var(--app-bg-tertiary) 25%, 
+        var(--app-bg-hover) 37%, 
+        var(--app-bg-tertiary) 63%
+    );
     background-size: 200% 100%;
     animation: shimmer 1.4s infinite linear;
     display: block;
 }
 
 @keyframes shimmer {
-    0% {
-        background-position: -200% 0;
-    }
-    100% {
-        background-position: 200% 0;
-    }
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 
-.skeleton-line:nth-child(1) {
-    width: 85%;
-}
-
-.skeleton-line:nth-child(2) {
-    width: 95%;
-}
-
-.skeleton-line:nth-child(3) {
-    width: 60%;
-}
+.skeleton-line:nth-child(1) { width: 85%; }
+.skeleton-line:nth-child(2) { width: 95%; }
+.skeleton-line:nth-child(3) { width: 60%; }
 
 /* ==========================================
-   PROFILE CARD
+   PROFILE CARD (Модальное окно профиля)
    ========================================== */
 
 #profile-card {
@@ -716,16 +742,12 @@ body {
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    z-index: var(--z-modal);
+    z-index: var(--app-z-modal);
     display: flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
     animation: fadeIn 0.25s ease;
-}
-
-#profile-card.hidden {
-    display: none !important;
 }
 
 .profile-content {
@@ -759,6 +781,10 @@ body {
     width: 0px;
 }
 
+/* ==========================================
+   ВКЛАДКИ ПРОФИЛЯ
+   ========================================== */
+
 .modal-sticky-header {
     position: sticky;
     top: 0;
@@ -790,7 +816,7 @@ body {
 }
 
 /* ==========================================
-   DYNAMIC KEY AREA
+   DYNAMIC KEY AREA (нижняя часть профиля)
    ========================================== */
 
 #dynamic-key-area {
@@ -819,7 +845,7 @@ body {
 }
 
 /* ==========================================
-   HISTORY CHATS LIST
+   ИСТОРИЯ ЧАТОВ
    ========================================== */
 
 #history-chats-list {
@@ -844,8 +870,6 @@ body {
     cursor: pointer;
     border: 2px solid transparent;
     transition: all var(--app-transition-medium);
-    position: relative;
-    z-index: var(--z-base);
 }
 
 .chat-history-item:active {
@@ -878,15 +902,12 @@ body {
     border-radius: var(--app-radius-sm);
     transition: all var(--app-transition-fast);
     color: var(--app-text-secondary);
-    position: relative;
-    z-index: var(--z-base);
 }
 
 .delete-chat-btn .lucide {
     width: 16px;
     height: 16px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 .delete-chat-btn:active {
@@ -895,7 +916,7 @@ body {
 }
 
 /* ==========================================
-   CHAT FILTERS
+   ФИЛЬТРЫ ЧАТОВ
    ========================================== */
 
 #chat-filters {
@@ -918,6 +939,7 @@ body {
     cursor: pointer;
     transition: all var(--app-transition-fast);
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .filter-chip:active {
@@ -932,7 +954,7 @@ body {
 }
 
 /* ==========================================
-   BUTTONS
+   КНОПКИ
    ========================================== */
 
 .btn {
@@ -946,18 +968,16 @@ body {
     cursor: pointer;
     transition: all var(--app-transition-fast);
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
     display: inline-flex;
     align-items: center;
     gap: var(--app-spacing-sm);
-    position: relative;
-    z-index: var(--z-base);
 }
 
 .btn .lucide {
     width: 18px;
     height: 18px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 .btn:active {
@@ -976,7 +996,7 @@ body {
 }
 
 /* ==========================================
-   CONTEXT SLIDER
+   CONTEXT SLIDER (Память чата)
    ========================================== */
 
 #context-slider {
@@ -1017,11 +1037,11 @@ body {
 }
 
 #context-slider:disabled {
-    opacity: 0.4;
+    opacity: var(--app-opacity-disabled);
 }
 
 /* ==========================================
-   FAB BUTTON
+   FAB КНОПКА (открыть капсулу ввода)
    ========================================== */
 
 #fab-open-input {
@@ -1041,16 +1061,16 @@ body {
     font-size: var(--app-font-size-xl);
     box-shadow: var(--app-shadow-glow);
     cursor: pointer;
-    z-index: var(--z-fab);
+    z-index: var(--app-z-fab);
     transition: all var(--app-transition-medium);
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 #fab-open-input .lucide {
     width: 24px;
     height: 24px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 #fab-open-input:active {
@@ -1058,7 +1078,7 @@ body {
 }
 
 /* ==========================================
-   INPUT OVERLAY - НЕ ПЕРЕКРЫВАЕТ КЛИКИ!
+   INPUT OVERLAY (затемнение при открытой капсуле)
    ========================================== */
 
 #input-overlay {
@@ -1070,18 +1090,17 @@ body {
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    z-index: var(--z-overlay);
+    z-index: var(--app-z-overlay);
     transition: opacity var(--app-transition-medium);
-    pointer-events: none !important;
 }
 
 #input-overlay.hidden {
     opacity: 0;
-    display: none !important;
+    pointer-events: none;
 }
 
 /* ==========================================
-   INPUT AREA
+   INPUT AREA (Капсула ввода)
    ========================================== */
 
 #input-area {
@@ -1100,7 +1119,7 @@ body {
     flex-direction: column;
     gap: var(--app-spacing-sm);
     box-sizing: border-box;
-    z-index: var(--z-input);
+    z-index: var(--app-z-input);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -1117,6 +1136,8 @@ body {
 
 #input-area .input-footer-bar {
     display: flex;
+    visibility: visible;
+    opacity: 1;
     justify-content: space-between;
     align-items: center;
     width: 100%;
@@ -1126,6 +1147,8 @@ body {
 
 #input-area .footer-btn-group {
     display: flex;
+    visibility: visible;
+    opacity: 1;
     align-items: center;
     height: 34px;
 }
@@ -1138,6 +1161,9 @@ body {
 
 #input-area .footer-action-btn {
     display: inline-flex;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
     width: 34px;
     min-width: 34px;
     height: 34px;
@@ -1160,7 +1186,6 @@ body {
     width: 18px;
     height: 18px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 #input-area .footer-action-btn:active {
@@ -1180,7 +1205,7 @@ body {
 }
 
 /* ==========================================
-   USER INPUT
+   USER INPUT (текстовое поле)
    ========================================== */
 
 #user-input {
@@ -1207,8 +1232,12 @@ body {
 }
 
 #user-input:disabled {
-    opacity: 0.4;
+    opacity: var(--app-opacity-disabled);
 }
+
+/* ==========================================
+   CLEAR INPUT BUTTON
+   ========================================== */
 
 #clear-input-btn {
     position: absolute;
@@ -1234,12 +1263,15 @@ body {
     width: 16px;
     height: 16px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 #clear-input-btn:active {
     opacity: 1;
 }
+
+/* ==========================================
+   VOICE TIMER
+   ========================================== */
 
 #voice-timer {
     font-size: var(--app-font-size-sm);
@@ -1250,7 +1282,7 @@ body {
 }
 
 /* ==========================================
-   TRASH MODAL
+   TRASH MODAL (Корзина)
    ========================================== */
 
 #trash-modal {
@@ -1262,7 +1294,7 @@ body {
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    z-index: var(--z-modal);
+    z-index: var(--app-z-modal);
     display: none;
     align-items: center;
     justify-content: center;
@@ -1275,7 +1307,7 @@ body {
     display: flex;
 }
 
-#trash-modal>div {
+#trash-modal > div {
     background: var(--app-bg-secondary);
     border-radius: var(--app-radius-xl);
     padding: var(--app-spacing-xl);
@@ -1338,6 +1370,10 @@ body {
 #trash-actions.active {
     display: block;
 }
+
+/* ==========================================
+   TRASH COUNT BADGE
+   ========================================== */
 
 #trash-count {
     font-size: var(--app-font-size-xs);
@@ -1409,6 +1445,7 @@ body {
     cursor: pointer;
     transition: all var(--app-transition-medium);
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1419,7 +1456,6 @@ body {
     width: 18px;
     height: 18px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 .theme-selector-btn:active {
@@ -1473,7 +1509,6 @@ body {
     width: 16px;
     height: 16px;
     stroke: currentColor;
-    pointer-events: none;
 }
 
 /* ==========================================
@@ -1481,20 +1516,16 @@ body {
    ========================================== */
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes slideUp {
-    from {
+    from { 
         opacity: 0;
         transform: translateY(30px) scale(0.95);
     }
-    to {
+    to { 
         opacity: 1;
         transform: translateY(0) scale(1);
     }
@@ -1527,7 +1558,7 @@ body {
 }
 
 /* ==========================================
-   АДАПТИВ
+   RESPONSIVE FIXES
    ========================================== */
 
 @media (max-width: 480px) {
@@ -1576,7 +1607,7 @@ body {
 }
 
 /* ==========================================
-   УТИЛИТЫ
+   UTILITY CLASSES
    ========================================== */
 
 .text-gradient {
@@ -1596,38 +1627,14 @@ body {
     justify-content: center;
 }
 
-.gap-sm {
-    gap: var(--app-spacing-sm);
-}
+.gap-sm { gap: var(--app-spacing-sm); }
+.gap-md { gap: var(--app-spacing-md); }
+.gap-lg { gap: var(--app-spacing-lg); }
 
-.gap-md {
-    gap: var(--app-spacing-md);
-}
+.mt-sm { margin-top: var(--app-spacing-sm); }
+.mt-md { margin-top: var(--app-spacing-md); }
+.mt-lg { margin-top: var(--app-spacing-lg); }
 
-.gap-lg {
-    gap: var(--app-spacing-lg);
-}
-
-.mt-sm {
-    margin-top: var(--app-spacing-sm);
-}
-
-.mt-md {
-    margin-top: var(--app-spacing-md);
-}
-
-.mt-lg {
-    margin-top: var(--app-spacing-lg);
-}
-
-.mb-sm {
-    margin-bottom: var(--app-spacing-sm);
-}
-
-.mb-md {
-    margin-bottom: var(--app-spacing-md);
-}
-
-.mb-lg {
-    margin-bottom: var(--app-spacing-lg);
-}
+.mb-sm { margin-bottom: var(--app-spacing-sm); }
+.mb-md { margin-bottom: var(--app-spacing-md); }
+.mb-lg { margin-bottom: var(--app-spacing-lg); }
