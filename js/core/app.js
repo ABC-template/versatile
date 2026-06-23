@@ -1,15 +1,12 @@
 // ============================================
 // js/core/app.js
 // Описание: Инициализация приложения
-// Версия: 3.0.0 (с интеграцией тем и иконок)
+// Версия: 3.0.0
 // ============================================
 
 console.log('🚀 App v3.0 начал загрузку');
 
-// ==========================================
-// ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОФЛАЙН-РЕЖИМА
-// ==========================================
-
+// Глобальные функции для офлайн-режима
 let offlineBanner = null;
 
 function showOfflineBanner(message = 'Нет интернета. Просмотр доступен, изменения невозможны.') {
@@ -65,28 +62,12 @@ function hideOfflineBanner() {
     }, 300);
 }
 
-function checkOnline() {
-    if (!navigator.onLine) {
-        showOfflineBanner();
-        return false;
-    }
-    hideOfflineBanner();
-    return true;
-}
-
-// ==========================================
-// ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ
-// ==========================================
-
 async function initApp() {
     console.log('🔧 Начало инициализации приложения...');
     
     const tg = window.Telegram?.WebApp;
 
-    // ==========================================
-    // 1. НАСТРОЙКА TELEGRAM
-    // ==========================================
-    
+    // Настройка Telegram
     if (tg) {
         try {
             tg.ready();
@@ -94,16 +75,12 @@ async function initApp() {
             if (tg.themeParams && tg.themeParams.bg_color) {
                 tg.setHeaderColor(tg.themeParams.bg_color);
             }
-            console.log('✅ Telegram WebApp инициализирован');
         } catch (e) {
             console.error('Ошибка активации Telegram SDK:', e);
         }
     }
 
-    // ==========================================
-    // 2. НАСТРОЙКА INSETS (БЕЗОПАСНЫЕ ЗОНЫ)
-    // ==========================================
-    
+    // Insets
     function setTelegramInsets() {
         const root = document.documentElement;
         try {
@@ -138,10 +115,7 @@ async function initApp() {
     setTimeout(setTelegramInsets, 150);
     setTimeout(setTelegramInsets, 450);
 
-    // ==========================================
-    // 3. ЗАГРУЗКА ПОЛЬЗОВАТЕЛЯ
-    // ==========================================
-    
+    // Пользователь
     const user = tg?.initDataUnsafe?.user;
     const userStore = window.userStore;
     const chatStore = window.chatStore;
@@ -155,14 +129,9 @@ async function initApp() {
         if (userAvatarEl) userAvatarEl.src = avatarUrl;
         if (cardAvatarEl) cardAvatarEl.src = avatarUrl;
         if (userNameEl) userNameEl.innerText = user.first_name + (user.last_name ? ' ' + user.last_name : '');
-        
-        console.log(`👤 Пользователь: ${user.first_name} (${user.id})`);
     }
 
-    // ==========================================
-    // 4. ЗАГРУЗКА ДАННЫХ ИЗ ХРАНИЛИЩА
-    // ==========================================
-    
+    // Загрузка данных
     chatStore.loadFromStorage();
     userStore.loadFromStorage();
 
@@ -178,13 +147,9 @@ async function initApp() {
         }
     }
 
-    // ==========================================
-    // 5. АВТОРИЗАЦИЯ
-    // ==========================================
-    
+    // Авторизация
     const uid = user?.id;
     if (!uid) {
-        console.warn('⚠️ User ID не найден, работа в гостевом режиме');
         const limitInfoEl = document.getElementById('limit-info');
         if (limitInfoEl) limitInfoEl.textContent = 'Ошибка: ID не найден';
         const appScreen = document.getElementById('app-screen');
@@ -197,94 +162,72 @@ async function initApp() {
 
     // Проверяем подписку
     if (window.authService) {
-        try {
-            const result = await window.authService.checkSubscription();
-            console.log(`📊 Результат проверки подписки:`, result);
+        const result = await window.authService.checkSubscription();
 
-            if (result.isMember || result.role === 'admin' || result.role === 'creator') {
-                console.log(`👤 Пользователь авторизован: ${result.role}`);
+        if (result.isMember || result.role === 'admin' || result.role === 'creator') {
+            console.log(`👤 Пользователь авторизован: ${result.role}`);
 
-                if (window.chatUI) {
-                    window.chatUI.showChatInterface();
-                }
-
-                // Регистрация устройства (только для PRO)
-                if (result.syncEnabled) {
-                    console.log('🔄 Синхронизация включена (PRO)');
-
-                    if (window.deviceService) {
-                        await window.deviceService.register();
-                    }
-
-                    if (window.initExportButtons) {
-                        window.initExportButtons();
-                    }
-                }
-
-                if (window.chatUI) {
-                    setTimeout(() => window.chatUI.cleanupTempChats(), 5000);
-                }
-
-            } else {
-                console.warn('⚠️ Пользователь не имеет доступа');
-                if (window.showGuest) {
-                    window.showGuest({
-                        msg: '403',
-                        joke: 'Для доступа к ИИ необходимо подписаться на канал!'
-                    });
-                }
-            }
-        } catch (err) {
-            console.error('❌ Ошибка проверки подписки:', err);
-            // Продолжаем работу в офлайн-режиме
             if (window.chatUI) {
                 window.chatUI.showChatInterface();
             }
+
+            if (result.syncEnabled) {
+                console.log('🔄 Синхронизация включена (PRO)');
+
+                if (window.deviceService) {
+                    await window.deviceService.register();
+                }
+
+                if (window.initExportButtons) {
+                    window.initExportButtons();
+                }
+            }
+
+            if (window.chatUI) {
+                setTimeout(() => window.chatUI.cleanupTempChats(), 5000);
+            }
+
+        } else {
+            if (window.showGuest) {
+                window.showGuest({
+                    msg: '403',
+                    joke: 'Для доступа к ИИ необходимо подписаться на канал!'
+                });
+            }
         }
     } else {
-        console.warn('⚠️ AuthService не найден, работа в офлайн-режиме');
+        console.warn('AuthService не найден, работа в офлайн-режиме');
         if (window.chatUI) {
             window.chatUI.showChatInterface();
         }
     }
 
-    // ==========================================
-    // 6. PUSH-УВЕДОМЛЕНИЯ
-    // ==========================================
-    
+    // Push-уведомления
     if (tg) {
-        try {
-            tg.onEvent('message', async (message) => {
-                console.log('📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:', message);
+        tg.onEvent('message', async (message) => {
+            console.log('📨 ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ БОТА:', message);
 
-                if (message.text === '🔄' && window.userStore?.canSync()) {
-                    console.log('✅ СИГНАЛ ОБНОВЛЕНИЯ РАСПОЗНАН!');
+            if (message.text === '🔄' && window.userStore?.canSync()) {
+                console.log('✅ СИГНАЛ ОБНОВЛЕНИЯ РАСПОЗНАН!');
 
-                    if (window.uiRenderer) {
-                        window.uiRenderer.showSyncStatus('syncing');
-                    }
-
-                    // Обновляем UI
-                    const activeChat = chatStore.getActiveChat();
-                    if (activeChat && window.chatUI) {
-                        window.chatUI.refreshUI();
-                    }
-
-                    if (window.uiRenderer) {
-                        window.uiRenderer.showSyncStatus('success');
-                    }
+                if (window.uiRenderer) {
+                    window.uiRenderer.showSyncStatus('syncing');
                 }
-            });
-            console.log('📨 Push-подписка активирована');
-        } catch (e) {
-            console.warn('⚠️ Ошибка активации push-подписки:', e);
-        }
+
+                const activeChat = chatStore.getActiveChat();
+                if (activeChat && window.chatUI) {
+                    window.chatUI.refreshUI();
+                }
+
+                if (window.uiRenderer) {
+                    window.uiRenderer.showSyncStatus('success');
+                }
+            }
+        });
+        console.log('📨 Push-подписка активирована');
     }
 
-    // ==========================================
-    // 7. ВОССТАНОВЛЕНИЕ ПОСЛЕДНЕГО ЧАТА
-    // ==========================================
-    
+    // Восстановление последнего чата
     if (window.chatUI) {
         const hasRestored = window.chatUI.restoreLastChat();
 
@@ -297,10 +240,7 @@ async function initApp() {
         }
     }
 
-    // ==========================================
-    // 8. ПЕРИОДИЧЕСКАЯ ОЧИСТКА
-    // ==========================================
-    
+    // Периодическая очистка
     setInterval(() => {
         if (window.chatUI) {
             window.chatUI.cleanupTempChats();
@@ -310,10 +250,7 @@ async function initApp() {
         }
     }, 5 * 60 * 1000);
 
-    // ==========================================
-    // 9. ОФЛАЙН/ОНЛАЙН ОБРАБОТЧИКИ
-    // ==========================================
-    
+    // Офлайн/онлайн обработчики
     window.addEventListener('online', () => {
         console.log('🌐 Интернет восстановлен');
         hideOfflineBanner();
@@ -321,9 +258,6 @@ async function initApp() {
         if (window.chatUI) {
             window.chatUI.refreshUI();
         }
-        
-        // Обновляем иконки при восстановлении сети
-        initLucideIcons();
     });
 
     window.addEventListener('offline', () => {
@@ -331,10 +265,7 @@ async function initApp() {
         showOfflineBanner();
     });
 
-    // ==========================================
-    // 10. КНОПКА "НОВЫЙ ЧАТ"
-    // ==========================================
-    
+    // Кнопка "Новый чат"
     window.handleNewChatClick = function() {
         const activeFilter = window.profileUI?.currentFilter || 'all';
 
@@ -373,10 +304,7 @@ async function initApp() {
         }
     };
 
-    // ==========================================
-    // 11. ФИНАЛЬНАЯ ОТРИСОВКА
-    // ==========================================
-    
+    // Финальная отрисовка
     const appScreen = document.getElementById('app-screen');
     if (appScreen) {
         appScreen.classList.remove('hidden');
@@ -395,37 +323,10 @@ async function initApp() {
     console.log('✅ Приложение v3.0 успешно загружено');
 }
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ LUCIDE ИКОНОК
-// ==========================================
-
-function initLucideIcons() {
-    if (typeof lucide !== 'undefined' && lucide.createIcons) {
-        try {
-            lucide.createIcons();
-            console.log('✅ Lucide иконки созданы');
-            return true;
-        } catch (e) {
-            console.warn('⚠️ Ошибка создания иконок Lucide:', e);
-            return false;
-        }
-    }
-    return false;
-}
-
-// ==========================================
-// ЗАПУСК ПРИЛОЖЕНИЯ
-// ==========================================
-
-// Старт после загрузки DOM
+// Запуск
 document.addEventListener('DOMContentLoaded', () => {
-    // Сначала инициализируем иконки
-    initLucideIcons();
-    
-    // Затем запускаем приложение
     initApp().catch(err => {
         console.error('❌ Критический сбой инициализации:', err);
-        // Показываем сообщение об ошибке
         const appScreen = document.getElementById('app-screen');
         if (appScreen) {
             appScreen.innerHTML = `
@@ -444,10 +345,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Если DOM уже загружен
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    // Небольшая задержка, чтобы все скрипты успели загрузиться
     setTimeout(() => {
         if (document.getElementById('app-screen')) {
-            initLucideIcons();
             initApp().catch(err => {
                 console.error('❌ Критический сбой инициализации:', err);
             });
@@ -455,99 +354,11 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     }, 100);
 }
 
-// ==========================================
-// ПОВТОРНАЯ ИНИЦИАЛИЗАЦИЯ ИКОНОК
-// ==========================================
-
-// Пытаемся еще раз через 500ms (на случай, если Lucide загрузился позже)
-setTimeout(function() {
-    if (!initLucideIcons()) {
-        // Если не получилось - пробуем еще через 500ms
-        setTimeout(function() {
-            initLucideIcons();
-        }, 500);
-    }
-}, 500);
-
-// Еще одна попытка после полной загрузки страницы
-window.addEventListener('load', function() {
-    initLucideIcons();
-});
-
-// ==========================================
-// НАБЛЮДАТЕЛЬ ЗА ИЗМЕНЕНИЯМИ DOM
-// ==========================================
-
-// Автоматически обновляем иконки при добавлении новых элементов с data-lucide
-if (window.MutationObserver && typeof lucide !== 'undefined') {
-    const observer = new MutationObserver(function(mutations) {
-        let needsUpdate = false;
-        
-        for (const mutation of mutations) {
-            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType === 1) {
-                        if (node.querySelector && node.querySelector('[data-lucide]')) {
-                            needsUpdate = true;
-                            break;
-                        }
-                        if (node.hasAttribute && node.hasAttribute('data-lucide')) {
-                            needsUpdate = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (mutation.type === 'attributes' && mutation.attributeName === 'data-lucide') {
-                needsUpdate = true;
-                break;
-            }
-        }
-        
-        if (needsUpdate) {
-            try {
-                lucide.createIcons();
-            } catch (e) {
-                // Игнорируем
-            }
-        }
-    });
-    
-    // Запускаем наблюдатель после загрузки DOM
-    document.addEventListener('DOMContentLoaded', function() {
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['data-lucide']
-        });
-        console.log('✅ MutationObserver для Lucide иконок активирован');
-    });
-}
-
-// ==========================================
-// ЗАПРОС FULLSCREEN (если поддерживается)
-// ==========================================
-
+// Запрос fullscreen
 if (window.Telegram?.WebApp?.requestFullscreen) {
     try {
         window.Telegram.WebApp.requestFullscreen();
-    } catch (e) {
-        // Игнорируем
-    }
+    } catch (e) {}
 }
-
-// ==========================================
-// ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК
-// ==========================================
-
-window.addEventListener('error', function(event) {
-    console.error('❌ Глобальная ошибка:', event.message, event.filename, event.lineno);
-    
-    // Игнорируем ошибки Lucide, они не критичны
-    if (event.message && event.message.includes('lucide')) {
-        return;
-    }
-});
 
 console.log('✅ app.js v3.0 полностью загружен');
