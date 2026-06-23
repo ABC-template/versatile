@@ -15,7 +15,7 @@
 </head>
 <body>
     <!-- ==========================================
-         HEADER (БЕЗ КНОПКИ СМЕНЫ ТЕМЫ!)
+         HEADER
     ========================================== -->
     <div id="header" class="hidden">
         <span id="limit-info">Синхронизация...</span>
@@ -42,14 +42,13 @@
     <div id="profile-card" class="hidden">
         <div class="profile-content">
             <div class="profile-scrollable-zone">
-                <!-- TAB: Профиль -->
                 <div id="tab-profile" class="modal-tab hidden">
                     <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 15px;">
                         <img id="card-avatar" src="" alt="Avatar Large" style="width: 55px; height: 55px; border-radius: 50%; margin-bottom: 8px; border: 2px solid var(--button-color);">
                         <div id="user-name" style="font-weight: bold; font-size: 15px; color: var(--text-color);">Пользователь</div>
                     </div>
                     
-                    <!-- ВЫБОР ТЕМЫ (здесь и только здесь!) -->
+                    <!-- ВЫБОР ТЕМЫ -->
                     <div style="margin-top: 16px; border-top: 1px solid var(--app-border-color, rgba(0,0,0,0.06)); padding-top: 16px;">
                         <p style="font-size: 13px; font-weight: 600; color: var(--app-text-secondary, #4A4A5A); margin-bottom: 12px;">🎨 Выберите тему</p>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -66,7 +65,6 @@
                     </div>
                 </div>
 
-                <!-- TAB: Чаты -->
                 <div id="tab-chats" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">💬 Ваши диалоги:</p>
@@ -91,7 +89,6 @@
                     <div id="history-chats-list"></div>
                 </div>
 
-                <!-- TAB: Избранное -->
                 <div id="tab-favorites" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="fav-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
@@ -99,7 +96,6 @@
                     <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
                 </div>
 
-                <!-- TAB: Органайзер -->
                 <div id="tab-organizer" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="organizer-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">📅 Органайзер Прогресса</p>
@@ -210,7 +206,100 @@
     <!-- Core -->
     <script src="js/core/locale.js"></script>
     <script src="js/core/config.js"></script>
-    <script src="js/core/theme-manager.js"></script>
+    
+    <!-- ==========================================
+         THEME-MANAGER (ВСТРОЕННЫЙ)
+    ========================================== -->
+    <script>
+        console.log('🔧 Загрузка ThemeManager (встроенный)...');
+        
+        class ThemeManager {
+            constructor() {
+                console.log('🏗️ Создание экземпляра ThemeManager');
+                this.supportedThemes = ['light', 'dark', 'amoled'];
+                this.defaultTheme = 'light';
+                this.currentTheme = null;
+                this.init();
+            }
+            
+            init() {
+                console.log('🔄 Инициализация темы...');
+                const savedTheme = this.loadTheme();
+                
+                if (savedTheme && this.supportedThemes.includes(savedTheme)) {
+                    this.applyTheme(savedTheme);
+                    console.log('✅ Применена сохранённая тема:', savedTheme);
+                } else {
+                    const tg = window.Telegram?.WebApp;
+                    const tgTheme = tg?.colorScheme === 'dark' ? 'amoled' : 'light';
+                    this.applyTheme(tgTheme);
+                    console.log('✅ Применена тема Telegram:', tgTheme);
+                }
+                
+                console.log('🎨 ThemeManager готов. Тема:', this.currentTheme);
+            }
+            
+            loadTheme() {
+                try {
+                    return localStorage.getItem('app_theme');
+                } catch {
+                    return null;
+                }
+            }
+            
+            saveTheme(theme) {
+                try {
+                    localStorage.setItem('app_theme', theme);
+                } catch (e) {}
+            }
+            
+            applyTheme(theme) {
+                if (!this.supportedThemes.includes(theme)) {
+                    theme = this.defaultTheme;
+                }
+                
+                this.currentTheme = theme;
+                document.body.setAttribute('data-theme', theme);
+                this.saveTheme(theme);
+                this.updateThemeUI(theme);
+                
+                console.log('🎨 Тема применена:', theme);
+            }
+            
+            toggleTheme() {
+                const currentIndex = this.supportedThemes.indexOf(this.currentTheme);
+                const nextIndex = (currentIndex + 1) % this.supportedThemes.length;
+                const nextTheme = this.supportedThemes[nextIndex];
+                this.applyTheme(nextTheme);
+                return nextTheme;
+            }
+            
+            setTheme(theme) {
+                if (this.supportedThemes.includes(theme)) {
+                    this.applyTheme(theme);
+                    return true;
+                }
+                return false;
+            }
+            
+            updateThemeUI(theme) {
+                document.querySelectorAll('[data-theme-btn]').forEach(btn => {
+                    const btnTheme = btn.getAttribute('data-theme-btn');
+                    btn.classList.toggle('active', btnTheme === theme);
+                });
+            }
+            
+            getCurrentTheme() {
+                return this.currentTheme;
+            }
+        }
+        
+        // СОЗДАЁМ ГЛОБАЛЬНЫЙ ЭКЗЕМПЛЯР
+        window.themeManager = new ThemeManager();
+        
+        console.log('✅ window.themeManager создан:', window.themeManager);
+        console.log('✅ Текущая тема:', window.themeManager.getCurrentTheme());
+    </script>
 
     <!-- Store -->
     <script src="js/store/ChatStore.js"></script>
