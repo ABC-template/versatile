@@ -6,7 +6,6 @@
     <title>Versatile AI</title>
     <link rel="stylesheet" href="style.css">
     
-    <!-- Внешние библиотеки -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -16,7 +15,7 @@
 </head>
 <body>
     <!-- ==========================================
-         HEADER
+         HEADER (БЕЗ КНОПКИ СМЕНЫ ТЕМЫ!)
     ========================================== -->
     <div id="header" class="hidden">
         <span id="limit-info">Синхронизация...</span>
@@ -31,9 +30,6 @@
             <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.profileUI.openModalTab('organizer')" title="Органайзер">
                 <i data-lucide="calendar"></i>
             </button>
-            <button class="action-btn" style="background: rgba(0,0,0,0.04); font-size: 13px;" onclick="window.themeManager.toggleTheme()" title="Сменить тему">
-                <i data-lucide="sun" id="theme-icon"></i>
-            </button>
             <div id="user-profile-trigger" onclick="window.profileUI.openModalTab('profile')" style="cursor:pointer; margin-left: 4px;">
                 <img id="user-avatar" src="" alt="Avatar" style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--button-color); background: #eee;">
             </div>
@@ -46,13 +42,14 @@
     <div id="profile-card" class="hidden">
         <div class="profile-content">
             <div class="profile-scrollable-zone">
+                <!-- TAB: Профиль -->
                 <div id="tab-profile" class="modal-tab hidden">
                     <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 15px;">
                         <img id="card-avatar" src="" alt="Avatar Large" style="width: 55px; height: 55px; border-radius: 50%; margin-bottom: 8px; border: 2px solid var(--button-color);">
                         <div id="user-name" style="font-weight: bold; font-size: 15px; color: var(--text-color);">Пользователь</div>
                     </div>
                     
-                    <!-- Выбор темы -->
+                    <!-- ВЫБОР ТЕМЫ (здесь и только здесь!) -->
                     <div style="margin-top: 16px; border-top: 1px solid var(--app-border-color, rgba(0,0,0,0.06)); padding-top: 16px;">
                         <p style="font-size: 13px; font-weight: 600; color: var(--app-text-secondary, #4A4A5A); margin-bottom: 12px;">🎨 Выберите тему</p>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -68,7 +65,8 @@
                         </div>
                     </div>
                 </div>
-                
+
+                <!-- TAB: Чаты -->
                 <div id="tab-chats" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="dialogs-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">💬 Ваши диалоги:</p>
@@ -92,14 +90,16 @@
                     </div>
                     <div id="history-chats-list"></div>
                 </div>
-                
+
+                <!-- TAB: Избранное -->
                 <div id="tab-favorites" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="fav-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">⭐ Избранные ответы:</p>
                     </div>
                     <div id="global-favorites-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
                 </div>
-                
+
+                <!-- TAB: Органайзер -->
                 <div id="tab-organizer" class="modal-tab hidden">
                     <div class="modal-sticky-header">
                         <p id="organizer-title-label" style="font-size: 13px; font-weight: 600; color: var(--hint-color); margin: 0;">📅 Органайзер Прогресса</p>
@@ -171,7 +171,6 @@
         <div id="tags-cloud-container"></div>
         <div id="chat-container" style="display:none;"></div>
         
-        <!-- FAB кнопка -->
         <button id="fab-open-input" onclick="window.expandInputArea()" style="display:none;">
             <i data-lucide="chevron-up"></i>
         </button>
@@ -205,7 +204,7 @@
     </div>
 
     <!-- ==========================================
-         СКРИПТЫ (порядок как в исходнике)
+         СКРИПТЫ
     ========================================== -->
     
     <!-- Core -->
@@ -259,10 +258,9 @@
     <script src="js/core/app.js"></script>
 
     <!-- ==========================================
-         ИНИЦИАЛИЗАЦИЯ LUCIDE (ПОСЛЕ ВСЕХ СКРИПТОВ)
+         ИНИЦИАЛИЗАЦИЯ LUCIDE
     ========================================== -->
     <script>
-        // Ждем загрузки всех скриптов и DOM
         setTimeout(function() {
             if (typeof lucide !== 'undefined') {
                 try {
@@ -271,8 +269,6 @@
                 } catch(e) {
                     console.warn('⚠️ Ошибка создания иконок:', e);
                 }
-            } else {
-                console.warn('⚠️ Lucide не загружен');
             }
         }, 500);
     </script>
