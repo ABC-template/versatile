@@ -74,43 +74,7 @@ function checkOnline() {
     return true;
 }
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ LUCIDE ИКОНОК
-// ==========================================
 
-function initLucideIcons() {
-    if (typeof lucide !== 'undefined') {
-        try {
-            lucide.createIcons();
-            console.log('✅ Lucide иконки инициализированы');
-            return true;
-        } catch (e) {
-            console.warn('⚠️ Ошибка инициализации Lucide:', e);
-            return false;
-        }
-    }
-    return false;
-}
-
-function retryLucideInit(attempts = 3, delay = 500) {
-    let count = 0;
-    
-    const tryInit = () => {
-        if (initLucideIcons()) {
-            return;
-        }
-        
-        count++;
-        if (count < attempts) {
-            console.log(`🔄 Повторная попытка инициализации Lucide (${count}/${attempts})...`);
-            setTimeout(tryInit, delay);
-        } else {
-            console.warn('⚠️ Не удалось инициализировать Lucide иконки после всех попыток');
-        }
-    };
-    
-    tryInit();
-}
 
 // ==========================================
 // ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ
