@@ -1,6 +1,6 @@
 /* ============================================
-   style.css - Versatile AI v3.0
-   Полный редизайн с поддержкой AMOLED/Светлой тем
+   style.css - Versatile AI v3.1
+   Минималистичный дизайн "лист бумаги"
    ============================================ */
 
 /* ==========================================
@@ -8,10 +8,10 @@
    ========================================== */
 
 :root {
-    /* ---------- СВЕТЛАЯ ТЕМА (по умолчанию) ---------- */
+    /* ---------- СВЕТЛАЯ ТЕМА ---------- */
     
     /* Фоны */
-    --app-bg-primary: #F8F9FA;
+    --app-bg-primary: #F5F5F7;
     --app-bg-secondary: #FFFFFF;
     --app-bg-tertiary: #F1F3F5;
     --app-bg-input: #FFFFFF;
@@ -29,30 +29,31 @@
     --app-accent-success: #2ECC71;
     --app-accent-warning: #F1C40F;
     --app-accent-danger: #E74C3C;
-    --app-accent-glow: rgba(108, 99, 255, 0.15);
+    --app-accent-glow: rgba(108, 99, 255, 0.10);
     
-    /* Градиенты */
+    /* Цвет сообщения пользователя (нейтральный) */
+    --app-msg-user-bg: #E8E8ED;
+    --app-msg-user-text: #1A1A2E;
+    
+    /* Градиенты (только для кнопок) */
     --app-gradient-primary: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
-    --app-gradient-primary-reverse: linear-gradient(135deg, #00D4FF 0%, #6C63FF 100%);
-    --app-gradient-message: linear-gradient(135deg, #6C63FF 0%, #8B7FFF 100%);
-    --app-gradient-ai-msg: linear-gradient(135deg, rgba(108, 99, 255, 0.05) 0%, rgba(0, 212, 255, 0.05) 100%);
-    --app-gradient-card: linear-gradient(135deg, rgba(108, 99, 255, 0.02) 0%, rgba(0, 212, 255, 0.02) 100%);
     --app-gradient-header: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
     
     /* Границы и тени */
     --app-border-color: rgba(0, 0, 0, 0.06);
     --app-border-color-light: rgba(0, 0, 0, 0.03);
     --app-border-color-active: rgba(108, 99, 255, 0.3);
-    --app-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-    --app-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.08);
-    --app-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.12);
-    --app-shadow-glow: 0 0 30px rgba(108, 99, 255, 0.2);
+    --app-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+    --app-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.06);
+    --app-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08);
+    --app-shadow-glow: 0 0 30px rgba(108, 99, 255, 0.12);
+    --app-shadow-input: 0 -2px 20px rgba(0, 0, 0, 0.06);
     
     /* Скругления */
     --app-radius-sm: 8px;
     --app-radius-md: 12px;
     --app-radius-lg: 16px;
-    --app-radius-xl: 24px;
+    --app-radius-xl: 20px;
     --app-radius-full: 50%;
     
     /* Отступы */
@@ -66,11 +67,11 @@
     
     /* Шрифты */
     --app-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-    --app-font-size-xs: 11px;
-    --app-font-size-sm: 12px;
-    --app-font-size-md: 14px;
-    --app-font-size-lg: 16px;
-    --app-font-size-xl: 18px;
+    --app-font-size-xs: 12px;
+    --app-font-size-sm: 13px;
+    --app-font-size-md: 15px;
+    --app-font-size-lg: 17px;
+    --app-font-size-xl: 19px;
     --app-font-size-2xl: 22px;
     --app-font-size-3xl: 28px;
     
@@ -80,8 +81,8 @@
     
     /* Анимации */
     --app-transition-fast: 0.15s ease;
-    --app-transition-medium: 0.25s ease;
-    --app-transition-slow: 0.4s ease;
+    --app-transition-medium: 0.3s ease;
+    --app-transition-slow: 0.5s ease;
     
     /* Z-индексы */
     --app-z-overlay: 1000;
@@ -91,14 +92,14 @@
     --app-z-header: 50;
 }
 
-/* ---------- AMOLED ТЕМА (черная) ---------- */
+/* ---------- AMOLED ТЕМА ---------- */
 body[data-theme="amoled"] {
     /* Фоны */
     --app-bg-primary: #000000;
     --app-bg-secondary: #0A0A0A;
     --app-bg-tertiary: #141414;
     --app-bg-input: #1A1A1A;
-    --app-bg-hover: rgba(255, 255, 255, 0.06);
+    --app-bg-hover: rgba(255, 255, 255, 0.05);
     
     /* Текст */
     --app-text-primary: #FFFFFF;
@@ -106,65 +107,28 @@ body[data-theme="amoled"] {
     --app-text-tertiary: #80808C;
     --app-text-inverse: #1A1A2E;
     
-    /* Акценты (чуть ярче для контраста) */
+    /* Акценты (чуть мягче для AMOLED) */
     --app-accent-primary: #7C73FF;
     --app-accent-secondary: #33D9FF;
-    --app-accent-glow: rgba(124, 115, 255, 0.25);
+    --app-accent-glow: rgba(124, 115, 255, 0.12);
     
-    /* Градиенты */
+    /* Цвет сообщения пользователя (нейтральный, адаптированный) */
+    --app-msg-user-bg: #2A2A2E;
+    --app-msg-user-text: #FFFFFF;
+    
+    /* Градиенты (приглушенные) */
     --app-gradient-primary: linear-gradient(135deg, #7C73FF 0%, #33D9FF 100%);
-    --app-gradient-primary-reverse: linear-gradient(135deg, #33D9FF 0%, #7C73FF 100%);
-    --app-gradient-message: linear-gradient(135deg, #7C73FF 0%, #9B8FFF 100%);
-    --app-gradient-ai-msg: linear-gradient(135deg, rgba(124, 115, 255, 0.08) 0%, rgba(51, 217, 255, 0.08) 100%);
-    --app-gradient-card: linear-gradient(135deg, rgba(124, 115, 255, 0.04) 0%, rgba(51, 217, 255, 0.04) 100%);
     --app-gradient-header: linear-gradient(135deg, #7C73FF 0%, #33D9FF 100%);
-    
-    /* Границы и тени (светящиеся) */
-    --app-border-color: rgba(255, 255, 255, 0.08);
-    --app-border-color-light: rgba(255, 255, 255, 0.04);
-    --app-border-color-active: rgba(124, 115, 255, 0.4);
-    --app-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.6);
-    --app-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.8);
-    --app-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.9);
-    --app-shadow-glow: 0 0 40px rgba(124, 115, 255, 0.3);
-}
-
-/* ---------- ТЕМНАЯ ТЕМА (dark, не AMOLED) ---------- */
-body[data-theme="dark"] {
-    /* Фоны - глубокий серый */
-    --app-bg-primary: #121212;
-    --app-bg-secondary: #1E1E1E;
-    --app-bg-tertiary: #2A2A2A;
-    --app-bg-input: #2A2A2A;
-    --app-bg-hover: rgba(255, 255, 255, 0.05);
-    
-    /* Текст */
-    --app-text-primary: #E8E8E8;
-    --app-text-secondary: #B0B0B8;
-    --app-text-tertiary: #70707C;
-    --app-text-inverse: #FFFFFF;
-    
-    /* Акценты */
-    --app-accent-primary: #6C63FF;
-    --app-accent-secondary: #00D4FF;
-    --app-accent-glow: rgba(108, 99, 255, 0.15);
-    
-    /* Градиенты */
-    --app-gradient-primary: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
-    --app-gradient-primary-reverse: linear-gradient(135deg, #00D4FF 0%, #6C63FF 100%);
-    --app-gradient-message: linear-gradient(135deg, #6C63FF 0%, #8B7FFF 100%);
-    --app-gradient-ai-msg: linear-gradient(135deg, rgba(108, 99, 255, 0.06) 0%, rgba(0, 212, 255, 0.06) 100%);
-    --app-gradient-card: linear-gradient(135deg, rgba(108, 99, 255, 0.03) 0%, rgba(0, 212, 255, 0.03) 100%);
-    --app-gradient-header: linear-gradient(135deg, #6C63FF 0%, #00D4FF 100%);
     
     /* Границы и тени */
     --app-border-color: rgba(255, 255, 255, 0.06);
     --app-border-color-light: rgba(255, 255, 255, 0.03);
-    --app-border-color-active: rgba(108, 99, 255, 0.3);
-    --app-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-    --app-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.6);
-    --app-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.8);
-    --app-shadow-glow: 0 0 30px rgba(108, 99, 255, 0.2);
+    --app-border-color-active: rgba(124, 115, 255, 0.3);
+    --app-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.6);
+    --app-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.7);
+    --app-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.8);
+    --app-shadow-glow: 0 0 30px rgba(124, 115, 255, 0.15);
+    --app-shadow-input: 0 -2px 20px rgba(0, 0, 0, 0.5);
 }
 
 /* ==========================================
@@ -198,8 +162,8 @@ body {
    ========================================== */
 
 ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 3px;
+    height: 3px;
 }
 
 ::-webkit-scrollbar-track {
@@ -208,7 +172,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
     background: var(--app-text-tertiary);
-    border-radius: 4px;
+    border-radius: 3px;
     opacity: 0.3;
 }
 
@@ -241,6 +205,7 @@ body {
     z-index: var(--app-z-header);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    min-height: 56px;
 }
 
 #header::after {
@@ -249,9 +214,9 @@ body {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 1px;
-    background: var(--app-gradient-primary);
-    opacity: 0.3;
+    height: 2px;
+    background: var(--app-gradient-header);
+    opacity: 0.2;
 }
 
 #limit-info {
@@ -286,13 +251,12 @@ body {
 #header-navigation .action-btn {
     background: var(--app-bg-tertiary);
     border: none;
-    width: 34px;
-    height: 34px;
+    width: 38px;
+    height: 38px;
     border-radius: var(--app-radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: var(--app-font-size-lg);
     cursor: pointer;
     transition: all var(--app-transition-fast);
     color: var(--app-text-secondary);
@@ -305,14 +269,14 @@ body {
 }
 
 #header-navigation .action-btn .lucide {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     stroke: currentColor;
 }
 
 #user-avatar {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: var(--app-radius-full);
     border: 2px solid var(--app-accent-primary);
     cursor: pointer;
@@ -369,7 +333,7 @@ body {
 }
 
 /* ==========================================
-   TAGS CLOUD (Облако тегов)
+   TAGS CLOUD (Облако тегов) - МИНИМАЛИЗМ
    ========================================== */
 
 #tags-cloud-container {
@@ -394,17 +358,14 @@ body {
 }
 
 .tags-cloud-header h2 {
-    font-size: var(--app-font-size-3xl);
-    font-weight: 700;
-    background: var(--app-gradient-primary);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-size: var(--app-font-size-2xl);
+    font-weight: 600;
+    color: var(--app-text-primary);
     margin: 0 0 var(--app-spacing-xs) 0;
 }
 
 .tags-cloud-header p {
-    color: var(--app-text-secondary);
+    color: var(--app-text-tertiary);
     font-size: var(--app-font-size-md);
     margin: 0;
 }
@@ -425,10 +386,11 @@ body {
     border-radius: var(--app-radius-lg);
     cursor: pointer;
     transition: all var(--app-transition-medium);
-    border: 2px solid var(--app-border-color-light);
+    border: 1px solid var(--app-border-color-light);
     box-shadow: var(--app-shadow-sm);
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    min-height: 64px;
 }
 
 .tag-chip:active {
@@ -442,7 +404,7 @@ body {
 }
 
 .tag-chip .tag-icon {
-    font-size: 24px;
+    font-size: 26px;
     width: 44px;
     height: 44px;
     display: flex;
@@ -455,7 +417,7 @@ body {
 
 .tag-chip .tag-name {
     font-size: var(--app-font-size-lg);
-    font-weight: 600;
+    font-weight: 500;
     color: var(--app-text-primary);
 }
 
@@ -470,7 +432,7 @@ body {
     padding-bottom: 120px;
     display: flex;
     flex-direction: column;
-    gap: var(--app-spacing-md);
+    gap: var(--app-spacing-sm);
     min-height: 0;
     -webkit-overflow-scrolling: touch;
 }
@@ -480,47 +442,46 @@ body {
 }
 
 /* ==========================================
-   СООБЩЕНИЯ
+   СООБЩЕНИЯ - "ЛИСТ БУМАГИ"
    ========================================== */
 
 .msg {
     max-width: 88%;
-    padding: var(--app-spacing-md) var(--app-spacing-lg);
-    border-radius: var(--app-radius-lg);
-    font-size: var(--app-font-size-md);
-    line-height: 1.5;
+    padding: var(--app-spacing-sm) var(--app-spacing-lg);
+    font-size: var(--app-font-size-lg);
+    line-height: 1.6;
     word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
     box-sizing: border-box;
     will-change: transform, opacity;
     animation: fadeInUp 0.25s cubic-bezier(0.1, 0.8, 0.25, 1);
+    position: relative;
 }
 
-/* Сообщение пользователя */
+/* Сообщение пользователя - сплошной цвет */
 .user-msg {
     align-self: flex-end;
-    background: var(--app-gradient-message);
-    color: var(--app-text-inverse);
+    background: var(--app-msg-user-bg);
+    color: var(--app-msg-user-text);
+    border-radius: var(--app-radius-lg);
     border-bottom-right-radius: var(--app-radius-sm);
-    box-shadow: var(--app-shadow-sm);
 }
 
-/* Сообщение AI */
+/* Сообщение AI - БЕЗ ФОНА, только текст */
 .ai-msg {
     align-self: flex-start;
-    background: var(--app-gradient-ai-msg);
+    background: transparent;
     color: var(--app-text-primary);
-    padding: var(--app-spacing-md) var(--app-spacing-lg);
     width: 100%;
     max-width: 100%;
-    border-radius: var(--app-radius-lg);
-    border-left: 3px solid var(--app-accent-primary);
+    padding: var(--app-spacing-sm) 0;
 }
 
 /* Приветственное сообщение */
 .welcome-msg {
     opacity: 0.7;
     font-style: italic;
-    border-left-color: var(--app-accent-secondary);
 }
 
 /* ==========================================
@@ -533,14 +494,23 @@ body {
     margin-top: var(--app-spacing-sm);
     padding-top: var(--app-spacing-sm);
     border-top: 1px solid var(--app-border-color-light);
+    flex-wrap: wrap;
+    opacity: 0.6;
+    transition: opacity var(--app-transition-fast);
+}
+
+.msg-actions:hover,
+.msg-actions:focus-within {
+    opacity: 1;
 }
 
 .action-btn {
-    background: var(--app-bg-tertiary);
+    background: transparent;
     border: none;
-    font-size: var(--app-font-size-md);
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
     border-radius: var(--app-radius-full);
     cursor: pointer;
     display: inline-flex;
@@ -551,29 +521,29 @@ body {
     box-sizing: border-box;
     padding: 0;
     margin: 0;
-    color: var(--app-text-secondary);
+    color: var(--app-text-tertiary);
+    touch-action: manipulation;
 }
 
 .action-btn .lucide {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     stroke: currentColor;
 }
 
 .action-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.88);
     background: var(--app-bg-hover);
 }
 
 .action-btn.is-favorite {
-    background: rgba(231, 76, 60, 0.1);
     color: var(--app-accent-danger);
 }
 
 .action-btn::after {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: 38px;
+    bottom: 46px;
     left: 50%;
     transform: translateX(-50%) scale(0.8);
     background: var(--app-bg-secondary);
@@ -596,7 +566,7 @@ body {
 }
 
 /* ==========================================
-   КОД В СООБЩЕНИЯХ
+   КОД В СООБЩЕНИЯХ AI
    ========================================== */
 
 .ai-msg pre {
@@ -611,6 +581,7 @@ body {
     box-sizing: border-box;
     position: relative;
     border: 1px solid var(--app-border-color-light);
+    font-size: var(--app-font-size-sm);
 }
 
 .ai-msg code {
@@ -620,12 +591,14 @@ body {
     padding: 2px 6px;
     border-radius: var(--app-radius-sm);
     color: var(--app-accent-primary);
+    word-break: break-all;
 }
 
 .ai-msg pre code {
     background: transparent;
     color: var(--app-text-primary);
     padding: 0;
+    word-break: break-word;
 }
 
 /* Кнопка копирования кода */
@@ -644,6 +617,7 @@ body {
     opacity: 0.9;
     transition: all var(--app-transition-fast);
     z-index: 10;
+    min-height: 32px;
 }
 
 .code-copy-btn:active {
@@ -691,46 +665,48 @@ body {
 }
 
 /* ==========================================
-   SKELETON LOADER
+   ИНДИКАТОР "ПЕЧАТАЕТ" (вместо скелетона)
    ========================================== */
 
-.skeleton-loading {
+.typing-indicator {
     align-self: flex-start;
-    background: var(--app-bg-secondary);
-    border-radius: var(--app-radius-lg);
-    padding: var(--app-spacing-md);
-    width: 70%;
     display: flex;
-    flex-direction: column;
-    gap: var(--app-spacing-sm);
-    margin-top: var(--app-spacing-xs);
-    border: 1px solid var(--app-border-color-light);
+    gap: 5px;
+    padding: var(--app-spacing-sm) var(--app-spacing-md);
+    margin: var(--app-spacing-xs) 0;
+    background: transparent;
+    border-radius: var(--app-radius-lg);
 }
 
-.skeleton-line {
-    height: 12px;
-    border-radius: 6px;
-    background: linear-gradient(90deg, 
-        var(--app-bg-tertiary) 25%, 
-        var(--app-bg-hover) 37%, 
-        var(--app-bg-tertiary) 63%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite linear;
-    display: block;
+.typing-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--app-radius-full);
+    background: var(--app-accent-primary);
+    animation: typingBounce 1.4s infinite ease-in-out;
 }
 
-@keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+.typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
 }
 
-.skeleton-line:nth-child(1) { width: 85%; }
-.skeleton-line:nth-child(2) { width: 95%; }
-.skeleton-line:nth-child(3) { width: 60%; }
+.typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.3;
+    }
+    30% {
+        transform: translateY(-6px);
+        opacity: 1;
+    }
+}
 
 /* ==========================================
-   PROFILE CARD (Модальное окно профиля)
+   PROFILE CARD (Модальное окно)
    ========================================== */
 
 #profile-card {
@@ -739,9 +715,9 @@ body {
     left: 0;
     width: 100vw;
     height: 100dvh;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: var(--app-z-modal);
     display: flex;
     align-items: center;
@@ -816,7 +792,7 @@ body {
 }
 
 /* ==========================================
-   DYNAMIC KEY AREA (нижняя часть профиля)
+   DYNAMIC KEY AREA
    ========================================== */
 
 #dynamic-key-area {
@@ -868,7 +844,7 @@ body {
     border-radius: var(--app-radius-md);
     font-size: var(--app-font-size-sm);
     cursor: pointer;
-    border: 2px solid transparent;
+    border: 1px solid transparent;
     transition: all var(--app-transition-medium);
 }
 
@@ -896,17 +872,15 @@ body {
     background: transparent;
     border: none;
     cursor: pointer;
-    font-size: var(--app-font-size-md);
-    opacity: 0.5;
     padding: 4px 6px;
     border-radius: var(--app-radius-sm);
     transition: all var(--app-transition-fast);
-    color: var(--app-text-secondary);
+    color: var(--app-text-tertiary);
 }
 
 .delete-chat-btn .lucide {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     stroke: currentColor;
 }
 
@@ -972,6 +946,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: var(--app-spacing-sm);
+    min-height: 44px;
 }
 
 .btn .lucide {
@@ -996,7 +971,7 @@ body {
 }
 
 /* ==========================================
-   CONTEXT SLIDER (Память чата)
+   CONTEXT SLIDER
    ========================================== */
 
 #context-slider {
@@ -1041,15 +1016,15 @@ body {
 }
 
 /* ==========================================
-   FAB КНОПКА (открыть капсулу ввода)
+   FAB КНОПКА
    ========================================== */
 
 #fab-open-input {
     position: fixed;
     bottom: calc(var(--tg-safe-bottom, 0px) + var(--app-spacing-lg));
     right: var(--app-spacing-lg);
-    width: 52px;
-    height: 52px;
+    width: 54px;
+    height: 54px;
     border-radius: var(--app-radius-full);
     background: var(--app-gradient-primary);
     color: var(--app-text-inverse);
@@ -1058,7 +1033,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: var(--app-font-size-xl);
     box-shadow: var(--app-shadow-glow);
     cursor: pointer;
     z-index: var(--app-z-fab);
@@ -1068,8 +1042,8 @@ body {
 }
 
 #fab-open-input .lucide {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     stroke: currentColor;
 }
 
@@ -1078,7 +1052,7 @@ body {
 }
 
 /* ==========================================
-   INPUT OVERLAY (затемнение при открытой капсуле)
+   INPUT OVERLAY
    ========================================== */
 
 #input-overlay {
@@ -1087,7 +1061,7 @@ body {
     left: 0;
     width: 100vw;
     height: 100dvh;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.25);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     z-index: var(--app-z-overlay);
@@ -1113,7 +1087,7 @@ body {
     background: var(--app-bg-secondary);
     border-radius: var(--app-radius-xl);
     padding: var(--app-spacing-md) var(--app-spacing-lg);
-    box-shadow: var(--app-shadow-lg);
+    box-shadow: var(--app-shadow-input);
     border: 1px solid var(--app-border-color-light);
     display: flex;
     flex-direction: column;
@@ -1141,7 +1115,7 @@ body {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    height: 34px;
+    height: 38px;
     margin-top: var(--app-spacing-xs);
 }
 
@@ -1150,7 +1124,7 @@ body {
     visibility: visible;
     opacity: 1;
     align-items: center;
-    height: 34px;
+    height: 38px;
 }
 
 #input-area .right-group {
@@ -1164,10 +1138,10 @@ body {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    min-height: 34px;
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
     border-radius: var(--app-radius-full);
     align-items: center;
     justify-content: center;
@@ -1175,7 +1149,6 @@ body {
     margin: 0;
     border: none;
     box-sizing: border-box;
-    font-size: var(--app-font-size-md);
     background: var(--app-bg-tertiary);
     color: var(--app-text-secondary);
     cursor: pointer;
@@ -1183,8 +1156,8 @@ body {
 }
 
 #input-area .footer-action-btn .lucide {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     stroke: currentColor;
 }
 
@@ -1205,7 +1178,7 @@ body {
 }
 
 /* ==========================================
-   USER INPUT (текстовое поле)
+   USER INPUT
    ========================================== */
 
 #user-input {
@@ -1223,7 +1196,7 @@ body {
     padding: 0 28px 0 0;
     margin: 0;
     border-radius: 0;
-    line-height: 1.4;
+    line-height: 1.5;
     resize: none;
 }
 
@@ -1247,10 +1220,9 @@ body {
     border: none;
     outline: none;
     color: var(--app-text-tertiary);
-    font-size: var(--app-font-size-md);
     cursor: pointer;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1260,8 +1232,8 @@ body {
 }
 
 #clear-input-btn .lucide {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     stroke: currentColor;
 }
 
@@ -1282,7 +1254,7 @@ body {
 }
 
 /* ==========================================
-   TRASH MODAL (Корзина)
+   TRASH MODAL
    ========================================== */
 
 #trash-modal {
@@ -1291,9 +1263,9 @@ body {
     left: 0;
     width: 100vw;
     height: 100dvh;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: var(--app-z-modal);
     display: none;
     align-items: center;
@@ -1450,6 +1422,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: var(--app-spacing-sm);
+    min-height: 44px;
 }
 
 .theme-selector-btn .lucide {
@@ -1502,7 +1475,6 @@ body {
     cursor: pointer;
     color: var(--app-text-tertiary);
     padding: var(--app-spacing-xs);
-    font-weight: 700;
 }
 
 #media-preview-container button .lucide {
@@ -1586,23 +1558,46 @@ body {
     }
     
     .msg {
-        max-width: 92%;
-        font-size: var(--app-font-size-sm);
+        max-width: 94%;
+        font-size: var(--app-font-size-md);
         padding: var(--app-spacing-sm) var(--app-spacing-md);
     }
     
     .tag-chip {
         padding: var(--app-spacing-md) var(--app-spacing-lg);
+        min-height: 56px;
     }
     
     .tag-chip .tag-icon {
-        width: 36px;
-        height: 36px;
-        font-size: 20px;
+        width: 38px;
+        height: 38px;
+        font-size: 22px;
     }
     
     .tags-cloud-header h2 {
         font-size: var(--app-font-size-2xl);
+    }
+}
+
+@media (min-width: 768px) {
+    #chat-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    .msg {
+        max-width: 80%;
+    }
+    
+    #input-area {
+        max-width: 600px;
+        left: 50%;
+        transform: translateX(-50%) translateY(150dvh);
+        width: 90%;
+    }
+    
+    #input-area.active {
+        transform: translateX(-50%) translateY(0);
     }
 }
 
