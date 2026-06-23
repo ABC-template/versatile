@@ -361,4 +361,38 @@ if (window.Telegram?.WebApp?.requestFullscreen) {
     } catch (e) {}
 }
 
+// ==========================================
+// ИНИЦИАЛИЗАЦИЯ LUCIDE ПОСЛЕ ЗАГРУЗКИ ВСЕГО
+// ==========================================
+
+function initLucideIcons() {
+    if (typeof lucide !== 'undefined') {
+        try {
+            lucide.createIcons();
+            console.log('✅ Lucide иконки созданы');
+            return true;
+        } catch (e) {
+            console.warn('⚠️ Ошибка создания иконок:', e);
+            return false;
+        }
+    }
+    console.warn('⚠️ Lucide не найден');
+    return false;
+}
+
+// Пробуем создать иконки с задержкой
+setTimeout(function() {
+    initLucideIcons();
+}, 300);
+
+// Также пробуем после полной загрузки страницы
+window.addEventListener('load', function() {
+    initLucideIcons();
+});
+
+// И через 1 секунду для верности
+setTimeout(function() {
+    initLucideIcons();
+}, 1000);
+
 console.log('✅ app.js v3.0 полностью загружен');
