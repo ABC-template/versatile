@@ -96,7 +96,7 @@ async function initApp() {
             let topInset = 0;
             if (isMiniApp && isMobilePlatform) {
                 topInset = tg?.contentSafeAreaInset?.top || tg?.safeAreaInset?.top || 0;
-                if (topInset < 50) topInset = 60;
+                if (topInset < 50) topInset = 75;
             } else {
                 topInset = 0;
             }
