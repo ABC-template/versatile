@@ -74,8 +74,6 @@ function checkOnline() {
     return true;
 }
 
-
-
 // ==========================================
 // ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ
 // ==========================================
@@ -141,13 +139,7 @@ async function initApp() {
     setTimeout(setTelegramInsets, 450);
 
     // ==========================================
-    // 3. ИНИЦИАЛИЗАЦИЯ LUCIDE ИКОНОК
-    // ==========================================
-    
-    //retryLucideInit(5, 500);
-
-    // ==========================================
-    // 4. ЗАГРУЗКА ПОЛЬЗОВАТЕЛЯ
+    // 3. ЗАГРУЗКА ПОЛЬЗОВАТЕЛЯ
     // ==========================================
     
     const user = tg?.initDataUnsafe?.user;
@@ -168,7 +160,7 @@ async function initApp() {
     }
 
     // ==========================================
-    // 5. ЗАГРУЗКА ДАННЫХ ИЗ ХРАНИЛИЩА
+    // 4. ЗАГРУЗКА ДАННЫХ ИЗ ХРАНИЛИЩА
     // ==========================================
     
     chatStore.loadFromStorage();
@@ -187,7 +179,7 @@ async function initApp() {
     }
 
     // ==========================================
-    // 6. АВТОРИЗАЦИЯ
+    // 5. АВТОРИЗАЦИЯ
     // ==========================================
     
     const uid = user?.id;
@@ -257,7 +249,7 @@ async function initApp() {
     }
 
     // ==========================================
-    // 7. PUSH-УВЕДОМЛЕНИЯ
+    // 6. PUSH-УВЕДОМЛЕНИЯ
     // ==========================================
     
     if (tg) {
@@ -290,7 +282,7 @@ async function initApp() {
     }
 
     // ==========================================
-    // 8. ВОССТАНОВЛЕНИЕ ПОСЛЕДНЕГО ЧАТА
+    // 7. ВОССТАНОВЛЕНИЕ ПОСЛЕДНЕГО ЧАТА
     // ==========================================
     
     if (window.chatUI) {
@@ -306,7 +298,7 @@ async function initApp() {
     }
 
     // ==========================================
-    // 9. ПЕРИОДИЧЕСКАЯ ОЧИСТКА
+    // 8. ПЕРИОДИЧЕСКАЯ ОЧИСТКА
     // ==========================================
     
     setInterval(() => {
@@ -319,7 +311,7 @@ async function initApp() {
     }, 5 * 60 * 1000);
 
     // ==========================================
-    // 10. ОФЛАЙН/ОНЛАЙН ОБРАБОТЧИКИ
+    // 9. ОФЛАЙН/ОНЛАЙН ОБРАБОТЧИКИ
     // ==========================================
     
     window.addEventListener('online', () => {
@@ -330,8 +322,8 @@ async function initApp() {
             window.chatUI.refreshUI();
         }
         
-        // Обновляем иконки (могли сброситься)
-        retryLucideInit(3, 300);
+        // Обновляем иконки при восстановлении сети
+        initLucideIcons();
     });
 
     window.addEventListener('offline', () => {
@@ -340,7 +332,7 @@ async function initApp() {
     });
 
     // ==========================================
-    // 11. КНОПКА "НОВЫЙ ЧАТ"
+    // 10. КНОПКА "НОВЫЙ ЧАТ"
     // ==========================================
     
     window.handleNewChatClick = function() {
@@ -382,7 +374,7 @@ async function initApp() {
     };
 
     // ==========================================
-    // 12. ФИНАЛЬНАЯ ОТРИСОВКА
+    // 11. ФИНАЛЬНАЯ ОТРИСОВКА
     // ==========================================
     
     const appScreen = document.getElementById('app-screen');
@@ -400,67 +392,25 @@ async function initApp() {
         showOfflineBanner();
     }
 
-    // ==========================================
-    // 13. ИНИЦИАЛИЗАЦИЯ ИКОНОК ПОСЛЕ ОТРИСОВКИ
-    // ==========================================
-    
-    // Повторная инициализация иконок после отрисовки всех компонентов
-    setTimeout(() => {
-        retryLucideInit(3, 300);
-    }, 1000);
-
-    // И еще раз через 2 секунды (для динамически созданных элементов)
-    setTimeout(() => {
-        retryLucideInit(3, 300);
-    }, 2000);
-
-    // Наблюдатель за изменениями DOM для автоматической инициализации новых иконок
-    if (window.MutationObserver && typeof lucide !== 'undefined') {
-        const observer = new MutationObserver(function(mutations) {
-            let needsUpdate = false;
-            
-            for (const mutation of mutations) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    // Проверяем, есть ли добавленные элементы с data-lucide
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === 1) { // Element
-                            if (node.querySelector && node.querySelector('[data-lucide]')) {
-                                needsUpdate = true;
-                                break;
-                            }
-                            if (node.hasAttribute && node.hasAttribute('data-lucide')) {
-                                needsUpdate = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (mutation.type === 'attributes' && mutation.attributeName === 'data-lucide') {
-                    needsUpdate = true;
-                    break;
-                }
-            }
-            
-            if (needsUpdate) {
-                try {
-                    lucide.createIcons();
-                } catch (e) {
-                    // Игнорируем
-                }
-            }
-        });
-        
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['data-lucide']
-        });
-        
-        console.log('✅ MutationObserver для Lucide иконок активирован');
-    }
-
     console.log('✅ Приложение v3.0 успешно загружено');
+}
+
+// ==========================================
+// ИНИЦИАЛИЗАЦИЯ LUCIDE ИКОНОК
+// ==========================================
+
+function initLucideIcons() {
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        try {
+            lucide.createIcons();
+            console.log('✅ Lucide иконки созданы');
+            return true;
+        } catch (e) {
+            console.warn('⚠️ Ошибка создания иконок Lucide:', e);
+            return false;
+        }
+    }
+    return false;
 }
 
 // ==========================================
@@ -469,6 +419,10 @@ async function initApp() {
 
 // Старт после загрузки DOM
 document.addEventListener('DOMContentLoaded', () => {
+    // Сначала инициализируем иконки
+    initLucideIcons();
+    
+    // Затем запускаем приложение
     initApp().catch(err => {
         console.error('❌ Критический сбой инициализации:', err);
         // Показываем сообщение об ошибке
@@ -493,11 +447,82 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     // Небольшая задержка, чтобы все скрипты успели загрузиться
     setTimeout(() => {
         if (document.getElementById('app-screen')) {
+            initLucideIcons();
             initApp().catch(err => {
                 console.error('❌ Критический сбой инициализации:', err);
             });
         }
     }, 100);
+}
+
+// ==========================================
+// ПОВТОРНАЯ ИНИЦИАЛИЗАЦИЯ ИКОНОК
+// ==========================================
+
+// Пытаемся еще раз через 500ms (на случай, если Lucide загрузился позже)
+setTimeout(function() {
+    if (!initLucideIcons()) {
+        // Если не получилось - пробуем еще через 500ms
+        setTimeout(function() {
+            initLucideIcons();
+        }, 500);
+    }
+}, 500);
+
+// Еще одна попытка после полной загрузки страницы
+window.addEventListener('load', function() {
+    initLucideIcons();
+});
+
+// ==========================================
+// НАБЛЮДАТЕЛЬ ЗА ИЗМЕНЕНИЯМИ DOM
+// ==========================================
+
+// Автоматически обновляем иконки при добавлении новых элементов с data-lucide
+if (window.MutationObserver && typeof lucide !== 'undefined') {
+    const observer = new MutationObserver(function(mutations) {
+        let needsUpdate = false;
+        
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === 1) {
+                        if (node.querySelector && node.querySelector('[data-lucide]')) {
+                            needsUpdate = true;
+                            break;
+                        }
+                        if (node.hasAttribute && node.hasAttribute('data-lucide')) {
+                            needsUpdate = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (mutation.type === 'attributes' && mutation.attributeName === 'data-lucide') {
+                needsUpdate = true;
+                break;
+            }
+        }
+        
+        if (needsUpdate) {
+            try {
+                lucide.createIcons();
+            } catch (e) {
+                // Игнорируем
+            }
+        }
+    });
+    
+    // Запускаем наблюдатель после загрузки DOM
+    document.addEventListener('DOMContentLoaded', function() {
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-lucide']
+        });
+        console.log('✅ MutationObserver для Lucide иконок активирован');
+    });
 }
 
 // ==========================================
@@ -519,21 +544,9 @@ if (window.Telegram?.WebApp?.requestFullscreen) {
 window.addEventListener('error', function(event) {
     console.error('❌ Глобальная ошибка:', event.message, event.filename, event.lineno);
     
-    // Показываем пользователю только если это критично
-    if (event.message && (
-        event.message.includes('lucide') || 
-        event.message.includes('cannot read') ||
-        event.message.includes('undefined')
-    )) {
-        // Игнорируем ошибки Lucide, они не критичны
-        if (event.message.includes('lucide')) {
-            return;
-        }
-        
-        // Показываем уведомление только для критических ошибок
-        if (window.tg?.showAlert) {
-            // Не показываем каждый раз, чтобы не бесить пользователя
-        }
+    // Игнорируем ошибки Lucide, они не критичны
+    if (event.message && event.message.includes('lucide')) {
+        return;
     }
 });
 
